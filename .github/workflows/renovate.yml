@@ -6,9 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
-  issues: write
-  pull-requests: write
+  contents: read
 
 concurrency:
   group: renovate
@@ -19,25 +17,25 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: renovate/renovate:43.198.0@sha256:69212333d87a8d23529f89a6d8c9c87a2d49e7ee76d4a4447815900218c15728
+      options: --user 0
     env:
       GITHUB_REPOSITORY: ${{ github.repository }}
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       LOG_LEVEL: info
       RENOVATE_TOKEN: ${{ secrets.RENOVATE_TOKEN }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Run Renovate
         shell: bash
         run: |
           set -euo pipefail
 
-          : "${RENOVATE_TOKEN:=${GITHUB_TOKEN:-}}"
           if [[ -z "${RENOVATE_TOKEN}" ]]; then
-            echo "RENOVATE_TOKEN or GITHUB_TOKEN must be set" >&2
+            echo "RENOVATE_TOKEN must be set. The default GITHUB_TOKEN cannot create pull requests in this repository because GitHub Actions PR creation is disabled in repo settings." >&2
             exit 1
           fi
 
