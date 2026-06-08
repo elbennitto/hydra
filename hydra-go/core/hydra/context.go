@@ -107,19 +107,71 @@ func (c *Context) GetClusters() ([]*Cluster, error) {
 // The search starts from the given path and traverses up the directory tree.
 // Returns an error if the structure cannot be found.
 func CreateContext(l log.Logger, path string, config types.Config) (*Context, error) {
-	context, err := createContext(l, filepath.Clean(path), config)
+	cleanPath := filepath.Clean(path)
+	context, err := createContext(l, cleanPath, config)
 	switch {
 	case err != nil:
 		return nil, err
 	case context != nil:
 		return context, nil
 	default:
-		return nil, log.CreateError(
+		return nil, createMissingContextError(l, cleanPath)
+	}
+}
+
+func createMissingContextError(l log.Logger, path string) error {
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return log.CreateError(
 			errors.ErrInvalidHydraStructure,
-			"could not find a valid Hydra context starting from '{path}'",
+			"could not use Hydra context path '{path}': directory does not exist. Hint: set HYDRA_CONTEXT (or --hydra-context) to an existing Hydra context root directory.",
 			log.String("path", path),
 		)
 	}
+
+	valuesPath := filepath.Join(path, "values.yaml")
+	groupValuesPath := filepath.Join(filepath.Dir(path), "values.yaml")
+	if _, err := os.Stat(valuesPath); os.IsNotExist(err) {
+		return log.CreateError(
+			errors.ErrInvalidHydraStructure,
+			"could not find a valid Hydra context starting from '{path}'.\nHint: assuming '{path}' is the intended context directory, choose one of these fixes.\nRecommended: set 'global.hydra.type: group' in '{groupValuesPath}' so '{path}' resolves as a context beneath that group.\nAlternative: add 'global.hydra.type: context' to '{valuesPath}'.\nMissing file: '{valuesPath}'.",
+			log.String("path", path),
+			log.String("valuesPath", valuesPath),
+			log.String("groupValuesPath", groupValuesPath),
+		)
+	}
+
+	directive, err := loadHydraTypeDirective(l, path)
+	if err != nil {
+		return err
+	}
+	if directive.HasType && directive.Type != hydraTypeContext {
+		return log.CreateError(
+			errors.ErrInvalidHydraStructure,
+			"could not find a valid Hydra context starting from '{path}'.\nHint: assuming '{path}' is the intended context directory, choose one of these fixes.\nRecommended: set 'global.hydra.type: group' in '{groupValuesPath}' so '{path}' resolves as a context beneath that group.\nAlternative: change '{valuesPath}' from 'global.hydra.type: {actualType}' to 'global.hydra.type: {expectedType}'.",
+			log.String("path", path),
+			log.String("valuesPath", valuesPath),
+			log.String("groupValuesPath", groupValuesPath),
+			log.String("actualType", directive.Type),
+			log.String("expectedType", hydraTypeContext),
+		)
+	}
+	if !directive.HasType {
+		return log.CreateError(
+			errors.ErrInvalidHydraStructure,
+			"could not find a valid Hydra context starting from '{path}'.\nHint: assuming '{path}' is the intended context directory, choose one of these fixes.\nRecommended: set 'global.hydra.type: group' in '{groupValuesPath}' so '{path}' resolves as a context beneath that group.\nAlternative: add 'global.hydra.type: context' to '{valuesPath}'.",
+			log.String("path", path),
+			log.String("valuesPath", valuesPath),
+			log.String("groupValuesPath", groupValuesPath),
+		)
+	}
+
+	return log.CreateError(
+		errors.ErrInvalidHydraStructure,
+		"could not find a valid Hydra context starting from '{path}'.\nHint: assuming '{path}' is the intended context directory, choose one of these fixes.\nRecommended: set 'global.hydra.type: group' in '{groupValuesPath}' so '{path}' resolves as a context beneath that group.\nAlternative: add 'global.hydra.type: context' to '{valuesPath}'.",
+		log.String("path", path),
+		log.String("valuesPath", valuesPath),
+		log.String("groupValuesPath", groupValuesPath),
+	)
 }
 
 func createContext(l log.Logger, path string, config types.Config) (*Context, error) {

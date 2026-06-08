@@ -53,16 +53,9 @@ func writeGitopsLayoutChildRequiresGlobalBaseURL(t *testing.T) (contextDir strin
 	repoDir = filepath.Join(baseDir, "charts-repository")
 
 	require.NoError(t, os.MkdirAll(contextDir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(contextDir, "values.yaml"), []byte(`global:
-  baseUrl: https://user-values.example.com
-  hydra:
-    path: test-context
-    kubernetesVersion: "1.29.0"
-`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(contextDir, "values.yaml"), []byte("global:\n  baseUrl: https://user-values.example.com\n  hydra:\n    type: context\n    kubernetesVersion: \"1.29.0\"\n"), 0o644))
 
-	writeClusterDirWithValues(t, contextDir, "target", `global:
-  childTemplateMergeMarker: from-cluster-merge
-`)
+	writeClusterDirWithValues(t, contextDir, "target", "global:\n  hydra:\n    type: cluster\n  childTemplateMergeMarker: from-cluster-merge\n")
 
 	writeClusterDir(t, contextDir, "in-cluster")
 	writeRootAppDiskCache(t, contextDir, repoDir, "in-cluster", "argocd", map[string]string{})

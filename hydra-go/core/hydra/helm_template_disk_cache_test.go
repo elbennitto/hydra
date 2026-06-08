@@ -176,11 +176,7 @@ func writeDiskCacheTestGitopsLayout(t *testing.T) (contextDir string, repoDir st
 	repoDir = filepath.Join(baseDir, "charts-repository")
 
 	require.NoError(t, os.MkdirAll(contextDir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(contextDir, "values.yaml"), []byte(`global:
-  hydra:
-    path: test-context
-    kubernetesVersion: "1.29.0"
-`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(contextDir, "values.yaml"), []byte("global:\n  hydra:\n    type: context\n    kubernetesVersion: \"1.29.0\"\n"), 0o644))
 
 	writeClusterDir(t, contextDir, "in-cluster")
 	writeRootAppDiskCache(t, contextDir, repoDir, "in-cluster", "argocd", map[string]string{})
@@ -217,7 +213,7 @@ spec:
 func writeClusterDir(t *testing.T, contextDir string, clusterName string) {
 	t.Helper()
 	require.NoError(t, os.MkdirAll(filepath.Join(contextDir, clusterName), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(contextDir, clusterName, "values.yaml"), []byte("{}\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(contextDir, clusterName, "values.yaml"), []byte("global:\n  hydra:\n    type: cluster\n"), 0o644))
 }
 
 func writeRootAppDiskCache(t *testing.T, contextDir string, repoDir string, clusterName string, rootAppName string, childNamespaces map[string]string) {

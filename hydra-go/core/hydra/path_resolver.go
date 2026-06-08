@@ -23,7 +23,7 @@ func ResolvePath(l log.Logger, hydraContext types.HydraContext, config types.Con
 	if err != nil {
 		return nil, log.CreateError(
 			errors.ErrInvalidHydraStructure,
-			"failed to resolve path '{path}'",
+			"failed to use Hydra context path '{path}': {err}",
 			log.String("path", path),
 			log.Err(err))
 	}

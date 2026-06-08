@@ -17,7 +17,7 @@ func TestCluster_GetRootApps_ignoresDotDirectories(t *testing.T) {
 	clusterDir := filepath.Join(tmp, string(types.InCluster))
 	require.NoError(t, os.MkdirAll(filepath.Join(clusterDir, "myapp"), 0o755))
 	require.NoError(t, os.MkdirAll(filepath.Join(clusterDir, ".hydra"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(clusterDir, "values.yaml"), []byte("global:\n  info:\n    cluster: in-cluster\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(clusterDir, "values.yaml"), []byte("global:\n  hydra:\n    type: cluster\n  info:\n    cluster: in-cluster\n"), 0o644))
 
 	cfg := types.NewConfig(types.ColorNo, types.DryRunYes, types.KubernetesConnectionAllowedNo, true)
 	ctx, err := NewContext(log.Default(), types.ContextPath(tmp), cfg)
@@ -36,7 +36,7 @@ func TestNewRootApp_rejectsReservedBuiltinRootName(t *testing.T) {
 	tmp := t.TempDir()
 	clusterDir := filepath.Join(tmp, string(types.InCluster))
 	require.NoError(t, os.MkdirAll(filepath.Join(clusterDir, "myapp"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(clusterDir, "values.yaml"), []byte("global:\n  info:\n    cluster: in-cluster\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(clusterDir, "values.yaml"), []byte("global:\n  hydra:\n    type: cluster\n  info:\n    cluster: in-cluster\n"), 0o644))
 
 	cfg := types.NewConfig(types.ColorNo, types.DryRunYes, types.KubernetesConnectionAllowedNo, true)
 	ctx, err := NewContext(log.Default(), types.ContextPath(tmp), cfg)
