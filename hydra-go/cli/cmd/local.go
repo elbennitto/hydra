@@ -1,10 +1,10 @@
 package cmd
 
 import (
+	"github.com/spf13/cobra"
 	"hydra-gitops.org/hydra/hydra-go/cli/action"
 	"hydra-gitops.org/hydra/hydra-go/core/entity"
 	"hydra-gitops.org/hydra/hydra-go/core/hydra"
-	"github.com/spf13/cobra"
 )
 
 // LocalCommandParams holds the action functions for local-only command families.
@@ -32,6 +32,7 @@ Hydra data locally without connecting to a Kubernetes cluster.`,
 	}
 
 	cmd.AddCommand(newFindCommand(params.Find))
+	cmd.AddCommand(newLocalAppsCommand(action.ResolveApps))
 	cmd.AddCommand(newConfigCommand(params.Config))
 	cmd.AddCommand(newTemplateCommand(params.Template))
 	cmd.AddCommand(newLocalListCommand(params.List))

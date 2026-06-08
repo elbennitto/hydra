@@ -25,7 +25,7 @@ func TestLocalCommandContainsExpectedSubcommands(t *testing.T) {
 
 	localCmd := childCommandWithUsePrefix(rootCmd, "local")
 	require.NotNil(t, localCmd, "expected hydra local to exist")
-	assert.ElementsMatch(t, []string{"find", "config", "template", "list", "source", "values", "refs", "inspect", "review", "test", "export"}, commandUseNames(localCmd.Commands()))
+	assert.ElementsMatch(t, []string{"find", "apps", "config", "template", "list", "source", "values", "refs", "inspect", "review", "test", "export"}, commandUseNames(localCmd.Commands()))
 }
 
 func TestLocalReviewCommandShape(t *testing.T) {

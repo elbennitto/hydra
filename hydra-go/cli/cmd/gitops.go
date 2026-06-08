@@ -1,10 +1,10 @@
 package cmd
 
 import (
+	"github.com/spf13/cobra"
 	"hydra-gitops.org/hydra/hydra-go/cli/action"
 	hflags "hydra-gitops.org/hydra/hydra-go/cli/flags"
 	"hydra-gitops.org/hydra/hydra-go/core/hydra"
-	"github.com/spf13/cobra"
 )
 
 // clusterTreeSubcommandEnabled registers `hydra gitops inspect` when true.
@@ -94,6 +94,7 @@ rendered result against live state.`,
 
 	// Add subcommands
 	cmd.AddCommand(newClusterValidateCurrentContextCommand(params.ClusterValidateCurrentContext))
+	cmd.AddCommand(NewClusterAppsCommand(action.ResolveApps))
 	cmd.AddCommand(NewClusterDumpCommand(params.ClusterDump))
 	cmd.AddCommand(NewClusterListCommand(params.ClusterList))
 	cmd.AddCommand(NewClusterRefsCommand(params.ClusterRefs))
