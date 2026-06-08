@@ -207,15 +207,11 @@ func clusterScale(f ClusterScaleFlags, direction commands.ScaleDirection) error 
 	case commands.ScaleDown:
 		l.Info(logIdAction, "finding workloads to scale down across {count} apps", log.Int("count", len(appIds)))
 
-		mergedPresets, err := hydra.HydraMergedClusterDefaultsPresetsSection(cluster, appIds, f.HelmNetworkMode, renderedEntities)
-		if err != nil {
-			return err
-		}
 		minor := commands.ParseKubernetesMinorFromVersionString(string(f.KubernetesVersion))
 		if minor <= 0 {
 			minor = 99
 		}
-		effectivePresets, err := hydra.EffectiveClusterDefaultsPresetsForKubernetesMinor(mergedPresets, minor)
+		effectivePresets, err := hydra.EffectiveClusterDefaultsPresetsForCluster(cluster, appIds, f.HelmNetworkMode, renderedEntities, minor)
 		if err != nil {
 			return err
 		}

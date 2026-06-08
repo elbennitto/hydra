@@ -13,6 +13,7 @@ import (
 	"hydra-gitops.org/hydra/hydra-go/base/errors"
 	"hydra-gitops.org/hydra/hydra-go/base/log"
 
+	"github.com/mattn/go-runewidth"
 	"hydra-gitops.org/hydra/hydra-go/cli/flags"
 	"hydra-gitops.org/hydra/hydra-go/core/cel"
 	"hydra-gitops.org/hydra/hydra-go/core/commands"
@@ -21,7 +22,6 @@ import (
 	"hydra-gitops.org/hydra/hydra-go/core/k8s"
 	"hydra-gitops.org/hydra/hydra-go/core/types"
 	"hydra-gitops.org/hydra/hydra-go/core/yq"
-	"github.com/mattn/go-runewidth"
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
@@ -877,15 +877,11 @@ func ClusterSystem(f ClusterSystemFlags) (hydra.Hydra, string, error) {
 	}
 	renderedAllApps = invModel.TemplateEntities()
 
-	mergedPresets, err := hydra.HydraMergedClusterDefaultsPresetsSection(cluster, targetAppIds, f.HelmNetworkMode, renderedAllApps)
-	if err != nil {
-		return nil, "", err
-	}
 	k8sMinor := 99
 	if sm, verr := commands.KubernetesServerMinorVersion(cluster); verr == nil {
 		k8sMinor = sm
 	}
-	effectivePresets, err := hydra.EffectiveClusterDefaultsPresetsForKubernetesMinor(mergedPresets, k8sMinor)
+	effectivePresets, err := hydra.EffectiveClusterDefaultsPresetsForCluster(cluster, targetAppIds, f.HelmNetworkMode, renderedAllApps, k8sMinor)
 	if err != nil {
 		return nil, "", err
 	}

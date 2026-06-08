@@ -9,11 +9,11 @@ import (
 	"strings"
 	"sync"
 
+	"gopkg.in/yaml.v3"
 	"hydra-gitops.org/hydra/hydra-go/base/errors"
 	"hydra-gitops.org/hydra/hydra-go/base/log"
 	"hydra-gitops.org/hydra/hydra-go/core/entity"
 	"hydra-gitops.org/hydra/hydra-go/core/types"
-	"gopkg.in/yaml.v3"
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
@@ -34,7 +34,7 @@ const (
 	ClusterDefaultsPresetIDKubermatic                   = "kubermatic"
 	ClusterDefaultsPresetIDGardener                     = "gardener"
 	ClusterDefaultsPresetIDMonex                        = "monex"
-	ClusterDefaultsPresetIDCloudPoc                      = "cloud-poc"
+	ClusterDefaultsPresetIDCloudPoc                     = "cloud-poc"
 	ClusterDefaultsPresetIDSyseleven                    = "syseleven"
 	ClusterDefaultsPresetIDMetakube                     = "metakube"
 	ClusterDefaultsPresetIDSyselevenNodeProblemDetector = "syseleven-node-problem-detector"
@@ -425,6 +425,7 @@ type ClusterDefaultsPresetEffective struct {
 	ExplicitlyDisabled bool
 	Activates          types.PresetActivateList
 	Predicates         map[string]ClusterDefaultsPredicateEffective
+	ManualOverrides    []types.ClusterRootAppOverrideItem
 	BuiltinFile        builtinClusterDefaultsPresetFile
 }
 
@@ -451,6 +452,14 @@ func EffectiveClusterDefaultsPresets(merged *types.HydraPresetsSection) ([]Clust
 }
 
 func EffectiveClusterDefaultsPresetsForKubernetesMinor(merged *types.HydraPresetsSection, k8sMinor int) ([]ClusterDefaultsPresetEffective, error) {
+	return EffectiveClusterDefaultsPresetsForKubernetesMinorWithOverrides(merged, nil, k8sMinor)
+}
+
+func EffectiveClusterDefaultsPresetsForKubernetesMinorWithOverrides(
+	merged *types.HydraPresetsSection,
+	rootOverrides map[types.AppId]types.ClusterRootAppOverrideList,
+	k8sMinor int,
+) ([]ClusterDefaultsPresetEffective, error) {
 	builtins, err := loadBuiltinClusterDefaultsPresets()
 	if err != nil {
 		return nil, err
@@ -470,7 +479,19 @@ func EffectiveClusterDefaultsPresetsForKubernetesMinor(merged *types.HydraPreset
 		if merged != nil {
 			ovr = merged.BuiltinClusterDefaultsOverride(id)
 		}
-		out = append(out, effectiveClusterDefaultsPresetFromBuiltin(b, ovr))
+		eff := effectiveClusterDefaultsPresetFromBuiltin(b, ovr)
+		for appID, items := range rootOverrides {
+			if !appID.IsPresetApp() {
+				continue
+			}
+			childName, childErr := appID.ChildAppName()
+			if childErr != nil || childName == nil || string(*childName) != id {
+				continue
+			}
+			eff.ManualOverrides = append([]types.ClusterRootAppOverrideItem(nil), items...)
+			break
+		}
+		out = append(out, eff)
 	}
 	adj := make(map[string][]string, len(out))
 	for i := range out {
@@ -487,6 +508,28 @@ func EffectiveClusterDefaultsPresetsForKubernetesMinor(merged *types.HydraPreset
 		return nil, err
 	}
 	return out, nil
+}
+
+func EffectiveClusterDefaultsPresetsForCluster(
+	cluster *Cluster,
+	appIds sets.Set[types.AppId],
+	networkMode types.HelmNetworkMode,
+	rendered entity.Entities,
+	k8sMinor int,
+) ([]ClusterDefaultsPresetEffective, error) {
+	var mergedPresets *types.HydraPresetsSection
+	var err error
+	if cluster != nil && appIds != nil && appIds.Len() > 0 {
+		mergedPresets, err = HydraMergedClusterDefaultsPresetsSection(cluster, appIds, networkMode, rendered)
+		if err != nil {
+			return nil, err
+		}
+	}
+	rootOverrides, err := ClusterRootAppOverrides(cluster)
+	if err != nil {
+		return nil, err
+	}
+	return EffectiveClusterDefaultsPresetsForKubernetesMinorWithOverrides(mergedPresets, rootOverrides, k8sMinor)
 }
 
 // applyClusterDefaultsPresetActivations turns on presets listed in Activates for every currently enabled

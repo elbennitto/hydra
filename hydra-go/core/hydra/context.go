@@ -52,7 +52,6 @@ func initContextCache(l log.Logger) {
 }
 
 // NewContext creates a new Context with the given path and configuration.
-// The path should point to a directory containing the in-cluster structure.
 func NewContext(l log.Logger, path types.ContextPath, config types.Config) (*Context, error) {
 	initContextCache(l)
 	key := contextCacheKey{
@@ -102,8 +101,10 @@ func (c *Context) GetClusters() ([]*Cluster, error) {
 	return clusters, nil
 }
 
-// CreateContext creates a new Context by searching for the in-cluster/argocd structure
-// starting from the given path and traversing up the directory tree.
+// CreateContext creates a new Context by searching for a directory that resolves
+// to global.hydra.type=context.
+//
+// The search starts from the given path and traverses up the directory tree.
 // Returns an error if the structure cannot be found.
 func CreateContext(l log.Logger, path string, config types.Config) (*Context, error) {
 	context, err := createContext(l, filepath.Clean(path), config)
@@ -115,36 +116,43 @@ func CreateContext(l log.Logger, path string, config types.Config) (*Context, er
 	default:
 		return nil, log.CreateError(
 			errors.ErrInvalidHydraStructure,
-			"could not find '{cluster}/{argocd}' starting from '{path}'",
+			"could not find a valid Hydra context starting from '{path}'",
 			log.String("path", path),
-			log.String("cluster", types.InClusterDir),
-			log.String("argocd", types.ArgocdDir),
 		)
 	}
 }
 
 func createContext(l log.Logger, path string, config types.Config) (*Context, error) {
-	// Check if the current path contains in-cluster/argocd
-	inClusterPath := filepath.Join(path, types.InClusterDir)
-	argocdPath := filepath.Join(inClusterPath, types.ArgocdDir)
-
-	// Check if this is a directory that contains in-cluster/argocd
-	if info, err := os.Stat(argocdPath); err == nil && info.IsDir() {
-		l.DebugLog(logIdContext, "Found in-cluster/argocd structure",
-			log.String("gitOpsPath", path),
-			log.String("inClusterPath", inClusterPath),
-			log.String("argocdPath", argocdPath))
+	resolvedType, hasType, err := resolveHydraTypeAtPath(l, path)
+	if err != nil {
+		return nil, err
+	}
+	if hasType && resolvedType == hydraTypeContext {
+		if err := validateLevelType(l, path, hydraTypeContext, hydraTypeContext); err != nil {
+			return nil, err
+		}
+		l.DebugLog(logIdContext, "Found valid Hydra context directory",
+			log.String("contextPath", path),
+			log.String("type", resolvedType))
 		return NewContext(l, types.ContextPath(path), config)
+	}
+
+	allowParentLookup, err := parentLookupEnabledAtPath(l, path)
+	if err != nil {
+		return nil, err
+	}
+	if !allowParentLookup {
+		return nil, nil
 	}
 
 	// If not found, try parent directory
 	parentPath := filepath.Dir(path)
 	if parentPath == path {
-		// We've reached the root directory without finding in-cluster/argocd
+		// We've reached the root directory without finding a valid Hydra context.
 		return nil, nil
 	}
 
-	l.DebugLog(logIdContext, "in-cluster/argocd not found, checking parent directory",
+	l.DebugLog(logIdContext, "valid context not found, checking parent directory",
 		log.String("currentPath", path),
 		log.String("parentPath", parentPath))
 
@@ -224,6 +232,10 @@ func (c *Context) LoadValuesMap(mode types.HelmNetworkMode) (types.ValuesMap, er
 	}
 	contextValuesPath := filepath.Join(string(c.ContextPath), "values.yaml")
 	vals, err := values.LoadAndMergeValuesFile(c.l, contextValuesPath, groupVals)
+	if err != nil {
+		return nil, err
+	}
+	vals, err = ensureHydraTypeInValues(vals, hydraTypeContext, hydraTypeContext)
 	if err != nil {
 		return nil, err
 	}

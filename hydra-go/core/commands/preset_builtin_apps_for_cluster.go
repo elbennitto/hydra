@@ -31,14 +31,7 @@ func MergeBuiltinPresetAppsForCluster(
 	mergedAppIds sets.Set[types.AppId],
 	err error,
 ) {
-	var mergedPresets *types.HydraPresetsSection
-	if cluster != nil && allAppIds != nil && allAppIds.Len() > 0 {
-		mergedPresets, err = hydra.HydraMergedClusterDefaultsPresetsSection(cluster, allAppIds, networkMode, renderedAllApps)
-		if err != nil {
-			return nil, entity.Entities{}, nil, err
-		}
-	}
-	effective, err := hydra.EffectiveClusterDefaultsPresetsForKubernetesMinor(mergedPresets, k8sMinor)
+	effective, err := hydra.EffectiveClusterDefaultsPresetsForCluster(cluster, allAppIds, networkMode, renderedAllApps, k8sMinor)
 	if err != nil {
 		return nil, entity.Entities{}, nil, err
 	}

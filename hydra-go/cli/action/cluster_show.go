@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"gopkg.in/yaml.v3"
 	"hydra-gitops.org/hydra/hydra-go/base/colors"
 	"hydra-gitops.org/hydra/hydra-go/base/errors"
 	"hydra-gitops.org/hydra/hydra-go/base/log"
@@ -19,7 +20,6 @@ import (
 	"hydra-gitops.org/hydra/hydra-go/core/hydra"
 	"hydra-gitops.org/hydra/hydra-go/core/types"
 	"hydra-gitops.org/hydra/hydra-go/core/yq"
-	"gopkg.in/yaml.v3"
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
@@ -444,6 +444,11 @@ func clusterShowReasonText(reason commands.AssignmentReason) string {
 		return "assigned-via-preset-template"
 	case commands.AssignmentReasonKindAssignedViaPresetMatch:
 		return "assigned-via-preset-match"
+	case commands.AssignmentReasonKindAssignedViaClusterRootOverride:
+		if reason.OverrideTarget == "" {
+			return "assigned-via-cluster-root-override"
+		}
+		return "assigned-via-cluster-root-override=" + reason.OverrideTarget
 	case commands.AssignmentReasonKindAssignedViaOwnerRef:
 		if len(reason.OwnerRefs) == 0 {
 			return "assigned-via-owner-ref"

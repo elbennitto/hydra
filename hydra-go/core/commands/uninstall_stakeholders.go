@@ -3173,11 +3173,7 @@ func assignClusterEntitiesToAtMostOneAppByRefs(
 		if presetMergeErr != nil {
 			return nil, metadata, entity.Entities{}, presetMergeErr
 		}
-		mergedPresets, presetSectionErr := hydra.HydraMergedClusterDefaultsPresetsSection(cluster, allAppIds, networkMode, renderedAllApps)
-		if presetSectionErr != nil {
-			return nil, metadata, entity.Entities{}, presetSectionErr
-		}
-		effectivePresets, effectiveErr := hydra.EffectiveClusterDefaultsPresetsForKubernetesMinor(mergedPresets, k8sMinor)
+		effectivePresets, effectiveErr := hydra.EffectiveClusterDefaultsPresetsForCluster(cluster, allAppIds, networkMode, renderedAllApps, k8sMinor)
 		if effectiveErr != nil {
 			return nil, metadata, entity.Entities{}, effectiveErr
 		}
@@ -3258,6 +3254,19 @@ func assignClusterEntitiesToAtMostOneAppByRefs(
 			setDetail(fmt.Sprintf("cluster-defaults presets · %d / %d", i+1, nEntities))
 			advance(fmt.Sprintf("cluster-defaults presets · %d / %d", i+1, nEntities))
 		}
+	}
+
+	if err := applyClusterRootOverrides(
+		cluster,
+		allAppIds,
+		renderedAllApps,
+		clusterInNamespaces,
+		assignment,
+		assignmentReasons,
+		&metadata,
+		ambiguousIDs,
+	); err != nil {
+		return nil, metadata, entity.Entities{}, err
 	}
 
 	unassigned, err = clusterInventoryUnassignedForAbort(clusterInNamespaces, assignment, types.KeyClusterEntity)

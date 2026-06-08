@@ -421,16 +421,12 @@ func ReviewClusterRefsCallback(
 		log.Int("targetParserCount", len(targetParsers)))
 
 	builtinOpts := &ReviewRefsBuiltinOptions{}
-	mergedPresets, err := hydra.HydraMergedClusterDefaultsPresetsSection(cluster, targetAppIds, networkMode, renderedAllApps)
-	if err != nil {
-		return 0, err
-	}
 	serverMinor, verr := KubernetesServerMinorVersion(cluster)
 	refOwnershipK8sMinor := 99
 	if verr == nil {
 		refOwnershipK8sMinor = serverMinor
 	}
-	effectivePresets, err := hydra.EffectiveClusterDefaultsPresetsForKubernetesMinor(mergedPresets, refOwnershipK8sMinor)
+	effectivePresets, err := hydra.EffectiveClusterDefaultsPresetsForCluster(cluster, targetAppIds, networkMode, renderedAllApps, refOwnershipK8sMinor)
 	if err != nil {
 		return 0, err
 	}

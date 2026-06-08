@@ -946,11 +946,7 @@ func handleForceLeftovers(
 		return entity.Entities{}, err
 	}
 
-	mergedPresets, err := hydra.HydraMergedClusterDefaultsPresetsSection(cluster, allAppIds, types.HelmNetworkModeOffline, renderedAllApps)
-	if err != nil {
-		return entity.Entities{}, err
-	}
-	effectivePresets, err := hydra.EffectiveClusterDefaultsPresetsForKubernetesMinor(mergedPresets, k8sMinor)
+	effectivePresets, err := hydra.EffectiveClusterDefaultsPresetsForCluster(cluster, allAppIds, types.HelmNetworkModeOffline, renderedAllApps, k8sMinor)
 	if err != nil {
 		return entity.Entities{}, err
 	}

@@ -11,30 +11,32 @@ import (
 type AssignmentReasonKind string
 
 const (
-	AssignmentReasonKindMatchedByPresetID         AssignmentReasonKind = "matched-by-preset-id"
-	AssignmentReasonKindMatchedByPresetCEL        AssignmentReasonKind = "matched-by-preset-cel"
-	AssignmentReasonKindAssignedPreset            AssignmentReasonKind = "assigned-preset"
-	AssignmentReasonKindAssignedViaBuiltinRef     AssignmentReasonKind = "assigned-via-builtin-ref"
-	AssignmentReasonKindAssignedViaAppRef         AssignmentReasonKind = "assigned-via-app-ref"
-	AssignmentReasonKindAssignedViaTemplateID     AssignmentReasonKind = "assigned-via-template-id"
-	AssignmentReasonKindAssignedViaPresetTemplate AssignmentReasonKind = "assigned-via-preset-template"
-	AssignmentReasonKindAssignedViaPresetMatch    AssignmentReasonKind = "assigned-via-preset-match"
-	AssignmentReasonKindAssignedViaOwnerRef       AssignmentReasonKind = "assigned-via-owner-ref"
-	AssignmentReasonKindAssignedViaRefOwnership   AssignmentReasonKind = "assigned-via-ref-ownership"
-	AssignmentReasonKindAssignedViaInspectRef     AssignmentReasonKind = "assigned-via-inspect-ref"
-	AssignmentReasonKindAmbiguousAppAssignment    AssignmentReasonKind = "ambiguous-app-assignment"
-	AssignmentReasonKindNoAppAssignment           AssignmentReasonKind = "no-app-assignment"
+	AssignmentReasonKindMatchedByPresetID              AssignmentReasonKind = "matched-by-preset-id"
+	AssignmentReasonKindMatchedByPresetCEL             AssignmentReasonKind = "matched-by-preset-cel"
+	AssignmentReasonKindAssignedPreset                 AssignmentReasonKind = "assigned-preset"
+	AssignmentReasonKindAssignedViaBuiltinRef          AssignmentReasonKind = "assigned-via-builtin-ref"
+	AssignmentReasonKindAssignedViaAppRef              AssignmentReasonKind = "assigned-via-app-ref"
+	AssignmentReasonKindAssignedViaTemplateID          AssignmentReasonKind = "assigned-via-template-id"
+	AssignmentReasonKindAssignedViaPresetTemplate      AssignmentReasonKind = "assigned-via-preset-template"
+	AssignmentReasonKindAssignedViaPresetMatch         AssignmentReasonKind = "assigned-via-preset-match"
+	AssignmentReasonKindAssignedViaClusterRootOverride AssignmentReasonKind = "assigned-via-cluster-root-override"
+	AssignmentReasonKindAssignedViaOwnerRef            AssignmentReasonKind = "assigned-via-owner-ref"
+	AssignmentReasonKindAssignedViaRefOwnership        AssignmentReasonKind = "assigned-via-ref-ownership"
+	AssignmentReasonKindAssignedViaInspectRef          AssignmentReasonKind = "assigned-via-inspect-ref"
+	AssignmentReasonKindAmbiguousAppAssignment         AssignmentReasonKind = "ambiguous-app-assignment"
+	AssignmentReasonKindNoAppAssignment                AssignmentReasonKind = "no-app-assignment"
 )
 
 type AssignmentReason struct {
-	Kind          AssignmentReasonKind
-	PresetIDs     []string
-	PresetRules   []string
-	Preset        string
-	OwnerRefs     []types.Id
-	RefOwnership  *types.RefOwnershipPredicateLine
-	EventRef      string
-	EventSubjects []types.Id
+	Kind           AssignmentReasonKind
+	PresetIDs      []string
+	PresetRules    []string
+	Preset         string
+	OverrideTarget string
+	OwnerRefs      []types.Id
+	RefOwnership   *types.RefOwnershipPredicateLine
+	EventRef       string
+	EventSubjects  []types.Id
 }
 
 // ClusterEntityAssignmentMetadata carries secondary facts from

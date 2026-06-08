@@ -95,6 +95,7 @@ type clusterDefaultsPresetEvalCompiled struct {
 	id               string
 	enabled          bool
 	blocks           []clusterDefaultsPredicateEvalBlock
+	excludeBlocks    []clusterDefaultsPredicateEvalBlock
 	anchorPredicates []cel.Predicate // preset anchors used by owner/ref closure
 	activates        sets.Set[string]
 	activatesDirect  sets.Set[string]
@@ -127,6 +128,11 @@ func NewClusterDefaultsPresetEvalCache(
 			return nil, err
 		}
 		pc.blocks = blocks
+		excludeBlocks, err := buildExcludeEvalBlocksForPreset(eff, env)
+		if err != nil {
+			return nil, err
+		}
+		pc.excludeBlocks = excludeBlocks
 		anchorPrograms, err := buildAnchorProgramsForPresetClosure(eff, k8sMinor, env)
 		if err != nil {
 			return nil, err
@@ -386,13 +392,13 @@ func (c *ClusterDefaultsPresetEvalCache) MatchingPresetIDsByEntityWithRegardingO
 			matchProgress(donePreset, enabledPresets, preset.id)
 		}
 		matchedIDs := sets.New[types.Id]()
+		matchesByID := make(map[types.Id][]ClusterDefaultsPresetMatch)
 		for _, block := range preset.blocks {
 			explicitStarted := time.Now()
 			for _, id := range block.ids {
 				if _, ok := entityByID[id]; ok && (opts == nil || opts.SkipIDs == nil || !opts.SkipIDs.Has(id)) {
 					matchedIDs.Insert(id)
-					markDirect(id, preset.id)
-					appendDirectMatch(id, ClusterDefaultsPresetMatch{
+					matchesByID[id] = append(matchesByID[id], ClusterDefaultsPresetMatch{
 						PresetID: preset.id,
 						Rule:     block.idRules[id],
 						Direct:   true,
@@ -417,13 +423,26 @@ func (c *ClusterDefaultsPresetEvalCache) MatchingPresetIDsByEntityWithRegardingO
 						return nil, err
 					}
 					matchedIDs.Insert(id)
-					markDirect(id, preset.id)
-					appendDirectMatch(id, ClusterDefaultsPresetMatch{
+					matchesByID[id] = append(matchesByID[id], ClusterDefaultsPresetMatch{
 						PresetID: preset.id,
 						Rule:     block.programRules[i],
 						Direct:   true,
 					})
 				}
+			}
+		}
+		excludedIDs, err := matchingIDsForBlocks(preset.excludeBlocks, filteredLive, entityByID)
+		if err != nil {
+			return nil, err
+		}
+		for excludedID := range excludedIDs {
+			delete(matchesByID, excludedID)
+			matchedIDs.Delete(excludedID)
+		}
+		for id, matches := range matchesByID {
+			markDirect(id, preset.id)
+			for _, match := range matches {
+				appendDirectMatch(id, match)
 			}
 		}
 		if presetProfileEnabled && len(preset.anchorPredicates) > 0 {
@@ -1127,11 +1146,26 @@ func buildAnchorProgramsForPresetClosure(
 			seen.Insert(key)
 		}
 	}
+	for idx, item := range eff.ManualOverrides {
+		if item.Exclude {
+			continue
+		}
+		prog, err := compileClusterRootOverridePredicate(env, eff, idx, item)
+		if err != nil {
+			return nil, err
+		}
+		progs = append(progs, prog)
+	}
 	return progs, nil
 }
 
 func (p clusterDefaultsPresetEvalCompiled) matches(e entity.Entity) (bool, error) {
 	if !p.enabled {
+		return false, nil
+	}
+	if matched, err := evalBlocksMatch(p.excludeBlocks, e); err != nil {
+		return false, err
+	} else if matched {
 		return false, nil
 	}
 	return evalBlocksMatch(p.blocks, e)
@@ -1187,7 +1221,158 @@ func buildEvalBlocksForPreset(
 			blocks = append(blocks, block)
 		}
 	}
+	for idx, item := range eff.ManualOverrides {
+		if item.Exclude {
+			continue
+		}
+		block, err := evalBlockForClusterRootOverride(eff, idx, item, env)
+		if err != nil {
+			return nil, err
+		}
+		blocks = append(blocks, block)
+	}
 	return blocks, nil
+}
+
+func buildExcludeEvalBlocksForPreset(
+	eff ClusterDefaultsPresetEffective,
+	env cel.Env,
+) ([]clusterDefaultsPredicateEvalBlock, error) {
+	var blocks []clusterDefaultsPredicateEvalBlock
+	for idx, item := range eff.ManualOverrides {
+		if !item.Exclude {
+			continue
+		}
+		block, err := evalBlockForClusterRootOverride(eff, idx, item, env)
+		if err != nil {
+			return nil, err
+		}
+		blocks = append(blocks, block)
+	}
+	return blocks, nil
+}
+
+func evalBlockForClusterRootOverride(
+	eff ClusterDefaultsPresetEffective,
+	idx int,
+	item types.ClusterRootAppOverrideItem,
+	env cel.Env,
+) (clusterDefaultsPredicateEvalBlock, error) {
+	block := clusterDefaultsPredicateEvalBlock{
+		idRules: make(map[types.Id]string, 1),
+		idSet:   sets.New[types.Id](),
+	}
+	if item.Cel == "" {
+		if !item.Selector.IsZero() && item.Selector.Name != "" {
+			if id, ok := selectorExactID(item.Selector); ok {
+				block.ids = append(block.ids, id)
+				block.idSet.Insert(id)
+				block.idRules[id] = clusterRootHydraOverrideRuleLabel(eff, idx, item, id, "")
+				return block, nil
+			}
+		}
+	}
+	prog, err := compileClusterRootOverridePredicate(env, eff, idx, item)
+	if err != nil {
+		return clusterDefaultsPredicateEvalBlock{}, err
+	}
+	block.programs = append(block.programs, prog)
+	block.programRules = append(block.programRules, clusterRootHydraOverrideRuleLabel(eff, idx, item, "", string(item.Cel)))
+	return block, nil
+}
+
+func compileClusterRootOverridePredicate(
+	env cel.Env,
+	eff ClusterDefaultsPresetEffective,
+	idx int,
+	item types.ClusterRootAppOverrideItem,
+) (cel.Predicate, error) {
+	origin := clusterRootHydraOverrideCompileOrigin(eff, idx, item)
+	if item.Cel == "" {
+		return env.CompileSelectedPredicateAt(origin, item.Selector)
+	}
+	return env.CompileSelectedPredicateAt(origin, item.Selector, item.Cel)
+}
+
+func matchingIDsForBlocks(
+	blocks []clusterDefaultsPredicateEvalBlock,
+	filteredLive entity.Entities,
+	entityByID map[types.Id]entity.Entity,
+) (sets.Set[types.Id], error) {
+	out := sets.New[types.Id]()
+	if len(blocks) == 0 {
+		return out, nil
+	}
+	for _, block := range blocks {
+		for _, id := range block.ids {
+			if _, ok := entityByID[id]; ok {
+				out.Insert(id)
+			}
+		}
+		for _, prog := range block.programs {
+			_, matched, err := prog.Select(filteredLive)
+			if err != nil {
+				return nil, err
+			}
+			for _, e := range matched.Items {
+				id, err := e.Id()
+				if err != nil {
+					return nil, err
+				}
+				out.Insert(id)
+			}
+		}
+	}
+	return out, nil
+}
+
+func clusterRootHydraOverrideCompileOrigin(
+	eff ClusterDefaultsPresetEffective,
+	idx int,
+	item types.ClusterRootAppOverrideItem,
+) string {
+	mode := "include"
+	if item.Exclude {
+		mode = "exclude"
+	}
+	return fmt.Sprintf(
+		`cluster root hydra.yaml · hydra.overrides.%s[%d] · %s`,
+		eff.ID, idx, mode,
+	)
+}
+
+func clusterRootHydraOverrideRuleLabel(
+	eff ClusterDefaultsPresetEffective,
+	idx int,
+	item types.ClusterRootAppOverrideItem,
+	id types.Id,
+	celExpr string,
+) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "preset: %s\nclusterRootHydraOverrideIndex: %d\nexclude: %t", eff.ID, idx, item.Exclude)
+	if id != "" {
+		fmt.Fprintf(&b, "\nid: %s", id)
+	}
+	if selector := clusterDefaultsSelectorRuleLabel(item.Selector); selector != "" {
+		b.WriteString("\nselector:\n")
+		b.WriteString(selector)
+	}
+	if expr := strings.TrimSpace(celExpr); expr != "" {
+		b.WriteString("\ncel: |\n")
+		for _, rawLine := range strings.Split(expr, "\n") {
+			b.WriteString("  ")
+			b.WriteString(strings.TrimRight(rawLine, " \t"))
+			b.WriteString("\n")
+		}
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
+func selectorExactID(selector types.RefSelector) (types.Id, bool) {
+	if selector.Version == "" || selector.Kind == "" || selector.Name == "" {
+		return "", false
+	}
+	return types.NewId(selector.Group, selector.Version, selector.Kind, selector.Namespace, selector.Name), true
 }
 
 func evalBlocksMatch(blocks []clusterDefaultsPredicateEvalBlock, e entity.Entity) (bool, error) {

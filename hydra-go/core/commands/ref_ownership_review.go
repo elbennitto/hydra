@@ -179,12 +179,8 @@ func AppendRefOwnershipReviewFindings(
 	var effectivePresets []hydra.ClusterDefaultsPresetEffective
 	var presetEnv cel.Env
 	if liveCluster.Len() > 0 {
-		mergedPresets, mErr := hydra.HydraMergedClusterDefaultsPresetsSection(cluster, allAppIds, networkMode, renderedAllApps)
-		if mErr != nil {
-			return 0, mErr
-		}
 		var pErr error
-		effectivePresets, pErr = hydra.EffectiveClusterDefaultsPresetsForKubernetesMinor(mergedPresets, kubernetesMinor)
+		effectivePresets, pErr = hydra.EffectiveClusterDefaultsPresetsForCluster(cluster, allAppIds, networkMode, renderedAllApps, kubernetesMinor)
 		if pErr != nil {
 			return 0, pErr
 		}
