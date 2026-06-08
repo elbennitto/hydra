@@ -64,8 +64,33 @@ changelog:
       - "^tmp-"
       - "^Merge"
 
-homebrew_casks:
+brews:
   - name: hydra
+    ids: [hydra]
+    repository:
+      owner: hydra-gitops
+      name: homebrew-tap
+      branch: main
+      git:
+        url: "ssh://git@github.com/hydra-gitops/homebrew-tap.git"
+        private_key: "{{ .Env.HOMEBREW_TAP_DEPLOY_KEY }}"
+    directory: Formula
+    homepage: "https://hydra-gitops.org/"
+    description: "Hydra GitOps CLI for Kubernetes cluster management"
+    license: "Apache-2.0"
+    url_template: "https://github.com/hydra-gitops/hydra/archive/refs/tags/{{ .Tag }}.tar.gz"
+    dependencies:
+      - name: go
+        type: build
+    install: |
+      cd "hydra-go" do
+        system "go", "build", *std_go_args(ldflags: "-s -w -X hydra-gitops.org/hydra/hydra-go/base/buildinfo.Version=#{version}"), "./cli"
+      end
+    test: |
+      assert_match "Hydra", shell_output("#{bin}/hydra --help")
+
+homebrew_casks:
+  - name: hydra-bin
     ids: [hydra]
     binaries:
       - hydra
@@ -78,7 +103,8 @@ homebrew_casks:
         private_key: "{{ .Env.HOMEBREW_TAP_DEPLOY_KEY }}"
     directory: Casks
     homepage: "https://hydra-gitops.org/"
-    description: "Hydra GitOps CLI for Kubernetes cluster management"
+    description: "Hydra GitOps CLI binary for Kubernetes cluster management"
+    license: "Apache-2.0"
 
 release:
   github:
@@ -93,10 +119,17 @@ release:
     docker pull ghcr.io/hydra-gitops/hydra:{{ .Tag }}
     ```
 
-    Homebrew (macOS + Linux):
+    Stable releases also publish `{{ .Tag }}`, `vX.Y`, `vX`, and `latest` aliases.
+    Homebrew source formula (recommended on macOS):
 
     ```bash
-    brew install --cask hydra-gitops/tap/hydra
+    brew install hydra-gitops/tap/hydra
+    ```
+
+    Homebrew binary cask from GitHub releases (recommended on Linux):
+
+    ```bash
+    brew install --cask hydra-gitops/tap/hydra-bin
     ```
 
     Verify downloaded archives with the published checksum file:
