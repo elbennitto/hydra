@@ -10,14 +10,14 @@ import (
 	"hydra-gitops.org/hydra/hydra-go/base/buildinfo"
 	"hydra-gitops.org/hydra/hydra-go/base/log"
 
+	"github.com/mattn/go-isatty"
+	cosigncli "github.com/sigstore/cosign/v2/cmd/cosign/cli"
+	"github.com/spf13/cobra"
 	"hydra-gitops.org/hydra/hydra-go/cli/action"
 	"hydra-gitops.org/hydra/hydra-go/cli/exitcode"
 	"hydra-gitops.org/hydra/hydra-go/cli/progress"
 	hc "hydra-gitops.org/hydra/hydra-go/cli/util"
 	"hydra-gitops.org/hydra/hydra-go/core/hydra"
-	cosigncli "github.com/sigstore/cosign/v2/cmd/cosign/cli"
-	"github.com/mattn/go-isatty"
-	"github.com/spf13/cobra"
 	"k8s.io/klog/v2"
 )
 
@@ -152,7 +152,7 @@ func normalizeExecutableName(argv0 string) string {
 
 func isHydraTopLevelCommand(name string) bool {
 	switch name {
-	case "argocd", "ci", "cluster", "cosign", "gitops", "helm", "local", "record", "version", "yq":
+	case "argocd", "ci", "cluster", "cosign", "gitops", "helm", "local", "message", "record", "version", "yq":
 		return true
 	default:
 		return false
@@ -239,6 +239,7 @@ HYDRA_CONTEXT environment variable.`,
 	rootCmd.AddCommand(wrapDelegatedCLI(cosigncli.New()))
 	rootCmd.AddCommand(newYqCommand())
 	rootCmd.AddCommand(newHelmCommand())
+	rootCmd.AddCommand(newMessageCommand())
 	rootCmd.AddCommand(newRecordCommand(rootCmd))
 
 	// Default: do not print command usage on RunE failures. Use exitcode.WithShowUsage(err)

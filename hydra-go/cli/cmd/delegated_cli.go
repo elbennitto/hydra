@@ -142,5 +142,6 @@ func skipHydraWelcome(cmd *cobra.Command) bool {
 	path := cmd.CommandPath()
 	return strings.HasPrefix(path, "hydra yq") ||
 		strings.HasPrefix(path, "hydra cosign") ||
-		strings.HasPrefix(path, "hydra helm")
+		strings.HasPrefix(path, "hydra helm") ||
+		strings.HasPrefix(path, "hydra message")
 }

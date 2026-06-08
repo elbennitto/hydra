@@ -14,7 +14,7 @@ func TestRootCommandContainsExpectedTopLevelCommands(t *testing.T) {
 	rootCmd, _ := newRootCommand(mock.rootCommandParams())
 
 	require.NotNil(t, rootCmd)
-	assert.ElementsMatch(t, []string{"argocd", "ci", "cluster", "cosign", "gitops", "helm", "local", "record", "version", "yq"}, commandUseNames(rootCmd.Commands()))
+	assert.ElementsMatch(t, []string{"argocd", "ci", "cluster", "cosign", "gitops", "helm", "local", "message", "record", "version", "yq"}, commandUseNames(rootCmd.Commands()))
 }
 
 func TestLocalCommandContainsExpectedSubcommands(t *testing.T) {

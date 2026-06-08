@@ -9,6 +9,9 @@ import (
 	"testing"
 
 	"github.com/go-logr/logr"
+	"github.com/spf13/cobra"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"hydra-gitops.org/hydra/hydra-go/base/buildinfo"
 	"hydra-gitops.org/hydra/hydra-go/base/utils"
 	"hydra-gitops.org/hydra/hydra-go/cli/action"
@@ -16,9 +19,6 @@ import (
 	"hydra-gitops.org/hydra/hydra-go/core/hydra"
 	"hydra-gitops.org/hydra/hydra-go/core/types"
 	"hydra-gitops.org/hydra/hydra-go/core/yaml"
-	"github.com/spf13/cobra"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"k8s.io/klog/v2"
 )
 
@@ -162,7 +162,7 @@ func TestMockRootCommand(t *testing.T) {
 
 		require.NotNil(t, rootCmd)
 		require.NotNil(t, flags)
-		assert.ElementsMatch(t, []string{"argocd", "ci", "cluster", "cosign", "gitops", "helm", "local", "record", "version", "yq"}, commandUseNames(rootCmd.Commands()))
+		assert.ElementsMatch(t, []string{"argocd", "ci", "cluster", "cosign", "gitops", "helm", "local", "message", "record", "version", "yq"}, commandUseNames(rootCmd.Commands()))
 
 		// All flags should still be nil until mock functions are called
 		assert.Nil(t, mock.FindFlags)
@@ -414,6 +414,29 @@ func TestConfigureLoggingWelcome(t *testing.T) {
 
 		flags := &GlobalFlags{}
 		cmd := &cobra.Command{Use: "version"}
+		configureLogging(flags, cmd)
+
+		require.NoError(t, w.Close())
+		os.Stderr = oldStderr
+
+		var buf bytes.Buffer
+		_, err = io.Copy(&buf, r)
+		require.NoError(t, err)
+		require.NoError(t, r.Close())
+
+		assert.NotContains(t, buf.String(), "Welcome to Hydra")
+	})
+
+	t.Run("skips welcome for message subcommand", func(t *testing.T) {
+		oldStderr := os.Stderr
+		r, w, err := os.Pipe()
+		require.NoError(t, err)
+		os.Stderr = w
+
+		flags := &GlobalFlags{}
+		root := &cobra.Command{Use: "hydra"}
+		cmd := &cobra.Command{Use: "message"}
+		root.AddCommand(cmd)
 		configureLogging(flags, cmd)
 
 		require.NoError(t, w.Close())
