@@ -11,7 +11,7 @@ builds:
     env:
       - CGO_ENABLED=0
     ldflags:
-      - -s -w -X hydra-gitops.org/hydra/hydra-go/base/buildinfo.Version={{.Version}}
+      - -s -w -X hydra-gitops.org/hydra/hydra-go/base/buildinfo.Version={{.Version}} -X hydra-gitops.org/hydra/hydra-go/base/buildinfo.TagSHA={{.FullCommit}}
     goos:
       - linux
       - darwin
@@ -64,42 +64,24 @@ changelog:
       - "^tmp-"
       - "^Merge"
 
-brews:
-  - name: hydra
-    ids: [hydra]
-    repository:
-      owner: hydra-gitops
-      name: homebrew-tap
-      branch: main
-      git:
-        url: "ssh://git@github.com/hydra-gitops/homebrew-tap.git"
-        private_key: "{{ .Env.HOMEBREW_TAP_DEPLOY_KEY }}"
-    directory: Formula
-    homepage: "https://hydra-gitops.org/"
-    description: "Hydra GitOps CLI for Kubernetes cluster management"
-    license: "Apache-2.0"
-    url_template: "https://github.com/hydra-gitops/hydra/archive/refs/tags/{{ .Tag }}.tar.gz"
-    dependencies:
-      - name: go
-        type: build
-    install: |
-      cd "hydra-go" do
-        system "go", "build", *std_go_args(ldflags: "-s -w -X hydra-gitops.org/hydra/hydra-go/base/buildinfo.Version=#{version}"), "./cli"
-      end
-    test: |
-      assert_match "Hydra", shell_output("#{bin}/hydra --help")
-
 homebrew_casks:
   - name: hydra-bin
     ids: [hydra]
+    commit_author:
+      name: "{{ .Env.GIT_AUTHOR_NAME }}"
+      email: "{{ .Env.GIT_AUTHOR_EMAIL }}"
+      signing:
+        enabled: true
+        key: "{{ .Env.GIT_SIGNING_KEY_PATH }}"
+        format: ssh
     binaries:
       - hydra
     repository:
-      owner: hydra-gitops
-      name: homebrew-tap
+      owner: "{{ .Env.HOMEBREW_TAP_DEPLOY_TARGET_OWNER }}"
+      name: "{{ .Env.HOMEBREW_TAP_DEPLOY_TARGET_NAME }}"
       branch: main
       git:
-        url: "ssh://git@github.com/hydra-gitops/homebrew-tap.git"
+        url: "ssh://git@github.com/{{ .Env.HOMEBREW_TAP_DEPLOY_TARGET_OWNER }}/{{ .Env.HOMEBREW_TAP_DEPLOY_TARGET_NAME }}.git"
         private_key: "{{ .Env.HOMEBREW_TAP_DEPLOY_KEY }}"
     directory: Casks
     homepage: "https://hydra-gitops.org/"
@@ -107,34 +89,34 @@ homebrew_casks:
     license: "Apache-2.0"
 
 release:
-  github:
-    owner: hydra-gitops
-    name: hydra
   footer: |
     ## Install
 
     Docker (multi-arch `linux/amd64` + `linux/arm64`):
 
     ```bash
-    docker pull ghcr.io/hydra-gitops/hydra:{{ .Tag }}
+    docker pull ghcr.io/{{ .Env.GITHUB_REPOSITORY_OWNER }}/hydra:latest
     ```
 
     Stable releases also publish `{{ .Tag }}`, `vX.Y`, `vX`, and `latest` aliases.
-    Homebrew source formula (recommended on macOS):
+
+    Homebrew (macOS recommended, build from source):
 
     ```bash
-    brew install hydra-gitops/tap/hydra
+    brew tap {{ .Env.HOMEBREW_TAP_DEPLOY_TARGET_OWNER }}/{{ .Env.HOMEBREW_TAP_DEPLOY_TARGET_NAME }} https://github.com/{{ .Env.HOMEBREW_TAP_DEPLOY_TARGET_OWNER }}/{{ .Env.HOMEBREW_TAP_DEPLOY_TARGET_NAME }}.git
+    brew install hydra
     ```
 
-    Homebrew binary cask from GitHub releases (recommended on Linux):
+    Homebrew (Linux recommended, install binary cask):
 
     ```bash
-    brew install --cask hydra-gitops/tap/hydra-bin
+    brew tap {{ .Env.HOMEBREW_TAP_DEPLOY_TARGET_OWNER }}/{{ .Env.HOMEBREW_TAP_DEPLOY_TARGET_NAME }} https://github.com/{{ .Env.HOMEBREW_TAP_DEPLOY_TARGET_OWNER }}/{{ .Env.HOMEBREW_TAP_DEPLOY_TARGET_NAME }}.git
+    brew install --cask hydra-bin
     ```
 
     Verify downloaded archives with the published checksum file:
 
     ```bash
-    curl -LO https://github.com/hydra-gitops/hydra/releases/download/{{ .Tag }}/checksums.txt
+    curl -LO https://github.com/{{ .Env.GITHUB_REPOSITORY }}/releases/download/{{ .Tag }}/checksums.txt
     shasum -a 256 --check checksums.txt
     ```

@@ -16,6 +16,7 @@ type readmeData struct {
 	ReleaseTag            string
 	ReleaseURL            string
 	Repo                  string
+	TapRepo               string
 	Version               string
 }
 
@@ -23,6 +24,7 @@ func main() {
 	templatePath := flag.String("template", "", "path to the README gotpl template")
 	outputPath := flag.String("output", "", "path to write the rendered README to")
 	repoSlug := flag.String("repo", "hydra-gitops/hydra", "repository slug in owner/name format")
+	tapRepoSlug := flag.String("tap-repo", "hydra-gitops/homebrew-tap", "homebrew tap repository slug in owner/name format")
 	version := flag.String("version", "", "release version with or without leading v")
 	flag.Parse()
 
@@ -50,6 +52,7 @@ func main() {
 		ReleaseTag:            releaseTag,
 		ReleaseURL:            releaseURL,
 		Repo:                  *repoSlug,
+		TapRepo:               *tapRepoSlug,
 		Version:               normalizedVersion,
 	}
 
