@@ -1,0 +1,4 @@
+steps:
+  - color:
+      fg: lightgreen
+      bold: true

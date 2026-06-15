@@ -15,11 +15,13 @@ import (
 type RecorderOptions struct {
 	// HydraBin is the hydra executable (e.g. "hydra" or an absolute path).
 	HydraBin string
+	// HydraGlobalArgs are inserted before the subcommand path, for example global flags.
+	HydraGlobalArgs []string
 	// CommandPath is the hydra subcommand path without "hydra" (e.g. "local template").
 	CommandPath string
 	// OutputPath is the destination .cast file.
 	OutputPath string
-	// MirrorOutput streams captured PTY bytes to stdout while recording (see --no-mirror-output).
+	// MirrorOutput streams captured PTY bytes to stdout while recording (see --mirror).
 	MirrorOutput bool
 }
 
@@ -43,7 +45,7 @@ func RecordHelp(opts RecorderOptions) error {
 	script.SetupRecordingShell()
 	script.ShowInitialPrompt()
 	docCommand := HelpCastDocumentationCommand(display)
-	execLine := expect.BuildHydraExecLine(opts.HydraBin, opts.CommandPath, "--help")
+	execLine := expect.BuildHydraExecLineWithGlobalArgs(opts.HydraBin, opts.HydraGlobalArgs, opts.CommandPath, "--help")
 	script.ShowAndRunCommand(display, execLine)
 
 	if err := os.MkdirAll(filepath.Dir(opts.OutputPath), 0o755); err != nil {

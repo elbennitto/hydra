@@ -1,0 +1,8 @@
+name: basic
+steps:
+  - type: prompt
+  - write: echo hello
+  - type: newline
+  - run: printf 'hello\n'
+  - sleep: 0.1
+  - write: done

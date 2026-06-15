@@ -5,17 +5,18 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/spf13/cobra"
 	"hydra-gitops.org/hydra/hydra-go/base/log"
 	"hydra-gitops.org/hydra/hydra-go/base/record/asciinema"
 	"hydra-gitops.org/hydra/hydra-go/base/record/expect"
-	"github.com/spf13/cobra"
 )
 
 // HelpRecordOptions configures help cast generation.
 type HelpRecordOptions struct {
-	Root         *cobra.Command
-	HydraBin     string
-	OutputDir    string
+	Root            *cobra.Command
+	HydraBin        string
+	HydraGlobalArgs []string
+	OutputDir       string
 	// MirrorOutput writes each cast's captured terminal output to stdout while recording.
 	MirrorOutput bool
 }
@@ -66,10 +67,11 @@ func RecordAllHelp(opts HelpRecordOptions) error {
 			log.Int("index", i+1),
 			log.Int("total", total))
 		if err := asciinema.RecordHelp(asciinema.RecorderOptions{
-			HydraBin:     opts.HydraBin,
-			CommandPath:  cmd.Path,
-			OutputPath:   outPath,
-			MirrorOutput: opts.MirrorOutput,
+			HydraBin:        opts.HydraBin,
+			HydraGlobalArgs: opts.HydraGlobalArgs,
+			CommandPath:     cmd.Path,
+			OutputPath:      outPath,
+			MirrorOutput:    opts.MirrorOutput,
 		}); err != nil {
 			return fmt.Errorf("record help for %q: %w", cmd.Path, err)
 		}

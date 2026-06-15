@@ -28,6 +28,7 @@ func (d *dynamicHandler) Handle(ctx context.Context, r slog.Record) error {
 	if !d.Enabled(ctx, r.Level) {
 		return nil
 	}
+	markRecordWritten()
 	return d.base.Handle(ctx, r)
 }
 

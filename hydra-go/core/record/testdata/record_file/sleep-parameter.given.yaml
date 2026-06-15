@@ -1,0 +1,6 @@
+name: sleep-parameter
+steps:
+  - write: before-sleep
+  - type: newline
+  - sleep: 0.3
+  - write: after-sleep

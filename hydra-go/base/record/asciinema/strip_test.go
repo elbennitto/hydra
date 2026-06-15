@@ -12,22 +12,22 @@ import (
 func TestStripRecordingControlSequences(t *testing.T) {
 	in := " $ \r\n\x1b]11;?\x1b\\\x1b[6nhydra local --help\r\n"
 	want := " $ \r\nhydra local --help\r\n"
-	assert.Equal(t, want, stripRecordingControlSequences(in))
+	assert.Equal(t, want, StripRecordingControlSequences(in))
 }
 
 func TestStripRecordingControlSequences_OnlyQueries(t *testing.T) {
-	assert.Empty(t, stripRecordingControlSequences("\x1b]11;?\x1b\\\x1b[6n"))
+	assert.Empty(t, StripRecordingControlSequences("\x1b]11;?\x1b\\\x1b[6n"))
 }
 
 func TestStripRecordingControlSequences_TerminalResponses(t *testing.T) {
 	in := "\x1b]11;rgb:0000/2b2b/3636\x1b\\\x1b[55;37Rhydra version --help\r\n"
 	want := "hydra version --help\r\n"
-	assert.Equal(t, want, stripRecordingControlSequences(in))
+	assert.Equal(t, want, StripRecordingControlSequences(in))
 }
 
 func TestRecordingFilterWriter_StreamedChunks(t *testing.T) {
 	var buf strings.Builder
-	fw := newRecordingFilterWriter(&buf)
+	fw := NewRecordingFilterWriter(&buf)
 	part1 := []byte(" $ \r\n\x1b]11;rgb:0000/2b2b/")
 	part2 := []byte("3636\x1b\\\x1b[55;37Rhydra --help\r\n")
 	_, err := fw.Write(part1)

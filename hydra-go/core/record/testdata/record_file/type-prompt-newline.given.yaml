@@ -1,0 +1,6 @@
+name: type-prompt-newline
+steps:
+  - type: prompt
+  - write: echo typed-only
+  - type: newline
+  - run: printf 'after-newline\n'

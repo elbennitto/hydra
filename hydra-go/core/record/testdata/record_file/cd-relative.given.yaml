@@ -1,0 +1,9 @@
+name: cd-relative
+steps:
+  - run: mkdir -p level1/level2
+  - cd: level1
+  - cd: level2
+  - cd: ..
+  - run: pwd
+  - assert:
+      stdout: history.contains("/home/hydra/level1")

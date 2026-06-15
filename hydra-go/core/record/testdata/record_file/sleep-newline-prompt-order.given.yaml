@@ -1,0 +1,11 @@
+name: Sleep newline prompt order
+steps:
+  - type: prompt
+  - write: d
+    speed: 0.2
+  - sleep: 1
+  - type: newline
+  - sleep: 0.2
+  - type: prompt
+  - write: c
+    speed: 0.2

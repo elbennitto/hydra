@@ -1,0 +1,13 @@
+name: newline-after-reset-sleep
+steps:
+  - type: prompt
+  - write: '# hydra is now installed'
+    speed: 0.2
+  - color: reset
+  - sleep: 0.2
+  - type: newline
+  - type: prompt
+  - write: command -v hydra
+    speed: 0.2
+  - color: reset
+  - type: newline

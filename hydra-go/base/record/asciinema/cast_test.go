@@ -44,13 +44,17 @@ func TestCaptureScriptOutput_RunsBashScript(t *testing.T) {
 func TestWriteRawCast_WritesDocumentationCommand(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "demo.cast")
-	body := " $ \r\n#!hydra sleep 0.5\r\nline\r\n"
+	body := " $ \r\n<<hydra sleep 0.5>>\r\nline\r\n"
 	require.NoError(t, writeRawCast(path, []byte(body), "hydra record help -- hydra demo --help"))
 
 	events := readCastEvents(t, path)
-	require.Len(t, events, 2)
+	require.Len(t, events, 3)
 	assert.InDelta(t, defaultLineDelaySeconds, events[0].time, 1e-9)
-	assert.InDelta(t, 0.5, events[1].time, 1e-9)
+	assert.Equal(t, " $ \r\n", events[0].data)
+	assert.InDelta(t, defaultLineDelaySeconds, events[1].time, 1e-9)
+	assert.Equal(t, "", events[1].data)
+	assert.InDelta(t, 0.5, events[2].time, 1e-9)
+	assert.Equal(t, "line\r\n", events[2].data)
 
 	var header map[string]any
 	data, err := os.ReadFile(path)

@@ -1,0 +1,6 @@
+name: assert-stdout-and-stderr
+steps:
+  - run: printf 'OUT_ONLY\n'
+  - assert:
+      stdout: history.contains("OUT_ONLY")
+      stderr: history == ""

@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"hydra-gitops.org/hydra/hydra-go/base/colors"
 	"github.com/stretchr/testify/assert"
+	"hydra-gitops.org/hydra/hydra-go/base/colors"
 )
 
 func TestBashScript_RecordingShellShowsColoredPromptAndCommand(t *testing.T) {
@@ -19,7 +19,7 @@ func TestBashScript_RecordingShellShowsColoredPromptAndCommand(t *testing.T) {
 	assert.Contains(t, body, "export TERM='xterm-256color'")
 	assert.Contains(t, body, "_HYDRA_PROMPT=")
 	assert.Contains(t, body, colors.RecordingShellPS1())
-	assert.Contains(t, body, "01;95m")
+	assert.Contains(t, body, "$ ")
 	assert.Contains(t, body, "_HYDRA_CMD=")
 	assert.Contains(t, body, colors.BoldWhite())
 	assert.Contains(t, body, `printf '%b' "$_HYDRA_PROMPT"`)
@@ -34,11 +34,21 @@ func TestHydraDisplayCommand(t *testing.T) {
 }
 
 func TestBuildHydraExecLine(t *testing.T) {
-	assert.Equal(t, "'/opt/hydra' 'local' 'template' '--help'", BuildHydraExecLine("/opt/hydra", "local template", "--help"))
+	assert.Equal(t,
+		"HYDRA_RECORD_NO_TERM_ESCAPES=1 CLICOLOR_FORCE=1 '/opt/hydra' 'local' 'template' '--help'",
+		BuildHydraExecLine("/opt/hydra", "local template", "--help"),
+	)
+}
+
+func TestBuildHydraExecLineWithGlobalArgs(t *testing.T) {
+	assert.Equal(t,
+		"HYDRA_RECORD_NO_TERM_ESCAPES=1 CLICOLOR_FORCE=1 '/opt/hydra' '--no-timestamps' 'local' 'template' '--help'",
+		BuildHydraExecLineWithGlobalArgs("/opt/hydra", []string{"--no-timestamps"}, "local template", "--help"),
+	)
 }
 
 func TestBashScript_WriteSleepDirective(t *testing.T) {
 	script := NewBashScript()
 	script.WriteSleepDirective(1.2)
-	assert.Contains(t, script.Render(), "#!hydra sleep 1.2")
+	assert.Contains(t, script.Render(), "<<hydra sleep 1.2>>")
 }

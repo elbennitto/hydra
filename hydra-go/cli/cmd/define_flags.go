@@ -7,13 +7,12 @@ import (
 
 	"hydra-gitops.org/hydra/hydra-go/base/log"
 
+	"github.com/spf13/cobra"
 	"hydra-gitops.org/hydra/hydra-go/base/errors"
 	"hydra-gitops.org/hydra/hydra-go/cli/flags"
 	hc "hydra-gitops.org/hydra/hydra-go/cli/util"
 	"hydra-gitops.org/hydra/hydra-go/core/helm"
 	"hydra-gitops.org/hydra/hydra-go/core/types"
-	"github.com/mattn/go-isatty"
-	"github.com/spf13/cobra"
 )
 
 func DefineFlags(cmd *cobra.Command, f any) error {
@@ -173,10 +172,11 @@ func defineColorFlag(cmd *cobra.Command, f any) error {
 
 		hc.AddPreRun(cmd, func(cmd *cobra.Command, args []string) {
 			if autoDetect {
-				tty := isatty.IsTerminal(os.Stdout.Fd())
-				if !tty && log.StdoutTTYAtCliInit() {
-					tty = true
+				if forced, ok := colorForcedByEnv(); ok {
+					colorFlag.Color = types.Color(forced)
+					return
 				}
+				tty := stdoutIsTerminalForHydra()
 				colorFlag.Color = types.Color(tty)
 				log.Default().DebugLog(logIdCmd, "auto detected color mode {mode}",
 					log.Bool("mode", bool(colorFlag.Color)))

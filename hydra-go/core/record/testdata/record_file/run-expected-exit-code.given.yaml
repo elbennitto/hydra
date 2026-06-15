@@ -1,0 +1,6 @@
+name: run-expected-exit-code
+steps:
+  - run: printf 'non-zero-ok\n'; exit 7
+    expectedExitCode: 7
+  - assert:
+      stdout: history.contains("non-zero-ok")

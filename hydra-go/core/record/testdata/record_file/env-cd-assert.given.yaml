@@ -1,0 +1,17 @@
+name: env-cd-assert
+steps:
+  - env:
+      - name: BASE
+        value: alpha
+      - name: DERIVED
+        cel: env.BASE + "-beta"
+      - name: ROOTPATH
+        exec: printf '%s' "$PWD"
+  - run: mkdir -p workspace
+  - cd: workspace
+  - run: printf '%s\n' "$DERIVED"
+  - assert:
+      stdout: history.contains("alpha-beta")
+  - run: pwd
+  - assert:
+      stdout: history.contains("/home/hydra/workspace")

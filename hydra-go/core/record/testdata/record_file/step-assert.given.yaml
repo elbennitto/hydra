@@ -1,0 +1,3 @@
+steps:
+  - assert:
+      both: 'true'

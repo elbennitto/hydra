@@ -10,7 +10,6 @@ import (
 	"hydra-gitops.org/hydra/hydra-go/base/buildinfo"
 	"hydra-gitops.org/hydra/hydra-go/base/log"
 
-	"github.com/mattn/go-isatty"
 	cosigncli "github.com/sigstore/cosign/v2/cmd/cosign/cli"
 	"github.com/spf13/cobra"
 	"hydra-gitops.org/hydra/hydra-go/cli/action"
@@ -94,6 +93,7 @@ func executeWithArgv(argv []string) error {
 
 	// create the root command
 	rootCmd, flags := NewRootCommand()
+	applyColorEnvOverrides()
 	ApplyColoredCobraHelp(rootCmd)
 	rootCmd.SetArgs(args)
 
@@ -263,7 +263,7 @@ func setSilenceUsageRecursive(cmd *cobra.Command) {
 }
 
 func configureLogging(flags *GlobalFlags, cmd *cobra.Command) {
-	stdoutTTYAtInit := isatty.IsTerminal(os.Stdout.Fd())
+	stdoutTTYAtInit := stdoutIsTerminalForHydra()
 
 	var useColor bool
 	switch {
@@ -272,7 +272,11 @@ func configureLogging(flags *GlobalFlags, cmd *cobra.Command) {
 	case flags.NoColorLog:
 		useColor = false
 	default:
-		useColor = isatty.IsTerminal(os.Stderr.Fd())
+		if forced, ok := colorForcedByEnv(); ok {
+			useColor = forced
+		} else {
+			useColor = stderrIsTerminalForHydra()
+		}
 	}
 
 	var colors *log.ColorHandlerColors
@@ -293,7 +297,7 @@ func configureLogging(flags *GlobalFlags, cmd *cobra.Command) {
 
 	var progressBars log.ProgressBars
 	if commandUsesClusterProgressFooter(cmd) {
-		tty := isatty.IsTerminal(os.Stderr.Fd())
+		tty := stderrIsTerminalForHydra()
 		if tty && useColor {
 			log.SetTerminalProgressUI(true)
 			if flags.NoProgress {

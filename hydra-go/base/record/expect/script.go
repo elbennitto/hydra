@@ -60,7 +60,7 @@ func (s *BashScript) SendLine(line string) {
 	s.lines = append(s.lines, line)
 }
 
-// WriteSleepDirective prints "#!hydra sleep <seconds>" to the terminal for cast timing.
+// WriteSleepDirective prints "<<hydra sleep <seconds>>" to the terminal for cast timing.
 func (s *BashScript) WriteSleepDirective(seconds float64) {
 	s.lines = append(s.lines, `printf `+shellQuote(directive.SleepLine(seconds)))
 }

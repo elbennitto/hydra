@@ -1,0 +1,5 @@
+name: run-defaults
+steps:
+  - run: printf 'run-defaults-ok\n'
+  - assert:
+      stdout: history.contains("run-defaults-ok")

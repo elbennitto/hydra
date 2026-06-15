@@ -10,20 +10,40 @@ import (
 
 func TestSleepLineAndParse(t *testing.T) {
 	line := SleepLine(1.2)
-	assert.Equal(t, "#!hydra sleep 1.2\r\n", line)
+	assert.Equal(t, "<<hydra sleep 1.2>>", line)
 
 	secs, ok := ParseSleepLine(line)
 	require.True(t, ok)
 	assert.InDelta(t, 1.2, secs, 1e-9)
 }
 
+func TestSleepInlineAndParse(t *testing.T) {
+	line := SleepInline(0.25)
+	assert.Equal(t, "<<hydra sleep 0.25>>", line)
+}
+
 func TestParseSleepLine_RejectsUnknownDirective(t *testing.T) {
-	_, ok := ParseSleepLine("#!hydra wait 1\r\n")
+	_, ok := ParseSleepLine("<<hydra wait 1>>")
 	assert.False(t, ok)
+}
+
+func TestParseSleepLine_FindsEmbeddedDirective(t *testing.T) {
+	secs, ok := ParseSleepLine("prefix <<hydra sleep 1.5>> suffix")
+	require.True(t, ok)
+	assert.InDelta(t, 1.5, secs, 1e-9)
 }
 
 func TestWriteSleep(t *testing.T) {
 	var buf bytes.Buffer
 	require.NoError(t, WriteSleep(&buf, 2))
-	assert.Equal(t, "#!hydra sleep 2\r\n", buf.String())
+	assert.Equal(t, "<<hydra sleep 2>>", buf.String())
+}
+
+func TestColorResetLine(t *testing.T) {
+	assert.Equal(t, "<<hydra color reset>>", ColorResetLine())
+}
+
+func TestIsSleepDirectiveOnlyLine(t *testing.T) {
+	assert.True(t, IsSleepDirectiveOnlyLine("<<hydra sleep 1>>\r\n"))
+	assert.False(t, IsSleepDirectiveOnlyLine("x<<hydra sleep 1>>\r\n"))
 }

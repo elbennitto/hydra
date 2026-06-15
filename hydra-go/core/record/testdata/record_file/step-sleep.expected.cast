@@ -1,0 +1,2 @@
+{"command":"hydra record file step-sleep","env":{"SHELL":"/bin/bash"},"term":{"cols":120,"rows":36,"type":"xterm-256color"},"version":3}
+[0.7,"o",""]

@@ -1,0 +1,11 @@
+name: env-object-cel
+steps:
+  - env:
+      - name: BASE
+        value: alpha
+  - env:
+      - name: DERIVED
+        cel: env.BASE + "-beta"
+  - run: printf '%s\n' "$DERIVED"
+  - assert:
+      stdout: history.contains("alpha-beta")

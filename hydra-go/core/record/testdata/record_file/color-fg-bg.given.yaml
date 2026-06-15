@@ -1,0 +1,9 @@
+name: color-fg-bg
+steps:
+  - type: prompt
+  - color:
+      fg: lightgreen
+      bg: blue
+  - write: colorful
+  - color: reset
+  - type: newline

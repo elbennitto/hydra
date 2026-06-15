@@ -1,0 +1,5 @@
+{"command":"hydra record file sleep-newline-prompt-order","env":{"SHELL":"/bin/bash"},"term":{"cols":120,"rows":36,"type":"xterm-256color"},"version":3}
+[0.01,"o","\u001b[1;95m $ \u001b[0m\u001b[1;97md"]
+[1,"o","\r\n"]
+[0.2,"o","\u001b[1;95m $ \u001b[0m\u001b[1;97mc"]
+[0.2,"o",""]

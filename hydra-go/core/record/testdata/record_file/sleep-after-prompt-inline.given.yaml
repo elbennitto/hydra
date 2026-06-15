@@ -1,0 +1,7 @@
+name: sleep-after-prompt-inline
+steps:
+  - type: prompt
+  - sleep: 0.2
+  - write: '# test'
+    speed: 0.2
+  - type: newline

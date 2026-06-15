@@ -1,0 +1,3 @@
+{"command":"hydra record file run-expected-exit-code","env":{"SHELL":"/bin/bash"},"term":{"cols":120,"rows":36,"type":"xterm-256color"},"version":3}
+[0.01,"o","\u001b[1;95m $ \u001b[0m\u001b[1;97mprintf 'non-zero-ok\\n'; exit 7\u001b[0m\r\n"]
+[0.01,"o","non-zero-ok\r\n"]

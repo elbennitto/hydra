@@ -1,0 +1,5 @@
+name: assert-stderr-only
+steps:
+  - run: printf 'warn-line\n' >&2
+  - assert:
+      stderr: history.contains("warn-line")

@@ -1,0 +1,1 @@
+{"command":"hydra record file step-assert","env":{"SHELL":"/bin/bash"},"term":{"cols":120,"rows":36,"type":"xterm-256color"},"version":3}

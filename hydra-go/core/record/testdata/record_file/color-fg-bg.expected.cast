@@ -1,0 +1,2 @@
+{"command":"hydra record file color-fg-bg","env":{"SHELL":"/bin/bash"},"term":{"cols":120,"rows":36,"type":"xterm-256color"},"version":3}
+[0.01,"o","\u001b[1;95m $ \u001b[0m\u001b[1;97m\u001b[92;44mcolorful\u001b[0m\r\n"]

@@ -8,9 +8,9 @@ import (
 // recordingFilterCarryMax is the suffix kept across Write calls so split escape sequences can be stripped.
 const recordingFilterCarryMax = 256
 
-// stripRecordingControlSequences removes terminal query/response sequences that must not
+// StripRecordingControlSequences removes terminal query/response sequences that must not
 // appear in documentation casts or on stdout while mirroring (OSC 11, DECRQCPR / CPR).
-func stripRecordingControlSequences(data string) string {
+func StripRecordingControlSequences(data string) string {
 	data = strings.ReplaceAll(data, "\x1b]11;?\x1b\\", "")
 	data = strings.ReplaceAll(data, "\x1b[6n", "")
 	data = stripOSC11Queries(data)
@@ -49,6 +49,9 @@ func stripCPRResponses(data string) string {
 // isExitCodeOnlyLine reports lines that only echo a numeric shell exit status (e.g. "0\r\n"
 // from PROMPT_COMMAND='echo $?' or terminal multiplexers such as Zellij).
 func isExitCodeOnlyLine(line string) bool {
+	if !strings.HasSuffix(line, "\n") && !strings.HasSuffix(line, "\r") {
+		return false
+	}
 	content := strings.TrimRight(line, "\r\n")
 	if content == "" {
 		return false
@@ -82,33 +85,33 @@ func stripOSC11Queries(data string) string {
 	}
 }
 
-// recordingFilterWriter strips terminal query/response escapes before forwarding to the sink.
-type recordingFilterWriter struct {
+// RecordingFilterWriter strips terminal query/response escapes before forwarding to the sink.
+type RecordingFilterWriter struct {
 	w     io.Writer
 	carry []byte
 }
 
-func newRecordingFilterWriter(w io.Writer) *recordingFilterWriter {
-	return &recordingFilterWriter{w: w}
+func NewRecordingFilterWriter(w io.Writer) *RecordingFilterWriter {
+	return &RecordingFilterWriter{w: w}
 }
 
-func (f *recordingFilterWriter) Write(p []byte) (int, error) {
+func (f *RecordingFilterWriter) Write(p []byte) (int, error) {
 	f.carry = append(f.carry, p...)
 	for len(f.carry) > recordingFilterCarryMax {
 		stable := f.carry[:len(f.carry)-recordingFilterCarryMax]
 		f.carry = f.carry[len(f.carry)-recordingFilterCarryMax:]
-		if _, err := f.w.Write([]byte(stripRecordingControlSequences(string(stable)))); err != nil {
+		if _, err := f.w.Write([]byte(StripRecordingControlSequences(string(stable)))); err != nil {
 			return len(p), err
 		}
 	}
 	return len(p), nil
 }
 
-func (f *recordingFilterWriter) Flush() error {
+func (f *RecordingFilterWriter) Flush() error {
 	if len(f.carry) == 0 {
 		return nil
 	}
-	cleaned := stripRecordingControlSequences(string(f.carry))
+	cleaned := StripRecordingControlSequences(string(f.carry))
 	f.carry = nil
 	if len(cleaned) == 0 {
 		return nil

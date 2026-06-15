@@ -7,10 +7,51 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"strings"
 
 	"github.com/creack/pty"
 	"hydra-gitops.org/hydra/hydra-go/base/record/expect"
 )
+
+// CastStreamBuilder receives terminal output chunks and converts them into an asciicast stream.
+type CastStreamBuilder struct {
+	documentationCommand string
+	chunks               []string
+}
+
+func NewCastStreamBuilder(documentationCommand string) *CastStreamBuilder {
+	return &CastStreamBuilder{documentationCommand: documentationCommand}
+}
+
+func (c *CastStreamBuilder) WriteString(chunk string) {
+	if chunk == "" {
+		return
+	}
+	c.chunks = append(c.chunks, chunk)
+}
+
+func (c *CastStreamBuilder) WriteBytes(chunk []byte) {
+	if len(chunk) == 0 {
+		return
+	}
+	c.chunks = append(c.chunks, string(chunk))
+}
+
+func (c *CastStreamBuilder) Build() ([]byte, error) {
+	cleanOutput := StripRecordingControlSequences(strings.Join(c.chunks, ""))
+	events := linesToEvents(splitTerminalLines(cleanOutput), "o")
+	return buildCastStream(events, c.documentationCommand)
+}
+
+// CastFileSink writes rendered cast bytes to disk.
+type CastFileSink struct{}
+
+func (CastFileSink) Write(path string, cast []byte) error {
+	if err := os.WriteFile(path, cast, 0o644); err != nil {
+		return fmt.Errorf("write cast file: %w", err)
+	}
+	return nil
+}
 
 // defaultCastCols and defaultCastRows define the PTY/cast geometry.
 const defaultCastCols = 120
@@ -32,9 +73,9 @@ func captureScriptOutput(scriptPath string, env []string, mirror io.Writer) ([]b
 
 	var output bytes.Buffer
 	dest := io.Writer(&output)
-	var filteredMirror *recordingFilterWriter
+	var filteredMirror *RecordingFilterWriter
 	if mirror != nil {
-		filteredMirror = newRecordingFilterWriter(mirror)
+		filteredMirror = NewRecordingFilterWriter(mirror)
 		dest = io.MultiWriter(&output, filteredMirror)
 	}
 
@@ -67,9 +108,17 @@ func captureScriptOutput(scriptPath string, env []string, mirror io.Writer) ([]b
 
 // writeRawCast writes the final documentation asciicast v3 file directly.
 func writeRawCast(path string, ptyOutput []byte, documentationCommand string) error {
-	cleanOutput := stripRecordingControlSequences(string(ptyOutput))
-	events := linesToEvents(splitTerminalLines(cleanOutput), "o")
+	builder := NewCastStreamBuilder(documentationCommand)
+	builder.WriteBytes(ptyOutput)
+	stream, err := builder.Build()
+	if err != nil {
+		return err
+	}
 
+	return CastFileSink{}.Write(path, stream)
+}
+
+func buildCastStream(events []castEvent, documentationCommand string) ([]byte, error) {
 	header := map[string]any{
 		"version": 3,
 		"term": map[string]any{
@@ -86,7 +135,7 @@ func writeRawCast(path string, ptyOutput []byte, documentationCommand string) er
 	}
 	headerJSON, err := json.Marshal(header)
 	if err != nil {
-		return fmt.Errorf("encode cast header: %w", err)
+		return nil, fmt.Errorf("encode cast header: %w", err)
 	}
 
 	var out bytes.Buffer
@@ -95,13 +144,15 @@ func writeRawCast(path string, ptyOutput []byte, documentationCommand string) er
 	for _, event := range events {
 		eventJSON, err := json.Marshal([]any{event.time, event.kind, event.data})
 		if err != nil {
-			return fmt.Errorf("encode cast event: %w", err)
+			return nil, fmt.Errorf("encode cast event: %w", err)
 		}
 		out.Write(eventJSON)
 		out.WriteByte('\n')
 	}
-	if err := os.WriteFile(path, out.Bytes(), 0o644); err != nil {
-		return fmt.Errorf("write cast file: %w", err)
-	}
-	return nil
+	return out.Bytes(), nil
+}
+
+// WriteCast writes a documentation asciicast v3 file from captured PTY output.
+func WriteCast(path string, ptyOutput []byte, documentationCommand string) error {
+	return writeRawCast(path, ptyOutput, documentationCommand)
 }

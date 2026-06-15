@@ -1,0 +1,7 @@
+{"command":"hydra record file env-cd-assert","env":{"SHELL":"/bin/bash"},"term":{"cols":120,"rows":36,"type":"xterm-256color"},"version":3}
+[0.01,"o","\u001b[1;95m $ \u001b[0m\u001b[1;97mmkdir -p workspace\u001b[0m\r\n"]
+[0.01,"o","\u001b[1;95m $ \u001b[0m\u001b[1;97mcd workspace\u001b[0m\r\n"]
+[0.01,"o","\u001b[1;95m $ \u001b[0m\u001b[1;97mprintf '%s\\n' \"$DERIVED\"\u001b[0m\r\n"]
+[0.01,"o","alpha-beta\r\n"]
+[0.01,"o","\u001b[1;95m $ \u001b[0m\u001b[1;97mpwd\u001b[0m\r\n"]
+[0.01,"o","/home/hydra/workspace\r\n"]

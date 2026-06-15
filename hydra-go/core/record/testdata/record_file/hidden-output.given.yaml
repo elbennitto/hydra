@@ -1,0 +1,8 @@
+name: hidden-output
+steps:
+  - run: printf 'hidden\n'
+    output: false
+  - assert:
+      stdout: history.contains("hidden")
+  - run: printf 'visible\n'
+    input: false

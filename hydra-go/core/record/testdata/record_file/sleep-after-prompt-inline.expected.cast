@@ -1,0 +1,9 @@
+{"command":"hydra record file sleep-after-prompt-inline","env":{"SHELL":"/bin/bash"},"term":{"cols":120,"rows":36,"type":"xterm-256color"},"version":3}
+[0.01,"o","\u001b[1;95m $ \u001b[0m\u001b[1;97m"]
+[0.2,"o","#"]
+[0.2,"o"," "]
+[0.2,"o","t"]
+[0.2,"o","e"]
+[0.2,"o","s"]
+[0.2,"o","t"]
+[0.2,"o","\r\n"]

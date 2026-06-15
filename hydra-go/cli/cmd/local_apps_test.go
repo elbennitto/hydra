@@ -45,6 +45,7 @@ func TestLocalAppsCommandUsesAllAppsPatternWhenNoArgsProvided(t *testing.T) {
 		captured = &flags
 		return nil, nil
 	})
+	t.Setenv("HYDRA_CONTEXT", "/tmp/hydra-context")
 
 	err := cmd.Execute()
 	require.NoError(t, err)

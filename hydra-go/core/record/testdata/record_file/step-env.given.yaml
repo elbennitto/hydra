@@ -1,0 +1,4 @@
+steps:
+  - env:
+      - name: A
+        value: alpha

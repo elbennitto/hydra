@@ -1,0 +1,13 @@
+{"command":"hydra record file write-speed","env":{"SHELL":"/bin/bash"},"term":{"cols":120,"rows":36,"type":"xterm-256color"},"version":3}
+[0.01,"o","plain-write\u001b[0m\r\n"]
+[0.01,"o","\u001b[92;44ms"]
+[0.05,"o","l"]
+[0.05,"o","o"]
+[0.05,"o","w"]
+[0.05,"o","-"]
+[0.05,"o","w"]
+[0.05,"o","r"]
+[0.05,"o","i"]
+[0.05,"o","t"]
+[0.05,"o","e"]
+[0.05,"o","\u001b[0m\r\n"]

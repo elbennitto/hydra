@@ -61,12 +61,14 @@ func BoldLightMagenta() string {
 	return "\033[1;95m"
 }
 
-// RecordingShellPS1 is the bash PS1 for asciicast help recordings (bold light magenta " $ ").
+// RecordingShellPS1 is the bash PS1 for asciicast help recordings (bold light
+// magenta " $ ").
 func RecordingShellPS1() string {
-	return `\[\033[01;95m\] \$ \[\033[00m\]`
+	return `\[\033[1;95m\] \$ \[\033[0m\]`
 }
 
-// RecordingShellPrompt returns the visible prompt for printf (same styling as RecordingShellPS1).
+// RecordingShellPrompt returns the visible prompt for printf (same styling as
+// RecordingShellPS1).
 func RecordingShellPrompt() string {
 	return BoldLightMagenta() + " $ " + Reset.String()
 }

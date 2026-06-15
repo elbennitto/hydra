@@ -1,0 +1,12 @@
+name: env-list-mixed
+steps:
+  - env:
+      - name: A
+        value: one
+      - name: B
+        cel: env.A + "-two"
+      - name: C
+        exec: printf 'three'
+  - run: printf '%s|%s\n' "$B" "$C"
+  - assert:
+      stdout: history.contains("one-two|three")

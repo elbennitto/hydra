@@ -1,0 +1,6 @@
+name: run-input-false
+steps:
+  - run: printf 'input-hidden-output-visible\n'
+    input: false
+  - assert:
+      stdout: history.contains("input-hidden-output-visible")

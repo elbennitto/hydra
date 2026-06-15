@@ -1,0 +1,8 @@
+name: env-object-value
+steps:
+  - env:
+      - name: DEMO
+        value: fixed-value
+  - run: printf '%s\n' "$DEMO"
+  - assert:
+      stdout: history.contains("fixed-value")

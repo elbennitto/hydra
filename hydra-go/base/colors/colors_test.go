@@ -18,18 +18,14 @@ func TestBoldWhite(t *testing.T) {
 }
 
 func TestRecordingShellPS1(t *testing.T) {
-	if got, want := RecordingShellPS1(), `\[\033[01;95m\] \$ \[\033[00m\]`; got != want {
+	if got, want := RecordingShellPS1(), `\[\033[1;95m\] \$ \[\033[0m\]`; got != want {
 		t.Errorf("RecordingShellPS1() = %q, want %q", got, want)
 	}
 }
 
 func TestRecordingShellPrompt(t *testing.T) {
-	got := RecordingShellPrompt()
-	if !strings.Contains(got, BoldLightMagenta()) {
-		t.Errorf("RecordingShellPrompt() = %q, want bold light magenta prefix", got)
-	}
-	if !strings.HasSuffix(got, " $ "+Reset.String()) {
-		t.Errorf("RecordingShellPrompt() = %q, want leading space, $ and reset suffix", got)
+	if got, want := RecordingShellPrompt(), BoldLightMagenta()+" $ "+Reset.String(); got != want {
+		t.Errorf("RecordingShellPrompt() = %q, want %q", got, want)
 	}
 }
 

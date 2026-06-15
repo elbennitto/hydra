@@ -21,6 +21,7 @@ var lastLogConfig Config
 func Configure(config Config) {
 	lastLogConfig = config
 	activeProgressBars = config.ProgressBars
+	resetWriteState()
 
 	opts := &slog.HandlerOptions{
 		AddSource: config.Level <= slog.LevelDebug,

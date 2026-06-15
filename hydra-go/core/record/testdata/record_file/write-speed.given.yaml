@@ -1,0 +1,12 @@
+name: write-speed
+steps:
+  - write: plain-write
+  - color: reset
+  - type: newline
+  - color:
+      fg: lightgreen
+      bg: blue
+  - write: slow-write
+    speed: 0.05
+  - color: reset
+  - type: newline

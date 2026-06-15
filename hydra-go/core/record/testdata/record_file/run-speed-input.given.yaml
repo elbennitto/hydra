@@ -1,0 +1,6 @@
+name: run-speed-input
+steps:
+  - run: printf 'typed-run\n'
+    speed: 0.05
+  - assert:
+      stdout: history.contains("typed-run")

@@ -1,0 +1,3 @@
+{"command":"hydra record file sleep-parameter","env":{"SHELL":"/bin/bash"},"term":{"cols":120,"rows":36,"type":"xterm-256color"},"version":3}
+[0.01,"o","before-sleep\r\n"]
+[0.3,"o","after-sleep"]

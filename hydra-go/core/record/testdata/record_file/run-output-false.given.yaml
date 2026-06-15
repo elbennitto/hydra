@@ -1,0 +1,7 @@
+name: run-output-false
+steps:
+  - run: printf 'hidden-output-value\n'
+    output: false
+  - assert:
+      stdout: history.contains("hidden-output-value")
+  - write: visible-after-hidden

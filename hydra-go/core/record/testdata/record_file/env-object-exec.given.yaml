@@ -1,0 +1,8 @@
+name: env-object-exec
+steps:
+  - env:
+      - name: EXEC_VAR
+        exec: printf 'exec-value'
+  - run: printf '%s\n' "$EXEC_VAR"
+  - assert:
+      stdout: history.contains("exec-value")

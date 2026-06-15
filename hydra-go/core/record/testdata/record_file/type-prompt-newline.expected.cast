@@ -1,0 +1,4 @@
+{"command":"hydra record file type-prompt-newline","env":{"SHELL":"/bin/bash"},"term":{"cols":120,"rows":36,"type":"xterm-256color"},"version":3}
+[0.01,"o","\u001b[1;95m $ \u001b[0m\u001b[1;97mecho typed-only\r\n"]
+[0.01,"o","\u001b[1;95m $ \u001b[0m\u001b[1;97mprintf 'after-newline\\n'\u001b[0m\r\n"]
+[0.01,"o","after-newline\r\n"]
