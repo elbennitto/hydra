@@ -132,6 +132,10 @@ func NewCluster(context *Context, clusterName types.ClusterName, limits RESTClie
 		return nil, err
 	}
 
+	if err := validateLevelType(cluster.l, cluster.ClusterPath(), hydraTypeCluster, hydraTypeCluster); err != nil {
+		return nil, err
+	}
+
 	return cluster, nil
 }
 
@@ -222,6 +226,10 @@ func (c *Cluster) LoadValuesMap(mode types.HelmNetworkMode) (types.ValuesMap, er
 
 	// Load and merge cluster-level values
 	vals, err := values.LoadAndMergeValuesFile(c.l, c.ClusterValuesFile(), contextVals)
+	if err != nil {
+		return nil, err
+	}
+	vals, err = ensureHydraTypeInValues(vals, hydraTypeCluster, hydraTypeCluster)
 	if err != nil {
 		return nil, err
 	}

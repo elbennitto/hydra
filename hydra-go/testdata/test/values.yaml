@@ -1,3 +1,5 @@
 global:
+  hydra:
+    type: context
   info:
     context: test

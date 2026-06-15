@@ -1,5 +1,3 @@
 global:
   hydra:
     type: cluster
-  info:
-    cluster: in-cluster

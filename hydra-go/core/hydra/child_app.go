@@ -139,6 +139,10 @@ func (a *ChildApp) loadValuesMap(networkMode types.HelmNetworkMode) (types.Value
 	if err != nil {
 		return nil, err
 	}
+	vals, err = ensureHydraTypeInValues(vals, hydraTypeChildApp, hydraTypeChildApp)
+	if err != nil {
+		return nil, err
+	}
 
 	return helm.LoadValuesMap(a.l, chart, vals)
 }

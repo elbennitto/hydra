@@ -132,6 +132,10 @@ func NewRootApp(cluster *Cluster, rootAppName types.RootAppName) (*RootApp, erro
 			log.String("name", string(rootAppName)))
 	}
 	initRootAppCache(cluster.l)
+	rootPath := filepath.Join(cluster.ClusterPath(), string(rootAppName))
+	if err := validateLevelType(cluster.l, rootPath, hydraTypeRootApp, hydraTypeRootApp); err != nil {
+		return nil, err
+	}
 	key := rootAppCacheKey{
 		clusterCacheKey: cluster.cacheKey(),
 		RootAppName:     rootAppName,
@@ -168,6 +172,10 @@ func (a *RootApp) loadValuesMap(networkMode types.HelmNetworkMode) (types.Values
 	}
 
 	valuesMap, err := helm.LoadValuesMap(a.l, charter, clusterVals)
+	if err != nil {
+		return nil, err
+	}
+	valuesMap, err = ensureHydraTypeInValues(valuesMap, hydraTypeRootApp, hydraTypeRootApp)
 	if err != nil {
 		return nil, err
 	}
