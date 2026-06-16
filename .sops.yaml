@@ -14,3 +14,18 @@ creation_rules:
   - path_regex: ^\.github/secrets/repos/hydra-gitops/hydra/age-pipeline-keys\.sops\.yaml$
     age: >-
       ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMvrL1CJG09aLg6F4A2+TXINIKZRVHr8KUVoHDy0FWXB Dennis Rieks <dennis.rieks@rohde-schwarz.com>
+  - path_regex: ^\.github/secrets/repos/drieks/hydra/git\.sops\.yaml$
+    age: >-
+      ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMvrL1CJG09aLg6F4A2+TXINIKZRVHr8KUVoHDy0FWXB Dennis Rieks <dennis.rieks@rohde-schwarz.com>,
+      age1xqq5gh0k7gcv5cgdu85m4nc0yft4dp9wu62dd4rcfzmwknrc0u9sc3s3cw,
+      age1gytlmwd26fgj3ddrgl3z0lrufk549f7sc7lzajalxksdqtceqvdqevhf83
+  - path_regex: ^\.github/secrets/repos/drieks/hydra/publish\.sops\.yaml$
+    age: >-
+      ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMvrL1CJG09aLg6F4A2+TXINIKZRVHr8KUVoHDy0FWXB Dennis Rieks <dennis.rieks@rohde-schwarz.com>,
+      age1gytlmwd26fgj3ddrgl3z0lrufk549f7sc7lzajalxksdqtceqvdqevhf83
+  - path_regex: ^\.github/secrets/repos/drieks/hydra/renovate\.sops\.yaml$
+    age: >-
+      ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMvrL1CJG09aLg6F4A2+TXINIKZRVHr8KUVoHDy0FWXB Dennis Rieks <dennis.rieks@rohde-schwarz.com>
+  - path_regex: ^\.github/secrets/repos/drieks/hydra/age-pipeline-keys\.sops\.yaml$
+    age: >-
+      ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMvrL1CJG09aLg6F4A2+TXINIKZRVHr8KUVoHDy0FWXB Dennis Rieks <dennis.rieks@rohde-schwarz.com>
