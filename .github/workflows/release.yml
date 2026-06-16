@@ -6,6 +6,7 @@ on:
       - main
 
 permissions:
+  actions: write # dispatch publish workflow
   contents: write # checkout + push signed tags
   issues: write # semantic-release/github may comment on issues
   pull-requests: write # semantic-release/github may comment on PRs
@@ -15,6 +16,8 @@ jobs:
     name: Release
     environment: release
     runs-on: ubuntu-24.04
+    env:
+      HYDRA_SECRETS_REPO: ${{ github.repository }}
 
     if: "github.event.head_commit.author.name != 'Hydra Release'"
 
@@ -37,21 +40,18 @@ jobs:
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
         run: ./scripts/semantic-release.sh
 
-      - name: Dispatch publish
+      - name: Dispatch publish on release tag
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           tag="$(git tag --points-at HEAD | grep '^v' | sort -V | tail -n1 || true)"
           if [[ -z "${tag}" ]]; then
-            echo "No new release tag found on HEAD; skipping dispatch"
+            echo "No new release tag found on HEAD; skipping publish dispatch"
             exit 0
           fi
 
-          sha="$(git rev-list -n1 "${tag}")"
-          echo "Dispatching publish for tag ${tag} at ${sha}"
+          echo "Dispatching publish workflow on ref ${tag}"
 
-          gh api repos/${{ github.repository }}/dispatches \
+          gh api repos/${{ github.repository }}/actions/workflows/publish.yml/dispatches \
             --method POST \
-            -f event_type=hydra_publish \
-            -F client_payload[tag]="${tag}" \
-            -F client_payload[sha]="${sha}"
+            -f ref="${tag}"

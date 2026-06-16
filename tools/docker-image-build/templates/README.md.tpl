@@ -35,7 +35,7 @@ shasum -a 256 --check checksums.txt
 
 ## Verify releases
 
-Public keys are published in [.github/secrets/public-keys.yaml](.github/secrets/public-keys.yaml).
+Public keys are published in [.github/secrets/repos/hydra-gitops/hydra/public-keys.yaml](.github/secrets/repos/hydra-gitops/hydra/public-keys.yaml).
 
 - Release tag signatures are verified before release jobs start.
 - Downloaded CLI archives can be checked against `checksums.txt`.

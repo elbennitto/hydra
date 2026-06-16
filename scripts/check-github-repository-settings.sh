@@ -124,9 +124,12 @@ check_signed_commits_with_rulesets() {
   local ruleset_name
   local target
   local enforcement
+  local target_normalized
+  local enforcement_normalized
   local includes
   local excludes
   local rules
+  local rules_normalized
   local include_pattern
   local exclude_pattern
   local include_match
@@ -137,8 +140,10 @@ check_signed_commits_with_rulesets() {
 
   while IFS='|' read -r ruleset_name target enforcement includes excludes rules; do
     [[ -z "${target:-}" ]] && continue
-    [[ "${target}" == "BRANCH" ]] || continue
-    [[ "${enforcement}" == "ACTIVE" ]] || continue
+    target_normalized="${target^^}"
+    enforcement_normalized="${enforcement^^}"
+    [[ "${target_normalized}" == "BRANCH" ]] || continue
+    [[ "${enforcement_normalized}" == "ACTIVE" ]] || continue
 
     include_match=0
     IFS=',' read -r -a include_patterns <<< "${includes}"
@@ -163,8 +168,9 @@ check_signed_commits_with_rulesets() {
     [[ "${exclude_match}" -eq 0 ]] || continue
 
     saw_applicable=1
+    rules_normalized="${rules^^}"
     matched_rulesets+=("name=${ruleset_name} include=${includes:-<none>} exclude=${excludes:-<none>} rules=${rules:-<none>}")
-    if [[ ",${rules}," == *",REQUIRED_SIGNATURES,"* ]]; then
+    if [[ ",${rules_normalized}," == *",REQUIRED_SIGNATURES,"* ]]; then
       return 0
     fi
   done < <(

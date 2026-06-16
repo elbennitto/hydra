@@ -1,10 +1,8 @@
 name: publish
-run-name: publish ${{ github.event.client_payload.tag }}
+run-name: publish ${{ github.ref_name }}
 
 on:
-  repository_dispatch:
-    types:
-      - hydra_publish
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -13,6 +11,9 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-24.04
+    environment: publish
+    env:
+      HYDRA_SECRETS_REPO: ${{ github.repository }}
     steps:
       - name: Print github.actor
         run: echo "github.actor=${{ github.actor }}"
@@ -21,7 +22,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          ref: refs/tags/${{ github.event.client_payload.tag }}
+          ref: refs/tags/${{ github.ref_name }}
 
       - name: Install cosign
         uses: ./.github/actions/install-cosign
@@ -34,22 +35,28 @@ jobs:
 
       - name: Verify release
         env:
-          RELEASE_TAG: ${{ github.event.client_payload.tag }}
+          RELEASE_TAG: ${{ github.ref_name }}
           SOPS_AGE_KEY_PUBLISH: ${{ secrets.SOPS_AGE_KEY_PUBLISH }}
         run: ./scripts/publish.sh verify
 
       - name: Build and publish CLI
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_TAG: ${{ github.event.client_payload.tag }}
+          RELEASE_TAG: ${{ github.ref_name }}
           SOPS_AGE_KEY_PUBLISH: ${{ secrets.SOPS_AGE_KEY_PUBLISH }}
         run: ./scripts/publish.sh cli
+
+      - name: Update Homebrew source formula
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          SOPS_AGE_KEY_PUBLISH: ${{ secrets.SOPS_AGE_KEY_PUBLISH }}
+        run: ./scripts/publish.sh formula
 
       - name: Build and publish container
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_ACTOR: ${{ github.actor }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-          RELEASE_TAG: ${{ github.event.client_payload.tag }}
+          RELEASE_TAG: ${{ github.ref_name }}
           SOPS_AGE_KEY_PUBLISH: ${{ secrets.SOPS_AGE_KEY_PUBLISH }}
         run: ./scripts/publish.sh container

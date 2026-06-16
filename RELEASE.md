@@ -48,8 +48,9 @@ The lightweight-then-sign flow is intentional: current `semantic-release` releas
 
 ### Homebrew
 
-- Cask publishing is handled via GoReleaser
-- Target usage is macOS and Linux Homebrew installations
+- Formula and cask publishing are handled via GoReleaser
+- `hydra` is published as a Homebrew formula that builds the latest release from source
+- `hydra-bin` is published as a Homebrew cask that installs the GitHub release binary
 - Published to `hydra-gitops/homebrew-tap`
 
 ## Supported platforms
@@ -75,13 +76,14 @@ The lightweight-then-sign flow is intentional: current `semantic-release` releas
 
 Public keys are stored in:
 
-- [.github/secrets/public-keys.yaml](.github/secrets/public-keys.yaml)
+- [.github/secrets/repos/hydra-gitops/hydra/public-keys.yaml](.github/secrets/repos/hydra-gitops/hydra/public-keys.yaml)
 
 Encrypted secret files:
 
-- [.github/secrets/release.sops.yaml](.github/secrets/release.sops.yaml)
-- [.github/secrets/publish.sops.yaml](.github/secrets/publish.sops.yaml)
-- [.github/secrets/age-pipeline-keys.sops.yaml](.github/secrets/age-pipeline-keys.sops.yaml)
+- [.github/secrets/repos/hydra-gitops/hydra/git.sops.yaml](.github/secrets/repos/hydra-gitops/hydra/git.sops.yaml)
+- [.github/secrets/repos/hydra-gitops/hydra/publish.sops.yaml](.github/secrets/repos/hydra-gitops/hydra/publish.sops.yaml)
+- [.github/secrets/repos/hydra-gitops/hydra/renovate.sops.yaml](.github/secrets/repos/hydra-gitops/hydra/renovate.sops.yaml)
+- [.github/secrets/repos/hydra-gitops/hydra/age-pipeline-keys.sops.yaml](.github/secrets/repos/hydra-gitops/hydra/age-pipeline-keys.sops.yaml)
 
 All encrypted files are decryptable with the owner SSH key configured in [.sops.yaml](.sops.yaml).
 
@@ -90,7 +92,18 @@ Required GitHub secrets:
 - SOPS_AGE_KEY_RELEASE
 - SOPS_AGE_KEY_PUBLISH
 - GITHUB_TOKEN (provided by GitHub Actions)
-- RENOVATE_TOKEN (recommended PAT for dependency update PRs; workflow falls back to GITHUB_TOKEN)
+- RENOVATE_TOKEN (required PAT or GitHub App token for dependency update PRs)
+
+Renovate token source:
+
+- Store the encrypted source value in [.github/secrets/repos/hydra-gitops/hydra/renovate.sops.yaml](.github/secrets/repos/hydra-gitops/hydra/renovate.sops.yaml) under `renovate.token`.
+- Create the token in `GitHub -> Settings -> Developer settings -> Personal access tokens -> Fine-grained tokens -> Generate new token`.
+- Use `Resource owner: hydra-gitops`.
+- Use `Repository access: Only select repositories` and select `hydra`.
+- Grant repository permissions `Contents: Read and write` and `Pull requests: Read and write`.
+- Grant `Issues: Read and write` as well if Renovate should manage its dashboard issue or leave issue comments.
+- If the organization requires approval for fine-grained tokens, an org owner must approve the token before it can access private repositories.
+- Upload the decrypted value to the repository secret with `repo="${GITHUB_REPOSITORY:-$(gh repo view --json nameWithOwner --jq '.nameWithOwner')}"; secrets_dir=".github/secrets/repos/${repo}"; sops --decrypt --extract '["renovate"]["token"]' "${secrets_dir}/renovate.sops.yaml" | gh secret set RENOVATE_TOKEN --repo "${repo}"`.
 
 Homebrew cask publishing writes to `hydra-gitops/homebrew-tap`.
 Use a separate write-enabled GitHub token for that repository.

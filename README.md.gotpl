@@ -10,10 +10,46 @@ Latest signed release: [{{ .ReleaseTag }}]({{ .ReleaseURL }})
 
 ## Install
 
-### Homebrew (macOS and Linux)
+### Homebrew
+
+macOS recommended (build the latest released version from source):
 
 ```bash
-brew install --cask hydra-gitops/tap/hydra
+brew tap {{ .TapRepo }} https://github.com/{{ .TapRepo }}
+brew install {{ .TapRepo }}/hydra
+```
+
+macOS binary cask from GitHub releases:
+
+```bash
+brew tap {{ .TapRepo }} https://github.com/{{ .TapRepo }}
+brew install {{ .TapRepo }}/hydra-bin
+```
+
+If you install the binary cask on macOS, Gatekeeper may block the first launch with:
+
+> `"hydra" Not Opened. Apple could not verify "hydra" is free of malware that may harm your Mac or compromise your privacy.`
+
+You can allow an exception in `System Settings > Privacy & Security`, or avoid the warning by using the source formula:
+
+```bash
+brew tap {{ .TapRepo }} https://github.com/{{ .TapRepo }}
+brew install {{ .TapRepo }}/hydra
+```
+
+Linux recommended (install the latest released binary):
+
+```bash
+brew tap {{ .TapRepo }} https://github.com/{{ .TapRepo }}
+brew install {{ .TapRepo }}/hydra-bin
+```
+
+Uninstall Homebrew packages with:
+
+```bash
+brew uninstall {{ .TapRepo }}/hydra
+brew uninstall --cask {{ .TapRepo }}/hydra-bin
+brew untap {{ .TapRepo }}
 ```
 
 ### Docker (linux/amd64 and linux/arm64)
@@ -22,6 +58,8 @@ brew install --cask hydra-gitops/tap/hydra
 docker pull {{ .ImageRef }}:latest
 docker run --rm {{ .ImageRef }}:latest --help
 ```
+
+Stable releases also publish `vX.Y.Z`, `vX.Y`, `vX`, and `latest` tags.
 
 ### Download CLI archives
 
@@ -38,7 +76,7 @@ shasum -a 256 --check checksums.txt
 
 ## Verify releases
 
-Public keys are published in [.github/secrets/public-keys.yaml](.github/secrets/public-keys.yaml).
+Public keys are published in [.github/secrets/repos/{{ .Repo }}/public-keys.yaml](.github/secrets/repos/{{ .Repo }}/public-keys.yaml).
 
 - Release tags are created as lightweight tags first and are rewritten to signed annotated tags immediately before push so `semantic-release` can keep its git-note metadata on the tagged commit.
 - Release tag signatures are verified before release jobs start.
@@ -51,6 +89,29 @@ Public keys are published in [.github/secrets/public-keys.yaml](.github/secrets/
 GitHub Actions installs `cosign`, `sops`, and `goreleaser` into `$HOME/.cosign`.
 The `sigstore/cosign-installer` action adds that directory to `GITHUB_PATH`, so later
 workflow steps can call these binaries directly without `sudo` or `/usr/local/bin`.
+
+## CI secrets
+
+Renovate requires a dedicated GitHub token that can open pull requests. Keep the source
+value in [.github/secrets/repos/{{ .Repo }}/renovate.sops.yaml](.github/secrets/repos/{{ .Repo }}/renovate.sops.yaml) under
+`renovate.token`, then upload it to GitHub with:
+
+```bash
+repo="${GITHUB_REPOSITORY:-$(gh repo view --json nameWithOwner --jq '.nameWithOwner')}"
+secrets_dir=".github/secrets/repos/${repo}"
+sops --decrypt --extract '["renovate"]["token"]' "${secrets_dir}/renovate.sops.yaml" | gh secret set RENOVATE_TOKEN --repo "${repo}"
+```
+
+Create the token in the GitHub UI as a fine-grained personal access token:
+
+1. Open `GitHub -> Settings -> Developer settings -> Personal access tokens -> Fine-grained tokens -> Generate new token`.
+2. Set `Resource owner` to `hydra-gitops`.
+3. Set `Repository access` to `Only select repositories` and choose `hydra`.
+4. Under repository permissions, grant `Contents: Read and write` and `Pull requests: Read and write`.
+5. If you want Renovate to update its dashboard issue or leave issue comments, also grant `Issues: Read and write`.
+6. Create the token, copy it once, and replace the dummy value in `.github/secrets/repos/<owner>/<repo>/renovate.sops.yaml`.
+
+If the organization requires approval for fine-grained tokens, the token stays pending until an org owner approves it.
 
 ## Build locally
 

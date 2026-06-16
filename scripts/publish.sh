@@ -13,6 +13,56 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "${script_dir}/.." && pwd)"
 tmp_dir="${RUNNER_TEMP:-/tmp}"
 
+resolve_secrets_dir() {
+  local base_dir="${repo_root}/.github/secrets"
+  local candidate=""
+
+  if [[ -n "${HYDRA_SECRETS_DIR:-}" ]]; then
+    candidate="${HYDRA_SECRETS_DIR}"
+    [[ "${candidate}" = /* ]] || candidate="${repo_root}/${candidate}"
+    if [[ -d "${candidate}" ]]; then
+      printf '%s\n' "${candidate}"
+      return
+    fi
+  fi
+
+  local repo_slug="${HYDRA_SECRETS_REPO:-${GITHUB_REPOSITORY:-}}"
+  if [[ -z "${repo_slug}" ]]; then
+    local remote_url
+    remote_url="$(git -C "${repo_root}" config --get remote.origin.url 2>/dev/null || true)"
+    if [[ "${remote_url}" =~ ^git@github\.com:([^/]+/[^/.]+)(\.git)?$ ]]; then
+      repo_slug="${BASH_REMATCH[1]}"
+    elif [[ "${remote_url}" =~ ^https://github\.com/([^/]+/[^/.]+)(\.git)?$ ]]; then
+      repo_slug="${BASH_REMATCH[1]}"
+    fi
+  fi
+
+  if [[ -n "${repo_slug}" ]]; then
+    candidate="${base_dir}/repos/${repo_slug}"
+    if [[ -d "${candidate}" ]]; then
+      printf '%s\n' "${candidate}"
+      return
+    fi
+  fi
+
+  candidate="${base_dir}/repos/hydra-gitops/hydra"
+  if [[ -d "${candidate}" ]]; then
+    printf '%s\n' "${candidate}"
+    return
+  fi
+
+  local discovered_repo_dir
+  discovered_repo_dir="$(find "${base_dir}/repos" -mindepth 2 -maxdepth 2 -type d 2>/dev/null | head -n1 || true)"
+  if [[ -n "${discovered_repo_dir}" ]]; then
+    printf '%s\n' "${discovered_repo_dir}"
+    return
+  fi
+
+  printf '%s\n' "${base_dir}"
+}
+
+secrets_dir="$(resolve_secrets_dir)"
+
 tag=""
 cosign_key=""
 allowed_signers=""
@@ -41,7 +91,7 @@ resolve_tag() {
 ensure_sops_key() {
   : "${SOPS_AGE_KEY_PUBLISH:=${SOPS_AGE_KEY:-}}"
   if [[ -z "${SOPS_AGE_KEY_PUBLISH}" ]]; then
-    SOPS_AGE_KEY_PUBLISH="$(sops --decrypt --extract '["age_keys"]["publish"]["private_key"]' "${repo_root}/.github/secrets/age-pipeline-keys.sops.yaml" 2>/dev/null | grep AGE-SECRET-KEY-)"
+    SOPS_AGE_KEY_PUBLISH="$(sops --decrypt --extract '["age_keys"]["publish"]["private_key"]' "${secrets_dir}/age-pipeline-keys.sops.yaml" 2>/dev/null | grep AGE-SECRET-KEY-)"
   fi
   if [[ -z "${SOPS_AGE_KEY_PUBLISH}" ]]; then
     echo "SOPS_AGE_KEY_PUBLISH or SOPS_AGE_KEY must be set" >&2
@@ -58,9 +108,9 @@ verify() {
   mkdir -p "${tmp_dir}"
 
   local pub_openssh pub_key_material tag_commit tagger_name tagger_email
-  pub_openssh="$(awk -F": " '/public_key_openssh:/{gsub(/^"|"$/, "", $2); print $2}' "${repo_root}/.github/secrets/public-keys.yaml")"
+  pub_openssh="$(awk -F": " '/public_key_openssh:/{gsub(/^"|"$/, "", $2); print $2}' "${secrets_dir}/public-keys.yaml")"
   if [[ -z "${pub_openssh}" ]]; then
-    echo "Could not read git_signing.public_key_openssh from .github/secrets/public-keys.yaml" >&2
+    echo "Could not read git_signing.public_key_openssh from ${secrets_dir}/public-keys.yaml" >&2
     exit 1
   fi
 
@@ -100,16 +150,16 @@ load_publish_secrets() {
 
   mkdir -p "${tmp_dir}"
   cosign_key="${tmp_dir}/cosign.key"
-  sops --decrypt --extract '["cosign"]["private_key"]' "${repo_root}/.github/secrets/publish.sops.yaml" > "${cosign_key}"
+  sops --decrypt --extract '["cosign"]["private_key"]' "${secrets_dir}/publish.sops.yaml" > "${cosign_key}"
   chmod 600 "${cosign_key}"
-  COSIGN_PASSWORD="$(sops --decrypt --extract '["cosign"]["password"]' "${repo_root}/.github/secrets/publish.sops.yaml")"
+  COSIGN_PASSWORD="$(sops --decrypt --extract '["cosign"]["password"]' "${secrets_dir}/publish.sops.yaml")"
 
   # Prefer SSH deploy key auth for homebrew tap updates.
   # Also accept legacy tap_token field as fallback during migration.
   local tap_deploy_key
-  tap_deploy_key="$(sops --decrypt --extract '["homebrew"]["tap_deploy_key"]' "${repo_root}/.github/secrets/publish.sops.yaml" 2>/dev/null || true)"
+  tap_deploy_key="$(sops --decrypt --extract '["homebrew"]["tap_deploy_key"]' "${secrets_dir}/publish.sops.yaml" 2>/dev/null || true)"
   if [[ -z "${tap_deploy_key}" ]]; then
-    tap_deploy_key="$(sops --decrypt --extract '["homebrew"]["tap_token"]' "${repo_root}/.github/secrets/publish.sops.yaml" 2>/dev/null || true)"
+    tap_deploy_key="$(sops --decrypt --extract '["homebrew"]["tap_token"]' "${secrets_dir}/publish.sops.yaml" 2>/dev/null || true)"
   fi
   if [[ -n "${tap_deploy_key}" ]]; then
     homebrew_tap_deploy_key="${tmp_dir}/homebrew_tap_deploy_key"
