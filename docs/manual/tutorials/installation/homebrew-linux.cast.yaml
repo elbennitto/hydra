@@ -1,0 +1,102 @@
+name: Installation using Homebrew
+steps:
+  - type: prompt
+  - sleep: 1
+  - write: command -v hydra
+    speed: 0.2
+  - sleep: 1
+  - color: reset
+  - type: newline
+  - sleep: 0.2
+
+  - type: prompt
+  - sleep: 1
+  - write: '# no output means command not found,'
+    speed: 0.2
+  - sleep: 0.5
+  - color: reset
+  - type: newline
+  - sleep: 0.2
+
+  - type: prompt
+  - sleep: 0.5
+  - write: '# this is expected at this point'
+    speed: 0.2
+  - sleep: 0.5
+  - color: reset
+  - type: newline
+  - sleep: 0.2
+
+  - type: prompt
+  - sleep: 1
+  - write: brew tap hydra-gitops/homebrew-tap https://github.com/hydra-gitops/homebrew-tap
+    speed: 0.2
+  - sleep: 1
+  - color: reset
+  - type: newline
+  - sleep: 0.2
+
+  - type: prompt
+  - sleep: 1
+  - write: brew trust --formula hydra-gitops/tap/hydra-bin
+    speed: 0.2
+  - sleep: 1
+  - color: reset
+  - type: newline
+  - sleep: 0.2
+
+  - type: prompt
+  - sleep: 1
+  - write: brew install hydra-gitops/tap/hydra-bin
+    speed: 0.2
+  - sleep: 1
+  - color: reset
+  - type: newline
+  - sleep: 1
+
+  - run: hydra message --title 'Skipped' --text 'brew installation output skipped...'
+    input: false
+  - sleep: 1
+
+  - type: prompt
+  - sleep: 1
+  - write: '# hydra is now installed'
+    speed: 0.2
+  - color: reset
+  - sleep: 1
+  - type: newline
+
+  - sleep: 0.2
+  - type: prompt
+  - sleep: 1
+  - write: command -v hydra
+    speed: 0.2
+  - sleep: 1
+  - color: reset
+  - type: newline
+  - sleep: 0.2
+
+  # fake output
+  - write: /home/linuxbrew/.linuxbrew/bin/hydra
+  - type: newline
+  - sleep: 0.2
+
+  - type: prompt
+  - sleep: 1
+  - write: hydra version
+    speed: 0.2
+  - sleep: 0.5
+  - color: reset
+  - type: newline
+  - sleep: 0.2
+
+  # fake output
+  - write: hydra dev
+  - type: newline
+  - sleep: 0.2
+
+  - type: prompt
+  - sleep: 0.2
+  - write: '# end of installation tutorial'
+  - color: reset
+  - type: newline

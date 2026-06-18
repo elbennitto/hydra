@@ -1,0 +1,29 @@
+name: First Context - Cluster and Root App Directories
+steps:
+  - background: '#0b1f4d'
+  - run: hydra message --text 'setup'
+    input: false
+  - run: mkdir -p "$HYDRA_CONTEXT/cluster/root-app"
+  - run: |
+      cat > "$HYDRA_CONTEXT/../values.yaml" <<EOF
+      global:
+        hydra:
+          type: group
+      EOF
+  - marker: values.yaml created
+  - run: hydra message --text 'setup finished'
+    input: false
+  - background: reset
+  - run: find ~/group | sort
+    typed: true
+  - assert:
+      cast: 'plain(cast).contains("/home/hydra/group/context/cluster/root-app")'
+  - run: hydra local apps
+    typed: true
+    expectedExitCode: 1
+  - marker: Checked root app
+  - assert:
+      cast: 'plain(cast).contains("Chart.yaml: no such file or directory")'
+  - run: hydra message --title 'Structure prepared' --text 'The cluster directory and root app directory are now in place.\nYou need to create a helm chart in the root app directory to proceed to the next step.'
+    input: false
+  - export-to-directory: docs/tutorials/introduction/01-05-cluster-root-app

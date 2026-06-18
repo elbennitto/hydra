@@ -1,0 +1,13 @@
+name: First Context - No Context
+steps:
+  - run: "unset HYDRA_CONTEXT"
+    input: false
+  - run: hydra local apps
+    typed: true
+    expectedExitCode: 1
+  - marker: Checked apps without context
+  - assert:
+      cast: 'plain(cast).contains("--hydra-context flag or HYDRA_CONTEXT environment variable is required")'
+  - run: hydra message --title 'Expected error' --text 'The error is expected here, you need to specify a valid Hydra context first.'
+    input: false
+  - export-to-directory: docs/tutorials/introduction/01-01-no-context

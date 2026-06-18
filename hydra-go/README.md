@@ -6,15 +6,15 @@ The CLI component of [Hydra](../README.md). A command-line tool for debugging an
 
 The project is split into three Go modules with a strict dependency hierarchy:
 
-```text
+```tree
 hydra-go/
-├── .goreleaser.yml       GoReleaser config for CLI release artifacts
-├── go.work               Go workspace for multi-module development
-├── test.sh               Build, lint, and test all modules
-├── update_testdata.sh    Regenerate golden test files
-├── base/                 Generic utilities (no Hydra/Cobra/K8s dependencies)
-├── core/                 Business logic (no Cobra dependencies)
-└── cli/                  CLI implementation with Cobra
+    .goreleaser.yml       GoReleaser config for CLI release artifacts
+    go.work               Go workspace for multi-module development
+    test.sh               Build, lint, and test all modules
+    update_testdata.sh    Regenerate golden test files
+    base/                 Generic utilities (no Hydra/Cobra/K8s dependencies)
+    core/                 Business logic (no Cobra dependencies)
+    cli/                  CLI implementation with Cobra
 ```
 
 ### Dependency Direction

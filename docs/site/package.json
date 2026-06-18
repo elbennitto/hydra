@@ -1,0 +1,7 @@
+{
+  "name": "hydra-docs-site",
+  "private": true,
+  "dependencies": {
+    "asciinema-player": "3.16.0"
+  }
+}

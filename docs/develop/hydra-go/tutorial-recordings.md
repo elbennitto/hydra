@@ -6,9 +6,12 @@ Hydra records tutorial casts from declarative YAML specs with:
 hydra record file <file>...
 ```
 
-Specs are discovered under `docs/asciinema/tutorials/`.
-When the shell expands a glob such as `docs/asciinema/tutorials/first-context/*.yaml`,
-Hydra records each matched YAML spec in order. `--output` is only valid when exactly
+Specs are discovered under `docs/manual/`.
+Tutorial recording specs should use the suffix `*.cast.yaml` and live next to the
+matching tutorial content. When the shell expands a glob such as
+`docs/manual/tutorials/introduction/*.cast.yaml`, Hydra records each matched YAML
+spec in order. By default, the generated `.cast` file is written next to the spec.
+`--output` is only valid when exactly
 one input file is recorded.
 
 ## Runtime Model
@@ -29,8 +32,11 @@ Each item in `steps` must define exactly one of these forms:
 - `write: <text>`
 - `run: <shell command>`
 - `cd: <path>`
+- `marker: <label>`
 - `env: <entry-list>`
 - `color: reset | { fg: <name>, bg: <name>, bold: <bool>, reset: <bool> }`
+- `background: <name> | reset`
+- `export-to-directory: <path>`
 - `assert: { stdout: <cel>, stderr: <cel>, cast: <cel> }`
 
 ### `write`
@@ -43,6 +49,7 @@ Each item in `steps` must define exactly one of these forms:
 - Executes a shell command.
 - Optional:
 	- `input` (default `true`): show or hide the typed command in the cast.
+	- `typed` (default `false`): render visible command input as typed characters using the default typing speed.
 	- `output` (default `true`): show or hide command output in the cast.
 	- `expectedExitCode` (default `0`).
 	- `speed`: typing speed for visible command input.
@@ -53,11 +60,32 @@ Each item in `steps` must define exactly one of these forms:
 - Object form supports foreground/background and bold styling.
 - Typical prompt flow is `type: prompt` -> command text -> `color: reset` -> `type: newline`.
 
+### `background`
+
+- Sets the visible recording background for subsequent emitted output.
+- Use a supported named color such as `lightblue`, `blue`, `green`, or `black`.
+- `background: reset` returns to the default background.
+- This is useful for setup phases that should stand out from the main demo.
+
 ### `cd`
 
 - Changes working directory for subsequent `run`/`env.exec` commands.
 - Relative paths such as `..` are supported.
 - Leaving the recording root is rejected.
+
+### `marker`
+
+- Adds a labeled tutorial marker for the next visible `run` step.
+- Adds a labeled tutorial marker for the next `run` step.
+- Markers are written inline into the generated `.cast` as native asciinema marker events.
+- Use this for tutorial navigation labels such as `Create Chart.yaml` or `Show Hydra values`.
+
+### `export-to-directory`
+
+- Deletes the target directory if it already exists.
+- Recreates the target directory.
+- Exports the current virtual home directory into that target.
+- Relative paths are resolved from the current working directory of `hydra record file`.
 
 ### `env`
 

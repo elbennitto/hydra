@@ -1,0 +1,31 @@
+name: First Context - Root App Chart and Discovery
+steps:
+  - background: '#0b1f4d'
+  - run: hydra message --text 'setup'
+    input: false
+  - run: mkdir -p "$HYDRA_CONTEXT/cluster/app"
+  - run: |
+      cat > "$HYDRA_CONTEXT/../values.yaml" <<EOF
+      global:
+        hydra:
+          type: group
+      EOF
+  - marker: values.yaml created
+  - run: |
+      cat > "$HYDRA_CONTEXT/cluster/app/Chart.yaml" <<EOF
+      apiVersion: v2
+      name: app
+      version: 0.1.0
+      EOF
+  - marker: Chart.yaml created
+  - run: hydra message --text 'setup finished'
+    input: false
+  - background: reset
+  - run: hydra local apps
+    typed: true
+  - marker: Discovered app
+  - assert:
+      cast: 'plain(cast).contains("cluster.app")'
+  - run: 'hydra message --title "App discovered" --text "Hydra discovered the root app from Chart.yaml.\nThe app ID follows <cluster>.<root-app>: cluster.app."'
+    input: false
+  - export-to-directory: docs/tutorials/introduction/01-06-root-app-chart

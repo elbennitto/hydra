@@ -1,0 +1,69 @@
+name: First Context - Simple Deployment
+steps:
+  - background: '#0b1f4d'
+  - run: hydra message --text 'setup'
+    input: false
+  - run: mkdir -p "$HYDRA_CONTEXT/cluster/app/templates"
+  - run: |
+      cat > "$HYDRA_CONTEXT/../values.yaml" <<EOF
+      global:
+        hydra:
+          type: group
+      EOF
+    speed: 0
+  - marker: values.yaml created
+  - run: |
+      cat > "$HYDRA_CONTEXT/cluster/app/Chart.yaml" <<EOF
+      apiVersion: v2
+      name: app
+      version: 0.1.0
+      EOF
+    speed: 0
+  - marker: Chart.yaml created
+  - run: |
+      cat > "$HYDRA_CONTEXT/cluster/app/templates/deployment.yaml" <<EOF
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: app
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: app
+        template:
+          metadata:
+            labels:
+              app: app
+          spec:
+            containers:
+              - name: app
+                image: {{ .Values.image }}
+                ports:
+                  - containerPort: 8080
+      EOF
+    speed: 0
+  - marker: deployment.yaml created
+  - run: |
+      cat > "$HYDRA_CONTEXT/cluster/app/values.yaml" <<EOF
+      image: traefik/whoami:v1.11.0
+      global:
+        hydra:
+          path: .
+      EOF
+    speed: 0
+  - marker: app values.yaml created
+  - run: hydra message --text 'setup finished'
+    input: false
+  - background: reset
+  - run: find ~/group | sort
+    typed: true
+  - assert:
+      cast: 'plain(cast).contains("/home/hydra/group/context/cluster/app/templates") && plain(cast).contains("/home/hydra/group/context/cluster/app/templates/deployment.yaml") && plain(cast).contains("/home/hydra/group/context/cluster/app/values.yaml")'
+  - run: helm template "$HYDRA_CONTEXT/cluster/app"
+    typed: true
+  - marker: helm template
+  - run: hydra local template cluster.app
+    typed: true
+  - marker: hydra local template
+  - export-to-directory: docs/tutorials/introduction/02-01-simple-deployment

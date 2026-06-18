@@ -1,0 +1,509 @@
+.hydra-asciinema {
+  margin: 1.5rem 0;
+  max-width: 100%;
+}
+
+.hydra-asciinema .asciinema-player {
+  max-width: 100%;
+}
+
+.hydra-asciinema-info {
+  margin: 1rem 0 0.75rem;
+  padding: 0.8rem 0.95rem;
+  border: 1px solid rgb(0 0 0 / 0.12);
+  border-radius: 0.8rem;
+  background: rgb(255 255 255 / 0.42);
+}
+
+.hydra-asciinema-info__heading {
+  margin: 0 0 0.45rem;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.hydra-asciinema-info__text {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.hydra-asciinema-info__hint {
+  margin-top: 0.35rem;
+}
+
+.hydra-asciinema-info__text kbd {
+  min-width: 1.7em;
+  text-align: center;
+}
+
+.hydra-asciinema-info__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.4rem;
+  height: 2rem;
+  padding: 0 0.45rem;
+  border: 1px solid rgb(0 0 0 / 0.18);
+  border-radius: 0.45rem;
+  background: rgb(255 255 255 / 0.55);
+  color: currentColor;
+  cursor: pointer;
+}
+
+.hydra-asciinema-info__icon:hover {
+  background: rgb(255 255 255 / 0.78);
+}
+
+.hydra-asciinema-info__icon svg {
+  width: 26px;
+  height: 14px;
+}
+
+.hydra-asciinema-info__label {
+  font-weight: 600;
+}
+
+/* Keep the playback timeline (history scrubber) visible and below the terminal. */
+.hydra-asciinema .ap-wrapper.ap-hud .ap-control-bar,
+.hydra-asciinema .ap-control-bar {
+  opacity: 1 !important;
+}
+
+.hydra-asciinema .ap-player {
+  display: flex;
+  flex-direction: column;
+}
+
+.hydra-asciinema .ap-player .ap-control-bar {
+  position: static !important;
+  order: 2;
+}
+
+.hydra-asciinema .ap-player .ap-term {
+  order: 1;
+}
+
+.hydra-asciinema-panel {
+  display: grid;
+  gap: 0.9rem;
+  margin-top: 0.9rem;
+}
+
+.hydra-asciinema-panel__controls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.6rem;
+}
+
+.hydra-asciinema-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.3rem;
+  padding: 0.45rem 0.85rem;
+  border: 1px solid rgb(0 0 0 / 0.16);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.56);
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+}
+
+.hydra-asciinema-button:hover {
+  background: rgb(255 255 255 / 0.76);
+}
+
+.hydra-asciinema-toc {
+  padding: 0.85rem 0.95rem;
+  border: 1px solid rgb(0 0 0 / 0.12);
+  border-radius: 0.8rem;
+  background: rgb(255 255 255 / 0.38);
+}
+
+.hydra-asciinema-toc__heading {
+  margin: 0 0 0.7rem;
+  font-weight: 700;
+}
+
+.hydra-asciinema-toc__list {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.hydra-asciinema-toc__item {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid rgb(0 0 0 / 0.1);
+  border-radius: 0.7rem;
+  background: rgb(255 255 255 / 0.44);
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.hydra-asciinema-toc__item:hover,
+.hydra-asciinema-toc__item.is-active {
+  background: rgb(255 255 255 / 0.8);
+  border-color: rgb(0 0 0 / 0.18);
+}
+
+.hydra-asciinema-toc__time {
+  font-family: var(--md-code-font-family, monospace);
+  font-size: 0.88rem;
+  opacity: 0.75;
+}
+
+.hydra-asciinema-toc__label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.hydra-tree {
+  --hydra-tree-axis-x: 0.78rem;
+  margin: 1rem 0;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid rgb(0 0 0 / 0.08);
+  border-radius: 0.8rem;
+  background: rgb(255 255 255 / 0.35);
+  font-family: var(--md-code-font-family, monospace);
+  font-size: 0.9rem;
+  line-height: 1.35;
+  overflow-x: auto;
+}
+
+.hydra-tree__line {
+  display: flex;
+  align-items: center;
+  min-height: 1.3rem;
+  white-space: nowrap;
+}
+
+.hydra-tree__guide,
+.hydra-tree__branch {
+  position: relative;
+  flex: 0 0 1.2rem;
+  width: 1.2rem;
+  height: 1.25rem;
+}
+
+.hydra-tree__guide--pipe::before,
+.hydra-tree__branch--tee::before,
+.hydra-tree__branch--el::before {
+  content: "";
+  position: absolute;
+  left: var(--hydra-tree-axis-x);
+  border-left: 1.5px solid currentColor;
+  opacity: 0.55;
+}
+
+.hydra-tree__guide--pipe::before {
+  top: -0.1rem;
+  bottom: -0.1rem;
+}
+
+.hydra-tree__branch--tee::before {
+  top: -0.1rem;
+  bottom: -0.1rem;
+}
+
+.hydra-tree__branch--el::before {
+  top: -0.1rem;
+  height: 0.7rem;
+}
+
+.hydra-tree__branch--tee::after,
+.hydra-tree__branch--el::after {
+  content: "";
+  position: absolute;
+  left: var(--hydra-tree-axis-x);
+  top: 0.62rem;
+  width: 0.6rem;
+  border-top: 1.5px solid currentColor;
+  opacity: 0.55;
+}
+
+.hydra-tree__entry {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 0.24rem;
+  position: relative;
+}
+
+.hydra-tree__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 0.35rem;
+  padding: 0 0.05rem;
+  background: transparent;
+  position: relative;
+  z-index: 1;
+}
+
+.hydra-tree__icon .twemoji,
+.hydra-tree__icon svg {
+  width: 1rem;
+  height: 1rem;
+  color: currentColor;
+  fill: currentColor;
+}
+
+.hydra-tree__entry--dir {
+  color: inherit;
+  font-weight: inherit;
+}
+
+.hydra-tree__entry--file {
+  color: inherit;
+}
+
+/* Larger, easier-to-grab timeline scrollbar. */
+.hydra-asciinema .ap-control-bar .ap-progressbar {
+  flex: 1 1 auto;
+  min-width: 8rem;
+  padding: 4px 0;
+}
+
+.hydra-asciinema .ap-control-bar .ap-progressbar .ap-bar {
+  height: 10px;
+  cursor: pointer;
+}
+
+.hydra-asciinema .ap-control-bar .ap-progressbar .ap-bar .ap-gutter {
+  cursor: grab;
+}
+
+.hydra-asciinema .ap-control-bar .ap-progressbar .ap-bar .ap-gutter:active {
+  cursor: grabbing;
+}
+
+/* Use a light-blue documentation background in light mode only. */
+[data-md-color-scheme="default"] {
+  --md-default-bg-color: #cfe0f0;
+  --md-default-fg-color: #1e2f38;
+  --md-default-fg-color--light: #1e2f38;
+  --md-typeset-color: #1e2f38;
+  --md-typeset-heading-color: #1e2f38;
+  --md-accent-fg-color: #7fc2a0;
+  --md-accent-fg-color--transparent: rgb(127 194 160 / 0.15);
+  scrollbar-color: #61a286 #cfe0f0;
+}
+
+[data-md-color-scheme="default"] .hydra-tree {
+  color: #314852;
+}
+
+[data-md-color-scheme="default"] .hydra-asciinema-info {
+  background: rgb(255 255 255 / 0.42);
+  border-color: rgb(0 0 0 / 0.12);
+}
+
+[data-md-color-scheme="default"] .hydra-asciinema-button,
+[data-md-color-scheme="default"] .hydra-asciinema-toc__item {
+  color: #1e2f38;
+}
+
+/* Use a warm dark background in dark mode. */
+[data-md-color-scheme="slate"] {
+  --md-default-bg-color: #363430;
+  --md-default-fg-color: #e5e3c6;
+  --md-default-fg-color--light: #e5e3c6;
+  --md-typeset-color: #e5e3c6;
+  --md-typeset-a-color: #7fc2a0;
+
+  /* Material uses a separate heading color token in dark mode. */
+  --md-typeset-heading-color: #e5e3c6;
+  --md-accent-fg-color: #7fc2a0;
+  --md-accent-fg-color--transparent: rgb(127 194 160 / 0.15);
+  scrollbar-color: #61a286 #363430;
+}
+
+[data-md-color-scheme="slate"] .hydra-tree {
+  background: rgb(20 24 28 / 0.35);
+  border-color: rgb(255 255 255 / 0.08);
+  color: #d9dfc8;
+}
+
+[data-md-color-scheme="slate"] .hydra-asciinema-info {
+  background: rgb(20 24 28 / 0.35);
+  border-color: rgb(255 255 255 / 0.1);
+}
+
+[data-md-color-scheme="slate"] .hydra-asciinema-button,
+[data-md-color-scheme="slate"] .hydra-asciinema-toc {
+  background: rgb(20 24 28 / 0.35);
+  border-color: rgb(255 255 255 / 0.1);
+}
+
+[data-md-color-scheme="slate"] .hydra-asciinema-toc__item {
+  background: rgb(20 24 28 / 0.45);
+  border-color: rgb(255 255 255 / 0.1);
+}
+
+[data-md-color-scheme="slate"] .hydra-asciinema-button:hover,
+[data-md-color-scheme="slate"] .hydra-asciinema-toc__item:hover,
+[data-md-color-scheme="slate"] .hydra-asciinema-toc__item.is-active {
+  background: rgb(42 49 55 / 0.9);
+  border-color: rgb(255 255 255 / 0.18);
+}
+
+[data-md-color-scheme="slate"] .hydra-asciinema-info__icon {
+  background: rgb(20 24 28 / 0.45);
+  border-color: rgb(255 255 255 / 0.14);
+}
+
+[data-md-color-scheme="slate"] .hydra-asciinema-info__icon:hover {
+  background: rgb(255 255 255 / 0.1);
+}
+
+[data-md-color-scheme="slate"] .hydra-tree__entry--dir {
+  color: inherit;
+}
+
+[data-md-color-scheme="slate"] .hydra-tree__icon {
+  color: currentColor;
+}
+
+[data-md-color-scheme="slate"] ::-webkit-scrollbar-thumb {
+  background-color: #61a286;
+}
+
+[data-md-color-scheme="slate"] ::-webkit-scrollbar-thumb:hover {
+  background-color: #7fc2a0;
+}
+
+[data-md-color-scheme="slate"] ::-webkit-scrollbar-track {
+  background-color: #363430;
+}
+
+/* Keep the left navigation scrollbar darker on sidebar hover,
+   and only lighten when the thumb itself is hovered. */
+[data-md-color-scheme="slate"] .md-sidebar__scrollwrap {
+  scrollbar-color: #61a286 #363430;
+}
+
+[data-md-color-scheme="slate"] .md-sidebar__scrollwrap:hover {
+  scrollbar-color: #61a286 #363430;
+}
+
+[data-md-color-scheme="slate"] .md-sidebar__scrollwrap::-webkit-scrollbar-thumb,
+[data-md-color-scheme="slate"] .md-sidebar__scrollwrap:hover::-webkit-scrollbar-thumb {
+  background: #61a286 !important;
+  background-color: #61a286 !important;
+}
+
+[data-md-color-scheme="slate"] .md-sidebar__scrollwrap::-webkit-scrollbar-thumb:hover,
+[data-md-color-scheme="slate"] .md-sidebar__scrollwrap:hover::-webkit-scrollbar-thumb:hover,
+[data-md-color-scheme="slate"] .md-sidebar__scrollwrap::-webkit-scrollbar-thumb:active,
+[data-md-color-scheme="slate"] .md-sidebar__scrollwrap:hover::-webkit-scrollbar-thumb:active {
+  background: #7fc2a0 !important;
+  background-color: #7fc2a0 !important;
+}
+
+[data-md-color-scheme="slate"] .md-sidebar__scrollwrap::-webkit-scrollbar-track,
+[data-md-color-scheme="slate"] .md-sidebar__scrollwrap:hover::-webkit-scrollbar-track {
+  background-color: #363430;
+}
+
+[data-md-color-scheme="default"] ::-webkit-scrollbar-thumb {
+  background-color: #61a286;
+}
+
+[data-md-color-scheme="default"] ::-webkit-scrollbar-thumb:hover {
+  background-color: #7fc2a0;
+}
+
+[data-md-color-scheme="default"] ::-webkit-scrollbar-track {
+  background-color: #cfe0f0;
+}
+
+[data-md-color-scheme="default"] .md-sidebar__scrollwrap {
+  scrollbar-color: #61a286 #cfe0f0;
+}
+
+[data-md-color-scheme="default"] .md-sidebar__scrollwrap:hover {
+  scrollbar-color: #61a286 #cfe0f0;
+}
+
+[data-md-color-scheme="default"] .md-sidebar__scrollwrap::-webkit-scrollbar-thumb,
+[data-md-color-scheme="default"] .md-sidebar__scrollwrap:hover::-webkit-scrollbar-thumb {
+  background: #61a286 !important;
+  background-color: #61a286 !important;
+}
+
+[data-md-color-scheme="default"] .md-sidebar__scrollwrap::-webkit-scrollbar-thumb:hover,
+[data-md-color-scheme="default"] .md-sidebar__scrollwrap:hover::-webkit-scrollbar-thumb:hover,
+[data-md-color-scheme="default"] .md-sidebar__scrollwrap::-webkit-scrollbar-thumb:active,
+[data-md-color-scheme="default"] .md-sidebar__scrollwrap:hover::-webkit-scrollbar-thumb:active {
+  background: #7fc2a0 !important;
+  background-color: #7fc2a0 !important;
+}
+
+[data-md-color-scheme="default"] .md-sidebar__scrollwrap::-webkit-scrollbar-track,
+[data-md-color-scheme="default"] .md-sidebar__scrollwrap:hover::-webkit-scrollbar-track {
+  background-color: #cfe0f0;
+}
+
+/* Force light-mode body and heading colors on Material selectors that otherwise
+   derive dimmed variants from theme tokens. */
+[data-md-color-scheme="default"] body,
+[data-md-color-scheme="default"] .md-typeset,
+[data-md-color-scheme="default"] .md-typeset :is(h1, h2, h3, h4, h5, h6) {
+  color: #1e2f38;
+}
+
+/* Keep the footer above the desktop sidebars when scrolling near page end. */
+.md-footer {
+  position: relative;
+  z-index: 2;
+}
+
+/* Use Hydra SVG green tones for the documentation header. */
+[data-md-color-primary="custom"] {
+  --md-primary-fg-color: #61a387;
+  --md-primary-fg-color--light: #80c3a2;
+  --md-primary-fg-color--dark: #102631;
+}
+
+/* Enlarge the header logo without affecting inline/manual logo usage. */
+.md-header__button.md-logo img,
+.md-header__button.md-logo svg {
+  height: 2.26rem;
+  width: auto;
+  margin-top: -0.3rem;
+  margin-bottom: -0.4rem;
+}
+
+.hydra-home-logo-wrap {
+  display: flex;
+  justify-content: center;
+  margin: 0.5rem 0 1.5rem;
+}
+
+.hydra-home-logo {
+  width: min(24rem, 72vw);
+  height: auto;
+  border-radius: 0.8rem;
+  padding: 0.6rem;
+}
+
+@media (max-width: 700px) {
+  .hydra-home-logo-wrap {
+    margin: 0.25rem 0 1rem;
+  }
+
+  .hydra-home-logo {
+    width: min(18rem, 88vw);
+    padding: 0.4rem;
+  }
+}

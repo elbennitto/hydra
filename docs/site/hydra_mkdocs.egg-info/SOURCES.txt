@@ -1,0 +1,10 @@
+README.md
+pyproject.toml
+hydra_mkdocs/__init__.py
+hydra_mkdocs/plugin.py
+hydra_mkdocs.egg-info/PKG-INFO
+hydra_mkdocs.egg-info/SOURCES.txt
+hydra_mkdocs.egg-info/dependency_links.txt
+hydra_mkdocs.egg-info/entry_points.txt
+hydra_mkdocs.egg-info/requires.txt
+hydra_mkdocs.egg-info/top_level.txt

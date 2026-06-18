@@ -1,0 +1,29 @@
+name: First Context - Group Values
+steps:
+  - background: '#0b1f4d'
+  - run: hydra message --text 'setup'
+    input: false
+  - run: mkdir -p "$HYDRA_CONTEXT"
+  - run: |
+      cat > "$HYDRA_CONTEXT/../values.yaml" <<EOF
+      global:
+        hydra:
+          type: group
+      EOF
+  - marker: values.yaml created
+  - run: hydra message --text 'setup finished'
+    input: false
+  - background: reset
+  - run: find ~/group | sort
+    typed: true
+  - assert:
+      cast: plain(cast).contains("/home/hydra/group/values.yaml")
+  - run: hydra local apps
+    typed: true
+    expectedExitCode: 1
+  - marker: Checked apps in group context
+  - assert:
+      cast: plain(cast).contains("matched no applications")
+  - run: hydra message --title 'Context is valid' --text 'Hydra now accepts HYDRA_CONTEXT as valid.\nNo applications are defined yet, so this is the expected next error.'
+    input: false
+  - export-to-directory: docs/tutorials/introduction/01-04-group-values

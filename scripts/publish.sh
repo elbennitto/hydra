@@ -71,10 +71,17 @@ cosign_key=""
 allowed_signers=""
 container_context=""
 homebrew_formula_context=""
+manual_publish_context=""
 homebrew_tap_deploy_key=""
 homebrew_tap_deploy_target_repo=""
 homebrew_tap_deploy_target_owner=""
 homebrew_tap_deploy_target_name=""
+manual_pages_domain=""
+manual_site_url=""
+manual_pages_deploy_key=""
+manual_pages_deploy_key_path=""
+manual_pages_target_repo=""
+manual_pages_target_dir=""
 git_signing_key=""
 git_signing_pub=""
 git_signing_allowed_signers=""
@@ -86,9 +93,9 @@ git_committer_name=""
 git_committer_email=""
 
 cleanup() {
-  rm -f "${cosign_key:-}" "${allowed_signers:-}" "${homebrew_tap_deploy_key:-}"
+  rm -f "${cosign_key:-}" "${allowed_signers:-}" "${homebrew_tap_deploy_key:-}" "${manual_pages_deploy_key_path:-}"
   rm -f "${git_signing_key:-}" "${git_signing_pub:-}" "${git_signing_allowed_signers:-}"
-  rm -rf "${container_context:-}" "${homebrew_formula_context:-}"
+  rm -rf "${container_context:-}" "${homebrew_formula_context:-}" "${manual_publish_context:-}"
 }
 trap cleanup EXIT
 
@@ -170,6 +177,26 @@ extract_git_identity_field() {
       exit
     }
   ' "${file_path}"
+}
+
+extract_publish_field() {
+  local section_name="$1"
+  local field_name="$2"
+
+  awk -v section="${section_name}" -v field="${field_name}" '
+    $0 ~ "^[[:space:]]*" section ":[[:space:]]*$" { in_section=1; next }
+    in_section && /^[^[:space:]]/ { in_section=0 }
+    in_section && $0 ~ "^[[:space:]]*" field ":[[:space:]]*" {
+      value=$0
+      sub("^[[:space:]]*" field ":[[:space:]]*", "", value)
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
+      if ((value ~ /^".*"$/) || (value ~ /^\047.*\047$/)) {
+        value=substr(value, 2, length(value)-2)
+      }
+      print value
+      exit
+    }
+  ' "${secrets_dir}/publish.yaml"
 }
 
 load_git_identity_from_config() {
@@ -255,20 +282,7 @@ load_publish_secrets() {
     exit 1
   fi
 
-  homebrew_tap_deploy_target_repo="$(awk '
-    /^[[:space:]]*homebrew:[[:space:]]*$/ { in_homebrew=1; next }
-    in_homebrew && /^[^[:space:]]/ { in_homebrew=0 }
-    in_homebrew && /^[[:space:]]*tap_deploy_target_repo:[[:space:]]*/ {
-      value=$0
-      sub("^[[:space:]]*tap_deploy_target_repo:[[:space:]]*", "", value)
-      gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
-      if ((value ~ /^".*"$/) || (value ~ /^\047.*\047$/)) {
-        value=substr(value, 2, length(value)-2)
-      }
-      print value
-      exit
-    }
-  ' "${publish_public_config_file}")"
+  homebrew_tap_deploy_target_repo="$(extract_publish_field "homebrew" "tap_deploy_target_repo")"
 
   if [[ -z "${homebrew_tap_deploy_target_repo}" || "${homebrew_tap_deploy_target_repo}" == "null" ]]; then
     echo "Missing required homebrew.tap_deploy_target_repo in ${publish_public_config_file}" >&2
@@ -313,6 +327,49 @@ load_publish_secrets() {
 
   export COSIGN_PASSWORD
   export COSIGN_PRIVATE_KEY_PATH="${cosign_key}"
+}
+
+load_manual_publish_settings() {
+  ensure_sops_key
+
+  local publish_public_config_file="${secrets_dir}/publish.yaml"
+  if [[ ! -f "${publish_public_config_file}" ]]; then
+    echo "Missing required publish config: ${publish_public_config_file}" >&2
+    exit 1
+  fi
+
+  manual_pages_domain="${HYDRA_MANUAL_PAGES_DOMAIN:-}"
+  if [[ -z "${manual_pages_domain}" ]]; then
+    manual_pages_domain="$(extract_publish_field "manual" "pages_domain")"
+  fi
+  manual_pages_domain="${manual_pages_domain:-docs.hydra-gitops.org}"
+
+  manual_site_url="${HYDRA_DOCS_SITE_URL:-}"
+  if [[ -z "${manual_site_url}" ]]; then
+    manual_site_url="$(extract_publish_field "manual" "site_url")"
+  fi
+  if [[ -z "${manual_site_url}" ]]; then
+    manual_site_url="https://${manual_pages_domain}/"
+  fi
+
+  manual_pages_target_repo="${HYDRA_MANUAL_PAGES_TARGET_REPO:-}"
+  if [[ -z "${manual_pages_target_repo}" ]]; then
+    manual_pages_target_repo="$(extract_publish_field "manual" "target_repo")"
+  fi
+  if [[ -z "${manual_pages_target_repo}" ]]; then
+    manual_pages_target_repo="${GITHUB_REPOSITORY:-${HYDRA_SECRETS_REPO:-}}"
+  fi
+
+  manual_pages_target_dir="${HYDRA_MANUAL_PAGES_TARGET_DIR:-}"
+  if [[ -z "${manual_pages_target_dir}" ]]; then
+    manual_pages_target_dir="$(extract_publish_field "manual" "target_dir")"
+  fi
+  manual_pages_target_dir="${manual_pages_target_dir:-.}"
+  manual_pages_target_dir="${manual_pages_target_dir#/}"
+  manual_pages_target_dir="${manual_pages_target_dir%/}"
+  manual_pages_target_dir="${manual_pages_target_dir:-.}"
+
+  manual_pages_deploy_key="${MANUAL_PAGES_DEPLOY_KEY:-}"
 }
 
 load_git_release_identity() {
@@ -546,9 +603,113 @@ run_container() {
   cosign sign --yes --key "${cosign_key}" "${image}@${digest}"
 }
 
+run_manual() {
+  load_manual_publish_settings
+  load_git_identity_from_config
+
+  local release_repo source_dir target_dir deploy_remote deploy_path
+  local deploy_ssh_command="" auth_header="" use_https_token="false"
+  release_repo="${GITHUB_REPOSITORY:-${HYDRA_SECRETS_REPO:-}}"
+  if [[ -z "${release_repo}" ]]; then
+    echo "GITHUB_REPOSITORY or HYDRA_SECRETS_REPO must be set" >&2
+    exit 1
+  fi
+
+  source_dir="${repo_root}/docs/site/site"
+
+  (
+    cd "${repo_root}/docs/site"
+    ./build.sh --site-url "${manual_site_url}"
+  )
+
+  printf '%s\n' "${manual_pages_domain}" > "${source_dir}/CNAME"
+  touch "${source_dir}/.nojekyll"
+
+  target_dir="$(mktemp -d "${tmp_dir}/hydra-manual-pages.XXXXXX")"
+  manual_publish_context="${target_dir}"
+
+  if [[ "${manual_pages_target_repo}" == "${release_repo}" && -n "${GITHUB_TOKEN:-}" ]]; then
+    deploy_remote="https://github.com/${manual_pages_target_repo}.git"
+    auth_header="$(printf 'x-access-token:%s' "${GITHUB_TOKEN}" | base64 | tr -d '\n')"
+    use_https_token="true"
+  else
+    if [[ -z "${manual_pages_deploy_key}" ]]; then
+      manual_pages_deploy_key="$(sops --decrypt --extract '["manual"]["pages_deploy_key"]' "${secrets_dir}/publish.sops.yaml" 2>/dev/null || true)"
+    fi
+    if [[ -z "${manual_pages_deploy_key}" || "${manual_pages_deploy_key}" == "null" ]]; then
+      echo "Could not load manual deploy key from publish secrets (expected publish.sops.yaml: manual.pages_deploy_key)" >&2
+      exit 1
+    fi
+
+    manual_pages_deploy_key_path="${tmp_dir}/manual_pages_deploy_key"
+    if [[ "${manual_pages_deploy_key}" == *\\n* ]]; then
+      printf '%b\n' "${manual_pages_deploy_key}" > "${manual_pages_deploy_key_path}"
+    else
+      printf '%s\n' "${manual_pages_deploy_key}" > "${manual_pages_deploy_key_path}"
+    fi
+    chmod 600 "${manual_pages_deploy_key_path}"
+
+    deploy_remote="ssh://git@github.com/${manual_pages_target_repo}.git"
+    deploy_ssh_command="ssh -i ${manual_pages_deploy_key_path} -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -F /dev/null"
+  fi
+
+  if [[ "${use_https_token}" == "true" ]]; then
+    if git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" ls-remote --exit-code --heads "${deploy_remote}" gh-pages >/dev/null 2>&1; then
+      git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" clone --depth 1 --branch gh-pages "${deploy_remote}" "${target_dir}"
+    else
+      git init "${target_dir}"
+      git -C "${target_dir}" remote add origin "${deploy_remote}"
+    fi
+  elif GIT_SSH_COMMAND="${deploy_ssh_command}" git ls-remote --exit-code --heads "${deploy_remote}" gh-pages >/dev/null 2>&1; then
+    GIT_SSH_COMMAND="${deploy_ssh_command}" git clone --depth 1 --branch gh-pages "${deploy_remote}" "${target_dir}"
+  else
+    git init "${target_dir}"
+    git -C "${target_dir}" remote add origin "${deploy_remote}"
+  fi
+
+  if [[ "${manual_pages_target_dir}" == "." ]]; then
+    find "${target_dir}" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+    cp -a "${source_dir}/." "${target_dir}/"
+  else
+    deploy_path="${target_dir}/${manual_pages_target_dir}"
+    rm -rf "${deploy_path}"
+    mkdir -p "${deploy_path}"
+    cp -a "${source_dir}/." "${deploy_path}/"
+  fi
+
+  git -C "${target_dir}" config user.name "${git_user_name}"
+  git -C "${target_dir}" config user.email "${git_user_email}"
+
+  git -C "${target_dir}" add --all
+  if git -C "${target_dir}" diff --cached --quiet; then
+    echo "Manual site already up to date; nothing to publish"
+    return
+  fi
+
+  local source_revision
+  source_revision="${GITHUB_SHA:-$(git -C "${repo_root}" rev-parse HEAD)}"
+
+  if git -C "${target_dir}" rev-parse --verify gh-pages >/dev/null 2>&1; then
+    git -C "${target_dir}" checkout gh-pages
+  elif git -C "${target_dir}" rev-parse --verify main >/dev/null 2>&1; then
+    git -C "${target_dir}" checkout -B gh-pages
+  else
+    git -C "${target_dir}" checkout --orphan gh-pages
+  fi
+
+  git -C "${target_dir}" add --all
+  git -C "${target_dir}" commit -m "docs: publish manual from ${source_revision}"
+
+  if [[ "${use_https_token}" == "true" ]]; then
+    git -C "${target_dir}" -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" push origin HEAD:gh-pages
+  else
+    GIT_SSH_COMMAND="${deploy_ssh_command}" git -C "${target_dir}" push origin HEAD:gh-pages
+  fi
+}
+
 usage() {
   cat <<'EOF'
-Usage: scripts/publish.sh [verify|cli|formula|container|all]
+Usage: scripts/publish.sh [verify|cli|formula|container|manual|all]
 EOF
 }
 
@@ -565,6 +726,9 @@ case "${subcommand}" in
     ;;
   container)
     run_container
+    ;;
+  manual)
+    run_manual
     ;;
   all)
     verify

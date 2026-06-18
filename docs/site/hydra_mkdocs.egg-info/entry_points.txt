@@ -1,0 +1,2 @@
+[mkdocs.plugins]
+hydra_manual = hydra_mkdocs.plugin:HydraManualPlugin

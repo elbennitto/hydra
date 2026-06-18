@@ -6,10 +6,10 @@ This directory contains repository scoped secret material for `hydra-gitops/hydr
 
 - `public-keys.yaml`: non-sensitive public keys and target GitHub secret names.
 - `git.yaml`: non-sensitive git identity settings (user/author/committer).
-- `publish.yaml`: non-sensitive publish settings (Homebrew tap deploy target repository).
+- `publish.yaml`: non-sensitive publish settings (Homebrew tap deploy target repository plus manual GitHub Pages domain/site URL/target repo/target dir).
 - `age-pipeline-keys.sops.yaml`: encrypted age private keys for CI decryption.
 - `git.sops.yaml`: encrypted semantic-release signing private key.
-- `publish.sops.yaml`: encrypted cosign private key and Homebrew tap deploy key.
+- `publish.sops.yaml`: encrypted cosign private key, Homebrew tap deploy key, and manual pages deploy SSH key.
 - `renovate.sops.yaml`: encrypted Renovate token source value.
 
 `git.sops.yaml` is encrypted for both pipeline keys (`age_keys.release.private_key` and `age_keys.publish.private_key`) so either pipeline context can decrypt it.
@@ -64,7 +64,6 @@ The script configures:
 
 ## Values that must be filled manually
 
-- `git.yaml` -> `user.name`, `user.email`, optional `author.*`, and optional `committer.*`.
 - `renovate.sops.yaml` -> `renovate.token`.
 
 ## Already generated automatically
@@ -79,4 +78,11 @@ The script configures:
 - Homebrew tap deploy SSH key pair:
   - public key in `public-keys.yaml` at `homebrew_tap.public_key_openssh`
   - private key in `publish.sops.yaml` at `homebrew.tap_deploy_key`
-- Homebrew tap deploy target repository in `publish.yaml` at `homebrew.tap_deploy_target_repo`
+- Manual pages deploy SSH key pair:
+  - public key in `public-keys.yaml` at `manual_pages.public_key_openssh`
+  - private key in `publish.sops.yaml` at `manual.pages_deploy_key`
+- Homebrew tap deploy target repository in `publish.yaml` at `homebrew.tap_deploy_target_repo`.
+- Manual pages domain in `publish.yaml` at `manual.pages_domain`.
+- Manual pages site URL in `publish.yaml` at `manual.site_url`.
+- Manual pages target repository in `publish.yaml` at `manual.target_repo`.
+- Manual pages target directory in `publish.yaml` at `manual.target_dir`.
