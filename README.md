@@ -12,44 +12,56 @@ Latest signed release: [v1.1.0](https://github.com/hydra-gitops/hydra/releases/t
 
 ### Homebrew
 
+Tap the Hydra repository first:
+
+```bash
+brew tap hydra-gitops/homebrew-tap https://github.com/hydra-gitops/homebrew-tap
+```
+
 macOS recommended (build the latest released version from source):
 
 ```bash
-brew tap hydra-gitops/homebrew-tap https://github.com/hydra-gitops/homebrew-tap
-brew install hydra-gitops/homebrew-tap/hydra
+brew trust --formula hydra-gitops/tap/hydra
+brew install hydra-gitops/tap/hydra
 ```
 
-macOS binary cask from GitHub releases:
+Linux recommended (download the latest released binary from GitHub releases):
 
 ```bash
-brew tap hydra-gitops/homebrew-tap https://github.com/hydra-gitops/homebrew-tap
-brew install hydra-gitops/homebrew-tap/hydra-bin
+brew trust --formula hydra-gitops/tap/hydra-bin
+brew install hydra-gitops/tap/hydra-bin
 ```
 
-If you install the binary cask on macOS, Gatekeeper may block the first launch with:
+Linux can also self-compile from source if preferred:
+
+```bash
+brew trust --formula hydra-gitops/tap/hydra
+brew install hydra-gitops/tap/hydra
+```
+
+Hydra provides both Homebrew artifacts:
+
+- `hydra-bin` downloads the prebuilt CLI from GitHub releases and is recommended on Linux.
+- `hydra` builds from source and is recommended on macOS.
+
+If you install the GitHub-downloaded binary on macOS, Gatekeeper may block the first launch with:
 
 > `"hydra" Not Opened. Apple could not verify "hydra" is free of malware that may harm your Mac or compromise your privacy.`
 
 You can allow an exception in `System Settings > Privacy & Security`, or avoid the warning by using the source formula:
 
 ```bash
-brew tap hydra-gitops/homebrew-tap https://github.com/hydra-gitops/homebrew-tap
-brew install hydra-gitops/homebrew-tap/hydra
-```
-
-Linux recommended (install the latest released binary):
-
-```bash
-brew tap hydra-gitops/homebrew-tap https://github.com/hydra-gitops/homebrew-tap
-brew install hydra-gitops/homebrew-tap/hydra-bin
+brew trust --formula hydra-gitops/tap/hydra
+brew install hydra-gitops/tap/hydra
 ```
 
 Uninstall Homebrew packages with:
 
 ```bash
 brew uninstall hydra-gitops/homebrew-tap/hydra
-brew uninstall --cask hydra-gitops/homebrew-tap/hydra-bin
-brew untap hydra-gitops/homebrew-tap
+# or
+brew uninstall hydra-gitops/homebrew-tap/hydra-bin
+brew untap hydra-gitops/tap
 ```
 
 ### Docker (linux/amd64 and linux/arm64)

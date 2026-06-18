@@ -16,6 +16,7 @@ type readmeData struct {
 	ReleaseTag            string
 	ReleaseURL            string
 	Repo                  string
+	TapPackageRepo        string
 	TapRepo               string
 	Version               string
 }
@@ -52,6 +53,7 @@ func main() {
 		ReleaseTag:            releaseTag,
 		ReleaseURL:            releaseURL,
 		Repo:                  *repoSlug,
+		TapPackageRepo:        tapPackageRepo(*tapRepoSlug),
 		TapRepo:               *tapRepoSlug,
 		Version:               normalizedVersion,
 	}
@@ -73,4 +75,12 @@ func main() {
 		fmt.Fprintf(os.Stderr, "render template: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+func tapPackageRepo(tapRepoSlug string) string {
+	owner, _, ok := strings.Cut(tapRepoSlug, "/")
+	if !ok || strings.TrimSpace(owner) == "" {
+		return tapRepoSlug
+	}
+	return owner + "/tap"
 }

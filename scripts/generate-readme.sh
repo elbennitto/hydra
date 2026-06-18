@@ -5,30 +5,20 @@ set -euo pipefail
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "${script_dir}/.." && pwd)"
 
-github_slug_from_remote_url() {
-  local remote_url="$1"
-  if [[ "${remote_url}" =~ ^git@github\.com:([^/]+/[^/.]+)(\.git)?$ ]]; then
-    printf '%s\n' "${BASH_REMATCH[1]}"
-    return
-  fi
-  if [[ "${remote_url}" =~ ^https://github\.com/([^/]+/[^/.]+)(\.git)?$ ]]; then
-    printf '%s\n' "${BASH_REMATCH[1]}"
-    return
-  fi
+usage() {
+  cat <<'EOF'
+Usage: ./scripts/generate-readme.sh [--upstream-repo <owner/name>] [version]
+
+Options:
+  --upstream-repo <owner/name>  Override upstream repository slug for rendering.
+  -h, --help                    Show this help text.
+EOF
 }
 
-detect_upstream_repo_slug() {
-  local upstream_ref remote remote_url
-  upstream_ref="$(git -C "${repo_root}" rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null || true)"
-  if [[ -z "${upstream_ref}" ]]; then
-    return
+detect_actions_repo_slug() {
+  if [[ "${GITHUB_ACTIONS:-}" == "true" && -n "${GITHUB_REPOSITORY:-}" ]]; then
+    printf '%s\n' "${GITHUB_REPOSITORY}"
   fi
-  remote="${upstream_ref%%/*}"
-  remote_url="$(git -C "${repo_root}" config --get "remote.${remote}.url" 2>/dev/null || true)"
-  if [[ -z "${remote_url}" ]]; then
-    return
-  fi
-  github_slug_from_remote_url "${remote_url}"
 }
 
 extract_tap_repo_slug() {
@@ -53,9 +43,47 @@ extract_tap_repo_slug() {
   ' "${publish_yaml}"
 }
 
+repo_slug_override=""
+version=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --upstream-repo)
+      if [[ $# -lt 2 ]]; then
+        echo "Missing value for --upstream-repo" >&2
+        usage >&2
+        exit 1
+      fi
+      repo_slug_override="$2"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    --*)
+      echo "Unknown option: $1" >&2
+      usage >&2
+      exit 1
+      ;;
+    *)
+      if [[ -n "${version}" ]]; then
+        echo "Unexpected extra argument: $1" >&2
+        usage >&2
+        exit 1
+      fi
+      version="$1"
+      shift
+      ;;
+  esac
+done
+
 repo_slug="${README_REPO_SLUG:-}"
+if [[ -n "${repo_slug_override}" ]]; then
+  repo_slug="${repo_slug_override}"
+fi
 if [[ -z "${repo_slug}" ]]; then
-  repo_slug="$(detect_upstream_repo_slug)"
+  repo_slug="$(detect_actions_repo_slug)"
 fi
 repo_slug="${repo_slug:-hydra-gitops/hydra}"
 
@@ -64,8 +92,6 @@ if [[ -z "${tap_repo_slug}" ]]; then
   tap_repo_slug="$(extract_tap_repo_slug "${repo_root}/.github/secrets/repos/${repo_slug}/publish.yaml")"
 fi
 tap_repo_slug="${tap_repo_slug:-hydra-gitops/homebrew-tap}"
-
-version="${1:-}"
 
 if [[ -z "${version}" ]]; then
   latest_tag="$(git -C "${repo_root}" describe --tags --abbrev=0 2>/dev/null || true)"

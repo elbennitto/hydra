@@ -12,44 +12,56 @@ Latest signed release: [{{ .ReleaseTag }}]({{ .ReleaseURL }})
 
 ### Homebrew
 
+Tap the Hydra repository first:
+
+```bash
+brew tap {{ .TapRepo }} https://github.com/{{ .TapRepo }}
+```
+
 macOS recommended (build the latest released version from source):
 
 ```bash
-brew tap {{ .TapRepo }} https://github.com/{{ .TapRepo }}
-brew install {{ .TapRepo }}/hydra
+brew trust --formula {{ .TapPackageRepo }}/hydra
+brew install {{ .TapPackageRepo }}/hydra
 ```
 
-macOS binary cask from GitHub releases:
+Linux recommended (download the latest released binary from GitHub releases):
 
 ```bash
-brew tap {{ .TapRepo }} https://github.com/{{ .TapRepo }}
-brew install {{ .TapRepo }}/hydra-bin
+brew trust --formula {{ .TapPackageRepo }}/hydra-bin
+brew install {{ .TapPackageRepo }}/hydra-bin
 ```
 
-If you install the binary cask on macOS, Gatekeeper may block the first launch with:
+Linux can also self-compile from source if preferred:
+
+```bash
+brew trust --formula {{ .TapPackageRepo }}/hydra
+brew install {{ .TapPackageRepo }}/hydra
+```
+
+Hydra provides both Homebrew artifacts:
+
+- `hydra-bin` downloads the prebuilt CLI from GitHub releases and is recommended on Linux.
+- `hydra` builds from source and is recommended on macOS.
+
+If you install the GitHub-downloaded binary on macOS, Gatekeeper may block the first launch with:
 
 > `"hydra" Not Opened. Apple could not verify "hydra" is free of malware that may harm your Mac or compromise your privacy.`
 
 You can allow an exception in `System Settings > Privacy & Security`, or avoid the warning by using the source formula:
 
 ```bash
-brew tap {{ .TapRepo }} https://github.com/{{ .TapRepo }}
-brew install {{ .TapRepo }}/hydra
-```
-
-Linux recommended (install the latest released binary):
-
-```bash
-brew tap {{ .TapRepo }} https://github.com/{{ .TapRepo }}
-brew install {{ .TapRepo }}/hydra-bin
+brew trust --formula {{ .TapPackageRepo }}/hydra
+brew install {{ .TapPackageRepo }}/hydra
 ```
 
 Uninstall Homebrew packages with:
 
 ```bash
 brew uninstall {{ .TapRepo }}/hydra
-brew uninstall --cask {{ .TapRepo }}/hydra-bin
-brew untap {{ .TapRepo }}
+# or
+brew uninstall {{ .TapRepo }}/hydra-bin
+brew untap {{ .TapPackageRepo }}
 ```
 
 ### Docker (linux/amd64 and linux/arm64)
