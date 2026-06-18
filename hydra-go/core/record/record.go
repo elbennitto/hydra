@@ -23,7 +23,7 @@ import (
 
 const (
 	recordFileIdleWait     = 150 * time.Millisecond
-	recordFileStatusWait   = 15 * time.Second
+	recordFileStatusWait   = 45 * time.Second
 	recordFileSessionCols  = 120
 	recordFileSessionRows  = 36
 	recordFileTypeCharWait = 0.2
