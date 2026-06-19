@@ -40,6 +40,9 @@ func (c *CastStreamBuilder) WriteBytes(chunk []byte) {
 func (c *CastStreamBuilder) Build() ([]byte, error) {
 	cleanOutput := StripRecordingControlSequences(strings.Join(c.chunks, ""))
 	events := linesToEvents(splitTerminalLines(cleanOutput), "o")
+	if c.documentationCommand != "" {
+		events = normalizeDocumentationCastEvents(events)
+	}
 	return buildCastStream(events, c.documentationCommand)
 }
 
@@ -155,4 +158,40 @@ func buildCastStream(events []castEvent, documentationCommand string) ([]byte, e
 // WriteCast writes a documentation asciicast v3 file from captured PTY output.
 func WriteCast(path string, ptyOutput []byte, documentationCommand string) error {
 	return writeRawCast(path, ptyOutput, documentationCommand)
+}
+
+func normalizeDocumentationCastEvents(events []castEvent) []castEvent {
+	if len(events) == 0 {
+		return nil
+	}
+
+	out := make([]castEvent, 0, len(events))
+	pendingTime := 0.0
+	hasPendingTime := false
+	for i, event := range events {
+		if hasPendingTime {
+			event.time = pendingTime
+			hasPendingTime = false
+		}
+
+		if i > 0 &&
+			isOnlyLineEnding(event.data) &&
+			event.time != defaultLineDelaySeconds &&
+			strings.HasSuffix(events[i-1].data, "\n") {
+			out = append(out, castEvent{
+				time: defaultLineDelaySeconds,
+				kind: event.kind,
+				data: "",
+			})
+			pendingTime = event.time
+			hasPendingTime = true
+			continue
+		}
+
+		out = append(out, event)
+	}
+	if hasPendingTime {
+		out = append(out, castEvent{time: pendingTime, kind: "o", data: ""})
+	}
+	return out
 }

@@ -12,7 +12,7 @@ import (
 )
 
 func TestHelpCastDocumentationCommand(t *testing.T) {
-	assert.Equal(t, "hydra record help -- hydra argocd sync manual --help",
+	assert.Equal(t, "hydra record cli -- hydra argocd sync manual --help",
 		HelpCastDocumentationCommand("hydra argocd sync manual --help"))
 }
 
@@ -58,6 +58,34 @@ func TestLinesToEvents_InlineSleepDirective_DoesNotConsumeFollowingDigit(t *test
 	assert.Equal(t, "a", out[0].data)
 	assert.InDelta(t, 0.2, out[1].time, 1e-9)
 	assert.Equal(t, "2", out[1].data)
+}
+
+func TestLinesToEvents_MarkerDirective_EmitsMarkerEvent(t *testing.T) {
+	lines := []string{"output\r\n", "<<hydra marker Deploy>>\r\n", "next\r\n"}
+	out := linesToEvents(lines, "o")
+	require.Len(t, out, 4)
+	assert.Equal(t, "o", out[0].kind)
+	assert.Equal(t, "output\r\n", out[0].data)
+	assert.Equal(t, "m", out[1].kind)
+	assert.Equal(t, "Deploy", out[1].data)
+	assert.Equal(t, "o", out[2].kind)
+	assert.Equal(t, "\r\n", out[2].data)
+	assert.Equal(t, "o", out[3].kind)
+	assert.Equal(t, "next\r\n", out[3].data)
+}
+
+func TestLinesToEvents_SleepThenMarkerDirective_AppliesDelayToMarker(t *testing.T) {
+	lines := []string{"<<hydra sleep 0.3>><<hydra marker Deploy>>\r\n", "next\r\n"}
+	out := linesToEvents(lines, "o")
+	require.Len(t, out, 3)
+	assert.Equal(t, "m", out[0].kind)
+	assert.InDelta(t, 0.3, out[0].time, 1e-9)
+	assert.Equal(t, "Deploy", out[0].data)
+	assert.Equal(t, "o", out[1].kind)
+	assert.InDelta(t, defaultLineDelaySeconds, out[1].time, 1e-9)
+	assert.Equal(t, "\r\n", out[1].data)
+	assert.Equal(t, "o", out[2].kind)
+	assert.Equal(t, "next\r\n", out[2].data)
 }
 
 func TestLinesToEvents_TypedCharsWithSpeed_DoNotAppendNewlinePerChar(t *testing.T) {

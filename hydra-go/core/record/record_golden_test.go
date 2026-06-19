@@ -40,7 +40,7 @@ func TestRecordFileGolden(t *testing.T) {
 
 			specDir := t.TempDir()
 			outDir := t.TempDir()
-			specPath := filepath.Join(specDir, caseName+".yaml")
+			specPath := filepath.Join(specDir, caseName+".cast.yaml")
 			require.NoError(t, os.MkdirAll(filepath.Dir(specPath), 0o755))
 			require.NoError(t, os.WriteFile(specPath, givenBytes, 0o644))
 
@@ -92,20 +92,28 @@ func TestTutorialRecordingsGolden(t *testing.T) {
 	pkgDir := filepath.Dir(thisFile)
 	moduleRoot := filepath.Clean(filepath.Join(pkgDir, "..", ".."))
 	repoRoot := filepath.Clean(filepath.Join(moduleRoot, ".."))
-	tutorialRoot := filepath.Join(repoRoot, "docs", "asciinema", "tutorials")
+	tutorialRoot := filepath.Join(repoRoot, "docs", "manual")
 
 	specs, err := Discover(tutorialRoot)
 	require.NoError(t, err)
 	require.NotEmpty(t, specs, "no tutorial specs found under %s", tutorialRoot)
 
 	hydraBin := buildHydraCLIBinary(t, moduleRoot)
+	originalWD, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(repoRoot))
+	defer func() {
+		_ = os.Chdir(originalWD)
+	}()
 
 	for _, spec := range specs {
 		spec := spec
-		t.Run(spec.Slug, func(t *testing.T) {
+		t.Run(spec.OutputBase, func(t *testing.T) {
 			outDir := t.TempDir()
+			inputPath, err := filepath.Rel(repoRoot, spec.Path)
+			require.NoError(t, err)
 
-			require.NoError(t, RecordOne(spec.Path, RecordOptions{
+			require.NoError(t, RecordOne(inputPath, RecordOptions{
 				HydraBin:        hydraBin,
 				HydraGlobalArgs: []string{"--no-timestamps"},
 				SpecDir:         tutorialRoot,
@@ -113,11 +121,11 @@ func TestTutorialRecordingsGolden(t *testing.T) {
 				MirrorOutput:    false,
 			}))
 
-			gotPath := filepath.Join(outDir, spec.Slug+".cast")
+			gotPath := filepath.Join(outDir, spec.OutputBase+".cast")
 			gotBytes, err := os.ReadFile(gotPath)
 			require.NoError(t, err)
 
-			expectedPath := strings.TrimSuffix(spec.Path, filepath.Ext(spec.Path)) + ".cast"
+			expectedPath := TrimRecordSpecExtension(spec.Path) + ".cast"
 			if *updateRecordFileGolden {
 				require.NoError(t, os.WriteFile(expectedPath, gotBytes, 0o644))
 			}

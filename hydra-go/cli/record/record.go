@@ -18,7 +18,3 @@ type RecordFileOutput = corerecord.RecordFileOutput
 func RecordOne(file string, opts RecordOptions) error {
 	return corerecord.RecordOne(file, opts)
 }
-
-func RecordAll(opts RecordOptions) error {
-	return corerecord.RecordAll(opts)
-}

@@ -31,6 +31,8 @@ type RecordStep struct {
 
 	CD string
 
+	Marker string
+
 	Env []RecordEnvEntry
 
 	Assert RecordAssert
@@ -57,9 +59,10 @@ type RecordAssert struct {
 }
 
 type RecordSpec struct {
-	Slug string
-	Path string
-	File RecordFile
+	Path       string
+	DisplayPath string
+	OutputBase string
+	File       RecordFile
 }
 
 type rawRecordFile struct {
@@ -77,7 +80,7 @@ func Discover(specDir string) ([]RecordSpec, error) {
 			return nil
 		}
 		name := d.Name()
-		if !strings.HasSuffix(name, ".yaml") && !strings.HasSuffix(name, ".yml") {
+		if !isRecordSpecFilename(name) {
 			return nil
 		}
 		spec, err := Load(path)
@@ -85,9 +88,10 @@ func Discover(specDir string) ([]RecordSpec, error) {
 			return err
 		}
 		out = append(out, RecordSpec{
-			Slug: slugFromSpecPath(specDir, path),
-			Path: path,
-			File: spec,
+			Path:        path,
+			DisplayPath: outputBaseFromSpecPath(specDir, path),
+			OutputBase:  outputBaseFromSpecPath(specDir, path),
+			File:        spec,
 		})
 		return nil
 	})
@@ -96,7 +100,7 @@ func Discover(specDir string) ([]RecordSpec, error) {
 	}
 
 	slices.SortFunc(out, func(a, b RecordSpec) int {
-		return strings.Compare(a.Slug, b.Slug)
+		return strings.Compare(a.Path, b.Path)
 	})
 	return out, nil
 }
@@ -119,17 +123,17 @@ func Load(path string) (RecordFile, error) {
 	return spec, nil
 }
 
-func Find(specDir, slug string) (RecordSpec, error) {
+func Find(specDir, name string) (RecordSpec, error) {
 	specs, err := Discover(specDir)
 	if err != nil {
 		return RecordSpec{}, err
 	}
 	for _, spec := range specs {
-		if spec.Slug == slug {
+		if spec.DisplayPath == name || spec.OutputBase == name {
 			return spec, nil
 		}
 	}
-	return RecordSpec{}, fmt.Errorf("record %q not found in %q", slug, specDir)
+	return RecordSpec{}, fmt.Errorf("record %q not found in %q", name, specDir)
 }
 
 func Resolve(specDir, input string) (RecordSpec, error) {
@@ -140,6 +144,11 @@ func Resolve(specDir, input string) (RecordSpec, error) {
 	path := input
 	if !filepath.IsAbs(path) {
 		path = filepath.Clean(path)
+		absPath, err := filepath.Abs(path)
+		if err != nil {
+			return RecordSpec{}, fmt.Errorf("resolve absolute record file path %q: %w", input, err)
+		}
+		path = absPath
 	}
 	info, err := os.Stat(path)
 	switch {
@@ -158,28 +167,49 @@ func Resolve(specDir, input string) (RecordSpec, error) {
 		return RecordSpec{}, err
 	}
 
-	slug := slugFromSpecPath(specDir, path)
-	if rel, err := filepath.Rel(specDir, path); err != nil || strings.HasPrefix(rel, "..") || rel == "." {
-		slug = slugFromSpecPath(filepath.Dir(path), path)
-	}
-
-	return RecordSpec{Slug: slug, Path: path, File: spec}, nil
+	return RecordSpec{
+		Path:        path,
+		DisplayPath: filepath.ToSlash(strings.TrimSpace(input)),
+		OutputBase:  outputBaseFromSpecPath(specDir, path),
+		File:        spec,
+	}, nil
 }
 
-func slugFromSpecPath(specDir, path string) string {
+func outputBaseFromSpecPath(specDir, path string) string {
 	rel, err := filepath.Rel(specDir, path)
-	if err != nil {
+	if err != nil || strings.HasPrefix(rel, "..") || rel == "." {
 		rel = filepath.Base(path)
 	}
-	ext := filepath.Ext(rel)
-	rel = strings.TrimSuffix(rel, ext)
+	rel = TrimRecordSpecExtension(rel)
 	return filepath.ToSlash(rel)
+}
+
+func TrimRecordSpecExtension(path string) string {
+	switch {
+	case strings.HasSuffix(path, ".cast.yaml"):
+		return strings.TrimSuffix(path, ".cast.yaml")
+	case strings.HasSuffix(path, ".cast.yml"):
+		return strings.TrimSuffix(path, ".cast.yml")
+	default:
+		ext := filepath.Ext(path)
+		if ext == "" {
+			return path
+		}
+		return strings.TrimSuffix(path, ext)
+	}
+}
+
+func isRecordSpecFilename(name string) bool {
+	return strings.HasSuffix(name, ".cast.yaml") ||
+		strings.HasSuffix(name, ".cast.yml") ||
+		strings.HasSuffix(name, ".yaml") ||
+		strings.HasSuffix(name, ".yml")
 }
 
 func parseRecordFile(path string, raw rawRecordFile) (RecordFile, error) {
 	spec := RecordFile{Name: strings.TrimSpace(raw.Name)}
 	if spec.Name == "" {
-		spec.Name = slugFromSpecPath(filepath.Dir(path), path)
+		spec.Name = outputBaseFromSpecPath(filepath.Dir(path), path)
 	}
 	if len(raw.Steps) == 0 {
 		return RecordFile{}, fmt.Errorf("record spec %q: at least one step is required", path)
@@ -203,6 +233,7 @@ func parseRecordStep(path string, index int, stepMap map[string]interface{}) (Re
 	_, hasWrite := stepMap["write"]
 	_, hasRun := stepMap["run"]
 	_, hasCD := stepMap["cd"]
+	_, hasMarker := stepMap["marker"]
 	_, hasAssert := stepMap["assert"]
 	_, hasEnv := stepMap["env"]
 	_, hasColor := stepMap["color"]
@@ -223,6 +254,9 @@ func parseRecordStep(path string, index int, stepMap map[string]interface{}) (Re
 	if hasCD {
 		primary++
 	}
+	if hasMarker {
+		primary++
+	}
 	if hasAssert {
 		primary++
 	}
@@ -233,7 +267,7 @@ func parseRecordStep(path string, index int, stepMap map[string]interface{}) (Re
 		primary++
 	}
 	if primary != 1 {
-		return RecordStep{}, fmt.Errorf("record spec %q: step %d must define exactly one primary field (type/sleep/write/run/cd/assert/env/color)", path, index)
+		return RecordStep{}, fmt.Errorf("record spec %q: step %d must define exactly one primary field (type/sleep/write/run/cd/marker/assert/env/color)", path, index)
 	}
 
 	if hasType {
@@ -313,6 +347,14 @@ func parseRecordStep(path string, index int, stepMap map[string]interface{}) (Re
 			return RecordStep{}, fmt.Errorf("record spec %q: step %d cd requires non-empty string", path, index)
 		}
 		return RecordStep{Kind: "cd", CD: dir}, nil
+	}
+
+	if hasMarker {
+		label, ok := asString(stepMap["marker"])
+		if !ok || strings.TrimSpace(label) == "" {
+			return RecordStep{}, fmt.Errorf("record spec %q: step %d marker requires non-empty string", path, index)
+		}
+		return RecordStep{Kind: "marker", Marker: strings.TrimSpace(label)}, nil
 	}
 
 	if hasAssert {

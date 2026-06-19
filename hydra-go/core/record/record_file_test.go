@@ -50,6 +50,19 @@ func TestLoadRecordSpec_NewDSL(t *testing.T) {
 	assert.Equal(t, "assert", spec.Steps[6].Kind)
 }
 
+func TestLoadRecordSpec_MarkerStep(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "demo.yaml")
+	yaml := "steps:\n" +
+		"  - marker: Create Chart.yaml\n"
+	require.NoError(t, os.WriteFile(path, []byte(yaml), 0o644))
+
+	spec, err := Load(path)
+	require.NoError(t, err)
+	require.Len(t, spec.Steps, 1)
+	assert.Equal(t, "marker", spec.Steps[0].Kind)
+	assert.Equal(t, "Create Chart.yaml", spec.Steps[0].Marker)
+}
+
 func TestLoadRecordSpec_EnvRequiresListSyntax(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "demo.yaml")
 	yaml := "steps:\n" +
@@ -97,6 +110,21 @@ func TestRecordFile_RunOutputHiddenButAssertable(t *testing.T) {
 	cast := string(castBytes)
 	assert.Contains(t, cast, "visible output")
 	assert.NotContains(t, cast, "hidden output")
+}
+
+func TestRecordFile_MarkerLabelNotVisibleInPlainCast(t *testing.T) {
+	specDir := t.TempDir()
+	outDir := t.TempDir()
+	specPath := filepath.Join(specDir, "demo.yaml")
+	yaml := "steps:\n" +
+		"  - write: visible output\n" +
+		"  - marker: Hidden Marker Label\n" +
+		"  - assert:\n" +
+		"      cast: plain(cast).contains(\"visible output\") && !plain(cast).contains(\"Hidden Marker Label\")\n"
+	require.NoError(t, os.WriteFile(specPath, []byte(yaml), 0o644))
+
+	err := RecordOne(specPath, RecordOptions{SpecDir: specDir, OutputDir: outDir})
+	require.NoError(t, err)
 }
 
 func TestRecordFile_EnvValueCelExec(t *testing.T) {

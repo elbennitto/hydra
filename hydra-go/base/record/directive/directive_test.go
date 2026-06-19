@@ -43,6 +43,26 @@ func TestColorResetLine(t *testing.T) {
 	assert.Equal(t, "<<hydra color reset>>", ColorResetLine())
 }
 
+func TestMarkerLineAndParse(t *testing.T) {
+	line := MarkerLine("Deploy app")
+	assert.Equal(t, "<<hydra marker Deploy app>>", line)
+
+	label, ok := ParseMarkerLine(line)
+	require.True(t, ok)
+	assert.Equal(t, "Deploy app", label)
+}
+
+func TestParseMarkerLine_FindsEmbeddedDirective(t *testing.T) {
+	label, ok := ParseMarkerLine("prefix <<hydra marker Hello marker>> suffix")
+	require.True(t, ok)
+	assert.Equal(t, "Hello marker", label)
+}
+
+func TestIsMarkerDirectiveOnlyLine(t *testing.T) {
+	assert.True(t, IsMarkerDirectiveOnlyLine("<<hydra marker Step one>>\r\n"))
+	assert.False(t, IsMarkerDirectiveOnlyLine("x<<hydra marker Step one>>\r\n"))
+}
+
 func TestIsSleepDirectiveOnlyLine(t *testing.T) {
 	assert.True(t, IsSleepDirectiveOnlyLine("<<hydra sleep 1>>\r\n"))
 	assert.False(t, IsSleepDirectiveOnlyLine("x<<hydra sleep 1>>\r\n"))

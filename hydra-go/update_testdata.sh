@@ -19,7 +19,7 @@ go test -count=1 ./core/view/... -update
 echo "Updating cluster preset matches golden files (testdata/cluster_preset_matches/*.expected.yaml)..."
 go test -count=1 -run TestClusterPresetMatchesGolden ./core/hydra -update
 
-echo "Updating record file and tutorial cast golden files (core/record/testdata/record_file/*.expected.cast, docs/asciinema/tutorials/*.cast)..."
+echo "Updating record file and tutorial cast golden files (core/record/testdata/record_file/*.expected.cast, docs/manual/tutorials/*.cast)..."
 go test -count=1 -run 'TestRecordFileGolden|TestTutorialRecordingsGolden' ./core/record -update
 
 echo ""

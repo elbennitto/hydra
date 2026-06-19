@@ -45,7 +45,7 @@ func TestWriteRawCast_WritesDocumentationCommand(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "demo.cast")
 	body := " $ \r\n<<hydra sleep 0.5>>\r\nline\r\n"
-	require.NoError(t, writeRawCast(path, []byte(body), "hydra record help -- hydra demo --help"))
+	require.NoError(t, writeRawCast(path, []byte(body), "hydra record cli -- hydra demo --help"))
 
 	events := readCastEvents(t, path)
 	require.Len(t, events, 3)
@@ -67,5 +67,5 @@ func TestWriteRawCast_WritesDocumentationCommand(t *testing.T) {
 		}
 	}
 	require.NoError(t, json.Unmarshal(data[:idx], &header))
-	assert.Equal(t, "hydra record help -- hydra demo --help", header["command"])
+	assert.Equal(t, "hydra record cli -- hydra demo --help", header["command"])
 }

@@ -66,7 +66,7 @@ func testHelpRootCommand() *cobra.Command {
 
 	record := &cobra.Command{Use: "record"}
 	record.AddCommand(&cobra.Command{Use: "help"})
-	record.AddCommand(&cobra.Command{Use: "all"})
+	record.AddCommand(&cobra.Command{Use: "file <file>..."})
 	root.AddCommand(record)
 
 	hidden := &cobra.Command{Use: "validate", Hidden: true}

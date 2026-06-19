@@ -27,6 +27,12 @@ func TestBenchCaptureEchoScript(t *testing.T) {
 }
 
 func TestBenchCaptureHydraScript(t *testing.T) {
+	if _, err := os.Stat("/tmp/rec-hydra.sh"); err != nil {
+		if os.IsNotExist(err) {
+			t.Skip("skipping benchmark helper test: /tmp/rec-hydra.sh not present")
+		}
+		t.Fatal(err)
+	}
 	t0 := time.Now()
 	_, err := captureScriptOutput("/tmp/rec-hydra.sh", recordingEnv(), nil)
 	if err != nil {

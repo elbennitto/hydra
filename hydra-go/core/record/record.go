@@ -76,10 +76,6 @@ func RecordOne(file string, opts RecordOptions) error {
 	return newRecordFileOrchestrator(opts).RecordOne(file)
 }
 
-func RecordAll(opts RecordOptions) error {
-	return newRecordFileOrchestrator(opts).RecordAll()
-}
-
 type recordFileOrchestrator struct {
 	opts   RecordOptions
 	runner recordFileRunner
@@ -102,23 +98,10 @@ func (a recordFileOrchestrator) RecordOne(file string) error {
 	return a.recordSpec(spec)
 }
 
-func (a recordFileOrchestrator) RecordAll() error {
-	specs, err := Discover(a.opts.SpecDir)
-	if err != nil {
-		return err
-	}
-	for _, spec := range specs {
-		if err := a.recordSpec(spec); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func (a recordFileOrchestrator) recordSpec(spec RecordSpec) error {
 	outPath := strings.TrimSpace(a.opts.OutputPath)
 	if outPath == "" {
-		outPath = filepath.Join(a.opts.OutputDir, spec.Slug+".cast")
+		outPath = filepath.Join(a.opts.OutputDir, spec.OutputBase+".cast")
 	}
 	if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
 		return fmt.Errorf("create record file output dir: %w", err)
@@ -129,7 +112,7 @@ func (a recordFileOrchestrator) recordSpec(spec RecordSpec) error {
 		return err
 	}
 
-	builder := asciinema.NewCastStreamBuilder("hydra record file " + spec.Slug)
+	builder := asciinema.NewCastStreamBuilder("hydra record file " + spec.DisplayPath)
 	builder.WriteBytes(raw)
 	stream, err := builder.Build()
 	if err != nil {
@@ -158,7 +141,7 @@ func executeRecordFileSpec(spec RecordSpec, opts RecordOptions) ([]byte, error) 
 		return nil, fmt.Errorf("create output dir: %w", err)
 	}
 
-	tmpDir, err := os.MkdirTemp("", "hydra-record-file-"+strings.ReplaceAll(spec.Slug, "/", "-")+"-")
+	tmpDir, err := os.MkdirTemp("", "hydra-record-file-"+strings.ReplaceAll(spec.OutputBase, "/", "-")+"-")
 	if err != nil {
 		return nil, fmt.Errorf("create record file temp dir: %w", err)
 	}
@@ -181,7 +164,7 @@ func executeRecordFileSpec(spec RecordSpec, opts RecordOptions) ([]byte, error) 
 	history := historyState{
 		env:         envMapFromEnviron(os.Environ()),
 		virtualPath: virtualPath,
-		record:      spec.Slug,
+		record:      spec.DisplayPath,
 		rootDir:     tmpDir,
 		currentDir:  tmpDir,
 	}
@@ -194,15 +177,15 @@ func executeRecordFileSpec(spec RecordSpec, opts RecordOptions) ([]byte, error) 
 		command := stepCommandForLog(step)
 		semantics, _ := resolveExecSemantics(step)
 		l.DebugLog(logIdRecordFile, "running record file step",
-			log.String("record", spec.Slug),
+			log.String("record", spec.DisplayPath),
 			log.Int("stepIndex", i),
 			log.String("type", step.Kind),
 			log.Bool("input", semantics.showCommand),
 			log.Bool("output", semantics.showOutput),
 			log.Bool("slow", semantics.slow),
 			log.String("command", command))
-		if err := runStep(session, spec.Slug, virtualPath, step, i, &history); err != nil {
-			return nil, fmt.Errorf("record file %q step %d (%s): %w", spec.Slug, i, step.Kind, err)
+		if err := runStep(session, spec.DisplayPath, virtualPath, step, i, &history); err != nil {
+			return nil, fmt.Errorf("record file %q step %d (%s): %w", spec.DisplayPath, i, step.Kind, err)
 		}
 	}
 
@@ -257,6 +240,12 @@ func buildRecordFileOutputs(steps []RecordStep) []RecordFileOutput {
 			outputs = append(outputs, RecordFileOutput{Kind: RecordFileOutputText, Value: "\r\n"})
 		case "sleep":
 			outputs = append(outputs, RecordFileOutput{Kind: RecordFileOutputControl, Value: strings.TrimSpace(directive.SleepLine(step.SleepSeconds))})
+		case "marker":
+			label := strings.TrimSpace(step.Marker)
+			if label == "" {
+				continue
+			}
+			outputs = append(outputs, RecordFileOutput{Kind: RecordFileOutputControl, Value: strings.TrimSpace(directive.MarkerLine(label))})
 		case "color":
 			if value, ok := renderRecordColor(step.Color); ok {
 				outputs = append(outputs, RecordFileOutput{Kind: RecordFileOutputText, Value: value})
@@ -358,6 +347,15 @@ func runStep(session *recordFileShell, recordSlug, virtualPath string, step Reco
 			return err
 		}
 		history.env["PWD"] = history.currentDir
+		return nil
+	case "marker":
+		label := strings.TrimSpace(step.Marker)
+		if label == "" {
+			return nil
+		}
+		if err := session.WriteOutput(directive.MarkerLine(label)); err != nil {
+			return err
+		}
 		return nil
 	case "sleep":
 		if err := emitSleepDirective(session, step.SleepSeconds); err != nil {
@@ -624,6 +622,8 @@ func stepCommandForLog(step RecordStep) string {
 		return strings.TrimSpace(step.Write)
 	case "cd":
 		return strings.TrimSpace(step.CD)
+	case "marker":
+		return strings.TrimSpace(step.Marker)
 	default:
 		return ""
 	}
@@ -1190,6 +1190,7 @@ func (w *recordFileVisibleWriter) writeLineLocked(line string) error {
 		line = string(rewriteVirtualPath([]byte(line), w.actual, w.virtual))
 	}
 	line, _ = directive.StripSleepDirectives(line)
+	line, _ = directive.StripMarkerDirectives(line)
 	normalized := strings.TrimRight(stripANSICodes(line), "\r\n")
 	if shouldHideRecordFileLine(normalized) {
 		return nil
@@ -1407,6 +1408,10 @@ func shouldHideRecordFileLineForSanitize(trimmed string) bool {
 		// Keep sleep directives in the sanitized stream so cast timing can honor them.
 		return false
 	}
+	if _, ok := directive.ParseMarkerLine(leftTrimmed); ok {
+		// Keep marker directives in the sanitized stream so cast marker events can be emitted.
+		return false
+	}
 	return shouldHideRecordFileLine(trimmed)
 }
 
@@ -1416,6 +1421,7 @@ func visibleRecordOutputChunk(text string) string {
 	for _, line := range lines {
 		clean := stripANSICodes(line)
 		clean, _ = directive.StripSleepDirectives(clean)
+		clean, _ = directive.StripMarkerDirectives(clean)
 		trimmed := strings.TrimRight(clean, "\r\n")
 		leftTrimmed := strings.TrimLeft(trimmed, " \t\r")
 		if trimmed == "" {
@@ -1481,6 +1487,9 @@ func shouldHideRecordFileLine(trimmed string) bool {
 	trimmed = stripANSICodes(trimmed)
 	leftTrimmed := strings.TrimLeft(trimmed, " \t\r")
 	promptTrimmed := strings.TrimSpace(leftTrimmed)
+	if directive.IsMarkerDirectiveOnlyLine(leftTrimmed) {
+		return false
+	}
 	if directive.IsSleepDirectiveOnlyLine(leftTrimmed) {
 		return true
 	}

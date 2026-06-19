@@ -97,14 +97,43 @@ func TestRecordCommandContainsFileSubcommand(t *testing.T) {
 }
 
 func TestRecordOutputDirHelpers(t *testing.T) {
-	wantRecordDir := filepath.ToSlash(filepath.Join("docs", "asciinema", recordSpecDirName()))
-	baseDir := filepath.ToSlash(filepath.Join("docs", "asciinema"))
-	assert.Equal(t, "docs/asciinema/help", recordHelpOutputDir("docs/asciinema"))
-	assert.Equal(t, "docs/asciinema/help", recordHelpOutputDir("docs/asciinema/help"))
-	assert.Equal(t, wantRecordDir, recordFileOutputDir(baseDir))
-	assert.Equal(t, wantRecordDir, recordFileOutputDir(wantRecordDir))
-	assert.Equal(t, "docs/asciinema/tutorials/demo.cast", recordFileOutputPath("docs/asciinema/tutorials/demo.yaml", ""))
-	assert.Equal(t, "custom/path/out.cast", recordFileOutputPath("docs/asciinema/tutorials/demo.yaml", "custom/path/out.cast"))
+	assert.Equal(t, defaultRecordHelpOutputDir(), resolvedRecordHelpOutputDir(""))
+	assert.Equal(t, "docs/manual/commands", recordHelpOutputDir("docs/manual"))
+	assert.Equal(t, "docs/manual/commands", recordHelpOutputDir("docs/manual/commands"))
+	assert.Equal(t, "docs/manual", resolvedRecordFileOutputDir("", "docs/manual"))
+	assert.Equal(t, "custom/path/out", recordFileOutputDir("custom/path/out"))
+	assert.Equal(t, "docs/manual/tutorials/demo.cast", recordFileOutputPath("docs/manual/tutorials/demo.cast.yaml", ""))
+	assert.Equal(t, "docs/manual/tutorials/demo.cast", recordFileOutputPath("docs/manual/tutorials/demo.yaml", ""))
+	assert.Equal(t, "custom/path/out.cast", recordFileOutputPath("docs/manual/tutorials/demo.cast.yaml", "custom/path/out.cast"))
+}
+
+func TestRecordHelpCommandOutputPathResolver(t *testing.T) {
+	commandsDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(commandsDir, "local"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(commandsDir, "wrapped"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(commandsDir, "local", "template.md"), []byte("# hydra local template\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(commandsDir, "wrapped", "helm.md"), []byte("# hydra helm\n"), 0o644))
+
+	resolve := recordHelpCommandOutputPathResolver(commandsDir)
+
+	assert.Equal(t,
+		filepath.Join(commandsDir, "local", "template.cast"),
+		resolve(record.HelpCommand{Path: "local template", Slug: "local-template"}, commandsDir))
+	assert.Equal(t,
+		filepath.Join(commandsDir, "wrapped", "helm.cast"),
+		resolve(record.HelpCommand{Path: "helm", Slug: "helm"}, commandsDir))
+	assert.Equal(t,
+		filepath.Join(commandsDir, "local", "apps.cast"),
+		resolve(record.HelpCommand{Path: "local apps", Slug: "local-apps"}, commandsDir))
+	assert.Equal(t,
+		filepath.Join(commandsDir, "unknown.cast"),
+		resolve(record.HelpCommand{Path: "unknown", Slug: "unknown"}, commandsDir))
+}
+
+func TestRecordHelpCommandRelativeCastPath(t *testing.T) {
+	assert.Equal(t, "local/apps.cast", filepath.ToSlash(recordHelpCommandRelativeCastPath(record.HelpCommand{Path: "local apps", Slug: "local-apps"})))
+	assert.Equal(t, "gitops/review/app.cast", filepath.ToSlash(recordHelpCommandRelativeCastPath(record.HelpCommand{Path: "gitops review app", Slug: "gitops-review-app"})))
+	assert.Equal(t, "version.cast", filepath.ToSlash(recordHelpCommandRelativeCastPath(record.HelpCommand{Path: "version", Slug: "version"})))
 }
 
 func TestRunRecordFiles_RejectsOutputWithMultipleFiles(t *testing.T) {

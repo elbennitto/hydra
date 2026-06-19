@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"hydra-gitops.org/hydra/hydra-go/base/log"
@@ -17,6 +18,9 @@ type HelpRecordOptions struct {
 	HydraBin        string
 	HydraGlobalArgs []string
 	OutputDir       string
+	// OutputPath optionally resolves the destination cast path for a command.
+	// When nil, casts are written to <OutputDir>/<slug>.cast.
+	OutputPath func(cmd HelpCommand, outputDir string) string
 	// MirrorOutput writes each cast's captured terminal output to stdout while recording.
 	MirrorOutput bool
 }
@@ -57,6 +61,14 @@ func RecordAllHelp(opts HelpRecordOptions) error {
 
 	for i, cmd := range commands {
 		outPath := filepath.Join(opts.OutputDir, cmd.Slug+".cast")
+		if opts.OutputPath != nil {
+			if resolved := strings.TrimSpace(opts.OutputPath(cmd, opts.OutputDir)); resolved != "" {
+				outPath = resolved
+			}
+		}
+		if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
+			return fmt.Errorf("create cast output directory: %w", err)
+		}
 		display := expect.HydraDisplayCommand(cmd.Path, "--help")
 		if task != nil {
 			task.SetDetail(display)
@@ -73,7 +85,7 @@ func RecordAllHelp(opts HelpRecordOptions) error {
 			OutputPath:      outPath,
 			MirrorOutput:    opts.MirrorOutput,
 		}); err != nil {
-			return fmt.Errorf("record help for %q: %w", cmd.Path, err)
+			return fmt.Errorf("record cli help for %q: %w", cmd.Path, err)
 		}
 		if bar != nil {
 			bar.Advance(i+1, total)

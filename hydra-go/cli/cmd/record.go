@@ -2,8 +2,10 @@ package cmd
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -26,38 +28,20 @@ Subcommands discover Hydra commands automatically and capture their
 help output in a pseudo-terminal.`,
 	}
 
-	cmd.AddCommand(newRecordHelpCommand(root))
+	cmd.AddCommand(newRecordCLICommand(root))
 	cmd.AddCommand(newRecordFileCommand(root))
-	cmd.AddCommand(newRecordAllCommand(root))
 	return cmd
 }
 
-func newRecordAllCommand(root *cobra.Command) *cobra.Command {
+func newRecordCLICommand(root *cobra.Command) *cobra.Command {
 	var opts recordCLIParams
 
 	cmd := &cobra.Command{
-		Use:   "all",
-		Short: "Record all documentation casts",
-		Long: `Record all documentation casts.
-
-This records both Hydra CLI help casts and record-file casts.`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return runRecordAll(root, opts)
-		},
-	}
-
-	addRecordCommonFlags(cmd, &opts)
-	return cmd
-}
-
-func newRecordHelpCommand(root *cobra.Command) *cobra.Command {
-	var opts recordCLIParams
-
-	cmd := &cobra.Command{
-		Use:   "help",
-		Short: "Record help output for all Hydra CLI commands",
+		Use:   "cli",
+		Short: "Record CLI help output for all Hydra commands",
 		Long: `Discover all Hydra CLI commands and record "hydra <command> --help"
-for each one as an asciicast under hydra/docs/asciinema/help/.
+for each one as an asciicast next to the corresponding markdown page under
+hydra/docs/manual/commands/.
 
 	Each recording starts with a generic "$ " shell prompt. Captured terminal output is
 	not written to stdout by default; use --mirror to enable.`,
@@ -79,7 +63,7 @@ func newRecordFileCommand(root *cobra.Command) *cobra.Command {
 		Long: `Load one or more record YAML files and record them as asciicasts.
 
 The record file is executed in a fresh temporary directory. Any real temp path in
-the terminal output is rewritten to the record's virtual path ("/<record-slug>").`,
+the terminal output is rewritten to the record's virtual path ("/home/hydra").`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runRecordFiles(args, opts)
@@ -101,7 +85,7 @@ type recordCLIParams struct {
 }
 
 func addRecordCommonFlags(cmd *cobra.Command, opts *recordCLIParams) {
-	cmd.Flags().StringVar(&opts.outputDir, "output-dir", defaultRecordHelpOutputDir(),
+	cmd.Flags().StringVar(&opts.outputDir, "output-dir", "",
 		"Directory for .cast files")
 	cmd.Flags().StringVar(&opts.specDir, "spec-dir", defaultRecordSpecDir(),
 		"Directory containing record YAML specs")
@@ -112,31 +96,31 @@ func addRecordCommonFlags(cmd *cobra.Command, opts *recordCLIParams) {
 }
 
 func defaultRecordHelpOutputDir() string {
-	if _, err := os.Stat("hydra/docs/asciinema"); err == nil {
-		return "hydra/docs/asciinema"
+	if _, err := os.Stat("hydra/docs/manual"); err == nil {
+		return "hydra/docs/manual/commands"
 	}
-	if _, err := os.Stat("docs/asciinema"); err == nil {
-		return "docs/asciinema"
+	if _, err := os.Stat("docs/manual"); err == nil {
+		return "docs/manual/commands"
 	}
 	if _, err := os.Stat("hydra/docs"); err == nil {
-		return "hydra/docs/asciinema/help"
+		return "hydra/docs/manual/commands"
 	}
 	if _, err := os.Stat("docs"); err == nil {
-		return "docs/asciinema/help"
+		return "docs/manual/commands"
 	}
-	return "hydra/docs/asciinema/help"
+	return "hydra/docs/manual/commands"
 }
 
 func defaultRecordSpecDir() string {
-	hydraDir := filepath.ToSlash(filepath.Join("hydra", "docs", "asciinema", recordSpecDirName()))
-	if _, err := os.Stat(hydraDir); err == nil {
-		return hydraDir
+	helpDir := filepath.ToSlash(defaultRecordHelpOutputDir())
+	switch {
+	case strings.HasPrefix(helpDir, "hydra/docs/manual"):
+		return "hydra/docs/manual"
+	case strings.HasPrefix(helpDir, "docs/manual"):
+		return "docs/manual"
+	default:
+		return "docs/manual"
 	}
-	docsDir := filepath.ToSlash(filepath.Join("docs", "asciinema", recordSpecDirName()))
-	if _, err := os.Stat(docsDir); err == nil {
-		return docsDir
-	}
-	return hydraDir
 }
 
 func defaultHydraBin() string {
@@ -147,11 +131,13 @@ func defaultHydraBin() string {
 }
 
 func runRecordHelp(root *cobra.Command, opts recordCLIParams) error {
+	outputDir := resolvedRecordHelpOutputDir(opts.outputDir)
 	return record.RecordAllHelp(record.HelpRecordOptions{
 		Root:            root,
 		HydraBin:        opts.hydraBin,
 		HydraGlobalArgs: recordingHydraGlobalArgsFromEnv(os.LookupEnv),
-		OutputDir:       recordHelpOutputDir(opts.outputDir),
+		OutputDir:       outputDir,
+		OutputPath:      recordHelpCommandOutputPathResolver(outputDir),
 		MirrorOutput:    opts.mirrorOutput,
 	})
 }
@@ -193,30 +179,12 @@ func runSingleRecordFile(file string, opts recordCLIParams) error {
 	return nil
 }
 
-func runRecordAll(root *cobra.Command, opts recordCLIParams) error {
-	l := log.Default()
-	l.Info(logIdRecordCmd, "recording started",
-		log.String("mode", "all"),
-		log.String("outputDir", opts.outputDir),
-		log.String("hydraBin", opts.hydraBin))
-	if err := runRecordHelp(root, opts); err != nil {
-		return err
-	}
-	if err := recordcli.RecordAll(recordFileOptions(opts)); err != nil {
-		return err
-	}
-	l.Info(logIdRecordCmd, "recording finished",
-		log.String("mode", "all"),
-		log.String("outputDir", opts.outputDir))
-	return nil
-}
-
 func recordFileOptions(opts recordCLIParams) recordcli.RecordOptions {
 	return recordcli.RecordOptions{
 		HydraBin:        opts.hydraBin,
 		HydraGlobalArgs: recordingHydraGlobalArgsFromEnv(os.LookupEnv),
 		SpecDir:         opts.specDir,
-		OutputDir:       recordFileOutputDir(opts.outputDir),
+		OutputDir:       resolvedRecordFileOutputDir(opts.outputDir, opts.specDir),
 		MirrorOutput:    opts.mirrorOutput,
 	}
 }
@@ -228,19 +196,78 @@ func recordOneFileOptions(file string, opts recordCLIParams) recordcli.RecordOpt
 }
 
 func recordHelpOutputDir(base string) string {
-	if strings.HasSuffix(base, "/help") || strings.HasSuffix(base, `\help`) {
+	if strings.HasSuffix(base, "/commands") || strings.HasSuffix(base, `\commands`) {
 		return base
 	}
-	return filepath.Join(base, "help")
+	return filepath.Join(base, "commands")
+}
+
+func resolvedRecordHelpOutputDir(base string) string {
+	if strings.TrimSpace(base) == "" {
+		return defaultRecordHelpOutputDir()
+	}
+	return recordHelpOutputDir(base)
+}
+
+var recordHelpCommandHeaderPattern = regexp.MustCompile(`(?m)^#\s+hydra\s+(.+?)\s*$`)
+
+func recordHelpCommandOutputPathResolver(commandsDir string) func(record.HelpCommand, string) string {
+	byCommand := discoverRecordHelpCommandCastPaths(commandsDir)
+	return func(cmd record.HelpCommand, outputDir string) string {
+		if castPath, ok := byCommand[cmd.Path]; ok {
+			return castPath
+		}
+		rel := recordHelpCommandRelativeCastPath(cmd)
+		return filepath.Join(outputDir, rel)
+	}
+}
+
+func recordHelpCommandRelativeCastPath(cmd record.HelpCommand) string {
+	parts := strings.Fields(strings.TrimSpace(cmd.Path))
+	if len(parts) == 0 {
+		return cmd.Slug + ".cast"
+	}
+	if len(parts) == 1 {
+		return parts[0] + ".cast"
+	}
+	dir := filepath.Join(parts[:len(parts)-1]...)
+	return filepath.Join(dir, parts[len(parts)-1]+".cast")
+}
+
+func discoverRecordHelpCommandCastPaths(commandsDir string) map[string]string {
+	out := map[string]string{}
+	root := filepath.Clean(commandsDir)
+	_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d == nil || d.IsDir() || filepath.Ext(d.Name()) != ".md" {
+			return nil
+		}
+		markdown, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return nil
+		}
+		match := recordHelpCommandHeaderPattern.FindSubmatch(markdown)
+		if len(match) < 2 {
+			return nil
+		}
+		commandPath := strings.Join(strings.Fields(strings.TrimSpace(string(match[1]))), " ")
+		if commandPath == "" {
+			return nil
+		}
+		out[commandPath] = strings.TrimSuffix(path, filepath.Ext(path)) + ".cast"
+		return nil
+	})
+	return out
 }
 
 func recordFileOutputDir(base string) string {
-	slashSuffix := "/" + recordSpecDirName()
-	backslashSuffix := `\` + recordSpecDirName()
-	if strings.HasSuffix(base, slashSuffix) || strings.HasSuffix(base, backslashSuffix) {
-		return base
+	return base
+}
+
+func resolvedRecordFileOutputDir(base, specDir string) string {
+	if strings.TrimSpace(base) == "" {
+		return specDir
 	}
-	return filepath.Join(base, recordSpecDirName())
+	return recordFileOutputDir(base)
 }
 
 func recordFileOutputPath(file, output string) string {
@@ -250,15 +277,22 @@ func recordFileOutputPath(file, output string) string {
 	}
 
 	cleanFile := filepath.Clean(file)
-	ext := filepath.Ext(cleanFile)
-	if ext == "" {
-		return cleanFile + ".cast"
-	}
-	return strings.TrimSuffix(cleanFile, ext) + ".cast"
+	return trimRecordSpecOutputBase(cleanFile) + ".cast"
 }
 
-func recordSpecDirName() string {
-	return "tuto" + "rials"
+func trimRecordSpecOutputBase(path string) string {
+	switch {
+	case strings.HasSuffix(path, ".cast.yaml"):
+		return strings.TrimSuffix(path, ".cast.yaml")
+	case strings.HasSuffix(path, ".cast.yml"):
+		return strings.TrimSuffix(path, ".cast.yml")
+	default:
+		ext := filepath.Ext(path)
+		if ext == "" {
+			return path
+		}
+		return strings.TrimSuffix(path, ext)
+	}
 }
 
 func recordingHydraGlobalArgsFromEnv(lookupEnv func(string) (string, bool)) []string {

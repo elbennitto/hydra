@@ -11,7 +11,7 @@ const defaultLineDelaySeconds = 0.01
 
 // HelpCastDocumentationCommand builds the header command field for help recordings.
 func HelpCastDocumentationCommand(recordedHydraCommand string) string {
-	return "hydra record help -- " + recordedHydraCommand
+	return "hydra record cli -- " + recordedHydraCommand
 }
 
 type castEvent struct {
@@ -30,13 +30,21 @@ func linesToEvents(lines []string, kind string) []castEvent {
 	}
 	for _, line := range lines {
 		lineHasEnding := strings.HasSuffix(line, "\n") || strings.HasSuffix(line, "\r")
-		segments, trailingDelay := splitLineBySleepDirectives(line)
+		segments, trailingDelay, trailingMarkers := splitLineByDirectives(line)
 		for _, segment := range segments {
 			if segment.delayBefore != nil {
 				pendingTime = segment.delayBefore
 			}
+			for _, markerLabel := range segment.markersBefore {
+				t := 0.0
+				if pendingTime != nil {
+					t = *pendingTime
+					pendingTime = nil
+				}
+				out = append(out, castEvent{time: t, kind: "m", data: markerLabel})
+			}
 			if segment.text == "" {
-				if segment.delayBefore == nil && !(trailingDelay != nil && !lineHasEnding) {
+				if segment.delayBefore == nil && len(segment.markersBefore) == 0 && !(trailingDelay != nil && !lineHasEnding) {
 					t := defaultLineDelaySeconds
 					if pendingTime != nil {
 						t = *pendingTime
@@ -63,6 +71,14 @@ func linesToEvents(lines []string, kind string) []castEvent {
 		if trailingDelay != nil {
 			pendingTime = trailingDelay
 		}
+		for _, markerLabel := range trailingMarkers {
+			t := 0.0
+			if pendingTime != nil {
+				t = *pendingTime
+				pendingTime = nil
+			}
+			out = append(out, castEvent{time: t, kind: "m", data: markerLabel})
+		}
 	}
 	if pendingTime != nil && !lastLineHasEnding {
 		// Preserve a trailing sleep directive when the stream ends mid-line.
@@ -72,43 +88,68 @@ func linesToEvents(lines []string, kind string) []castEvent {
 }
 
 type sleepSplitSegment struct {
-	text        string
-	delayBefore *float64
+	text          string
+	delayBefore   *float64
+	markersBefore []string
 }
 
-func splitLineBySleepDirectives(line string) ([]sleepSplitSegment, *float64) {
+func splitLineByDirectives(line string) ([]sleepSplitSegment, *float64, []string) {
 	segments := make([]sleepSplitSegment, 0, 2)
 	remaining := line
 	var nextDelay *float64
+	nextMarkers := make([]string, 0, 1)
 
 	for {
-		start, end, secs, ok := directive.FindSleepDirective(remaining)
-		if !ok {
+		sleepStart, sleepEnd, sleepSecs, hasSleep := directive.FindSleepDirective(remaining)
+		markerStart, markerEnd, markerLabel, hasMarker := directive.FindMarkerDirective(remaining)
+
+		if !hasSleep && !hasMarker {
 			if remaining != "" {
-				segments = append(segments, sleepSplitSegment{text: remaining, delayBefore: nextDelay})
+				markers := append([]string(nil), nextMarkers...)
+				segments = append(segments, sleepSplitSegment{text: remaining, delayBefore: nextDelay, markersBefore: markers})
 				nextDelay = nil
+				nextMarkers = nextMarkers[:0]
 			} else if len(segments) == 0 {
 				// Keep legacy behavior: directive-only lines emit a placeholder event
 				// with default timing, while the directive delay applies to the next output.
-				segments = append(segments, sleepSplitSegment{text: "", delayBefore: nil})
+				if nextDelay != nil && len(nextMarkers) == 0 {
+					segments = append(segments, sleepSplitSegment{text: "", delayBefore: nil})
+				}
 			}
 			break
 		}
 
-		before := remaining[:start]
-		afterDirective := remaining[end:]
-
-		if before != "" || nextDelay != nil {
-			segments = append(segments, sleepSplitSegment{text: before, delayBefore: nextDelay})
-			nextDelay = nil
+		start := 0
+		end := 0
+		isSleep := false
+		if hasSleep && (!hasMarker || sleepStart <= markerStart) {
+			start = sleepStart
+			end = sleepEnd
+			isSleep = true
+		} else {
+			start = markerStart
+			end = markerEnd
 		}
 
-		d := secs
-		nextDelay = &d
+		before := remaining[:start]
+		afterDirective := remaining[end:]
+		if before != "" || nextDelay != nil || len(nextMarkers) > 0 {
+			markers := append([]string(nil), nextMarkers...)
+			segments = append(segments, sleepSplitSegment{text: before, delayBefore: nextDelay, markersBefore: markers})
+			nextDelay = nil
+			nextMarkers = nextMarkers[:0]
+		}
+
+		if isSleep {
+			d := sleepSecs
+			nextDelay = &d
+		} else {
+			nextMarkers = append(nextMarkers, markerLabel)
+		}
 		remaining = afterDirective
 	}
 
-	return segments, nextDelay
+	return segments, nextDelay, append([]string(nil), nextMarkers...)
 }
 
 func isOnlyLineEnding(s string) bool {
