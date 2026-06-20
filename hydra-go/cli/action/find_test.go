@@ -141,6 +141,7 @@ func writeFindTestContextEx(t *testing.T, deltaSharedKafkaName string) string {
 
 	writeFindTestFile(t, filepath.Join(contextDir, "values.yaml"), `global:
   hydra:
+    type: context
     path: test-context
     kubernetesVersion: "1.29.0"
 `)
@@ -224,7 +225,7 @@ metadata:
 
 func writeClusterValues(t *testing.T, contextDir string, clusterName string) {
 	t.Helper()
-	writeFindTestFile(t, filepath.Join(contextDir, clusterName, "values.yaml"), "{}\n")
+	writeFindTestFile(t, filepath.Join(contextDir, clusterName, "values.yaml"), "global:\n  hydra:\n    type: cluster\n")
 }
 
 func writeRootApp(t *testing.T, contextDir string, repoDir string, clusterName string, rootAppName string, childNamespaces map[string]string) {
@@ -246,6 +247,7 @@ func writeRootApp(t *testing.T, contextDir string, repoDir string, clusterName s
 			valuesYaml += "      namespace: " + namespace + "\n"
 		}
 	}
+	valuesYaml += "global:\n  hydra:\n    type: root-app\n"
 	writeFindTestFile(t, filepath.Join(rootAppDir, "values.yaml"), valuesYaml)
 }
 

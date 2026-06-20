@@ -2,6 +2,7 @@ package action
 
 import (
 	"bytes"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -164,6 +165,18 @@ func TestClusterShowRecognitionNotes_UsesResourceModelReasonsForPresetApps(t *te
 func TestClusterShowReasonEntryFromAssignmentReason_UsesEventRouteAndRawParserFields(t *testing.T) {
 	t.Parallel()
 
+	valuesPath := filepath.Join(t.TempDir(), "values.yaml")
+	require.NoError(t, os.WriteFile(valuesPath, []byte(`global:
+  hydra:
+    refs:
+      image-pull-secret-mirror:
+        tag:
+          - uninstall-safe
+        ref-parsers:
+          - gvk: v1/Secret
+            name: image-pull-secret
+`), 0o644))
+
 	cache := &clusterShowRefOwnershipSourceCache{decodedByPath: map[string]any{}}
 	reason := commands.AssignmentReason{
 		Kind:          commands.AssignmentReasonKindAssignedViaRefOwnership,
@@ -174,10 +187,7 @@ func TestClusterShowReasonEntryFromAssignmentReason_UsesEventRouteAndRawParserFi
 			Source: &types.RefOwnershipRuleSource{
 				Kind:      types.RefOwnershipRuleSourceKindHydraRefParser,
 				BlockPath: "global.hydra.refs.image-pull-secret-mirror.ref-parsers[0]",
-				Sources: []string{filepath.Join(
-					"..", "..", "..", "..",
-					"charts-repository", "apps", "cluster-infra", "kyverno", "dev", "values.yaml",
-				)},
+				Sources:   []string{valuesPath},
 			},
 		},
 	}

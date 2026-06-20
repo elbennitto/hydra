@@ -77,6 +77,7 @@ func writeTemplateConfigMapGoldenContext(t *testing.T) string {
 
 	writeFindTestFile(t, filepath.Join(contextDir, "values.yaml"), `global:
   hydra:
+    type: context
     path: test-context
     kubernetesVersion: "1.29.0"
 `)

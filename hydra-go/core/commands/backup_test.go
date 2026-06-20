@@ -1384,7 +1384,25 @@ func writeEncryptedBackupSelectionFile(t *testing.T, path, namespace, name strin
 	sopsSecretYaml, err := convertSecretToSopsSecretYaml(secret)
 	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0755))
-	require.NoError(t, hydrasops.EncryptSopsFile(sopsSecretYaml, path))
+	configPath := writeBackupTestSopsConfig(t)
+	overridePath := filepath.Join(t.TempDir(), "test-backup.sops.yaml")
+	encrypted, err := hydrasops.EncryptSopsYamlWithConfig(sopsSecretYaml, overridePath, configPath)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(path, []byte(encrypted), 0644))
+}
+
+func writeBackupTestSopsConfig(t *testing.T) string {
+	t.Helper()
+
+	path := filepath.Join(t.TempDir(), ".sops.yaml")
+	writeBackupSelectionTestFile(t, path, `creation_rules:
+  - path_regex: .*\.sops\.yaml$
+    age: >-
+      ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMvrL1CJG09aLg6F4A2+TXINIKZRVHr8KUVoHDy0FWXB Dennis Rieks <dennis.rieks@rohde-schwarz.com>,
+      age1xqq5gh0k7gcv5cgdu85m4nc0yft4dp9wu62dd4rcfzmwknrc0u9sc3s3cw,
+      age1gytlmwd26fgj3ddrgl3z0lrufk549f7sc7lzajalxksdqtceqvdqevhf83
+`)
+	return path
 }
 
 func writeBackupSelectionChart(t *testing.T, dir, name string) {
@@ -1462,6 +1480,9 @@ app-b:
             - backup
           ref-parsers:
             - predicate: 'id == "v1/Secret/shared-ns/app-b-secret"'
+global:
+  hydra:
+    type: root-app
 `)
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "templates"), 0755))
 }
@@ -1470,6 +1491,8 @@ func buildBackupSelectionTestCluster(t *testing.T) (*hydra.Cluster, types.AppId,
 	t.Helper()
 
 	contextDir := filepath.Join(t.TempDir(), "gitops")
+	writeBackupSelectionTestFile(t, filepath.Join(contextDir, "values.yaml"), "global:\n  hydra:\n    type: context\n")
+	writeBackupSelectionTestFile(t, filepath.Join(contextDir, "in-cluster", "values.yaml"), "global:\n  hydra:\n    type: cluster\n")
 	writeBackupSelectionRootApp(t, filepath.Join(contextDir, "in-cluster", "argocd"))
 	writeBackupSelectionWrapperChart(t, filepath.Join(contextDir, "in-cluster", "root"), "root")
 	writeBackupSelectionWrapperChart(t, filepath.Join(contextDir, "in-cluster", "app-a"), "app-a")

@@ -371,6 +371,7 @@ func writeReviewRefsTestContext(t *testing.T) string {
 
 	writeFindTestFile(t, filepath.Join(contextDir, "values.yaml"), `global:
   hydra:
+    type: context
     path: test-context
     kubernetesVersion: "1.29.0"
 `)
@@ -465,6 +466,7 @@ func writeReviewRefsRootAppPlatform(
 		b.WriteString(spec.Namespace)
 		b.WriteString("\n")
 	}
+	b.WriteString("global:\n  hydra:\n    type: root-app\n")
 	writeFindTestFile(t, filepath.Join(rootAppDir, "values.yaml"), b.String())
 }
 
@@ -482,6 +484,7 @@ func writeReviewRefsTestContextWithDisabledGhostApp(t *testing.T) string {
 
 	writeFindTestFile(t, filepath.Join(contextDir, "values.yaml"), `global:
   hydra:
+    type: context
     path: test-context
     kubernetesVersion: "1.29.0"
 `)
