@@ -170,6 +170,19 @@ func TestNamespacePredicateOnItemLevelEntity(t *testing.T) {
 	assert.False(t, result2)
 }
 
+func TestApiVersionPredicateMatchesCoreV1Entity(t *testing.T) {
+	env, err := NewEnv()
+	require.NoError(t, err)
+
+	predicate, err := env.CompilePredicate(`apiVersion == "v1"`)
+	require.NoError(t, err)
+
+	e := makeTestEntity("", "v1", "ConfigMap", "default", "demo")
+	result, err := predicate.EvalBool(e, types.MissingKeysReject)
+	require.NoError(t, err)
+	assert.True(t, result)
+}
+
 func TestLabelsOnClusterEntityWithNoLabels(t *testing.T) {
 	env, err := NewEnv()
 	require.NoError(t, err)

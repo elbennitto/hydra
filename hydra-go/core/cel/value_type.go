@@ -151,7 +151,7 @@ func (readerUnstructured) Type() *ctypes.Type {
 
 func readers() map[types.EntityKey]reader {
 	result := map[types.EntityKey]reader{
-		types.KeyApiVersion:   newReaderString(types.KeyApiVersion, false, entity.Entity.GVKString),
+		types.KeyApiVersion:   newReaderString(types.KeyApiVersion, false, entity.Entity.ApiVersionString),
 		types.KeyAppIds:       newReaderSlice(types.KeyAppIds, false, entity.Entity.AppIds),
 		types.KeyAppNamespace: newReaderString(types.KeyAppNamespace, false, entity.Entity.AppNamespace),
 		types.KeyGroup:        newReaderString(types.KeyGroup, false, entity.Entity.Group),
