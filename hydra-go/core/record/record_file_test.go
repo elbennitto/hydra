@@ -63,6 +63,19 @@ func TestLoadRecordSpec_MarkerStep(t *testing.T) {
 	assert.Equal(t, "Create Chart.yaml", spec.Steps[0].Marker)
 }
 
+func TestLoadRecordSpec_ExportToDirectoryStep(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "demo.yaml")
+	yaml := "steps:\n" +
+		"  - export-to-directory: docs/tutorials/introduction/demo\n"
+	require.NoError(t, os.WriteFile(path, []byte(yaml), 0o644))
+
+	spec, err := Load(path)
+	require.NoError(t, err)
+	require.Len(t, spec.Steps, 1)
+	assert.Equal(t, "export-to-directory", spec.Steps[0].Kind)
+	assert.Equal(t, "docs/tutorials/introduction/demo", spec.Steps[0].ExportToDirectory)
+}
+
 func TestLoadRecordSpec_EnvRequiresListSyntax(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "demo.yaml")
 	yaml := "steps:\n" +
@@ -253,6 +266,101 @@ func TestRecordFile_RunHereDoc(t *testing.T) {
 	castBytes, err := os.ReadFile(castPath)
 	require.NoError(t, err)
 	assert.Contains(t, string(castBytes), "hello")
+}
+
+func TestRecordFile_ExportToDirectory_ReplacesDirectoryWithVirtualHome(t *testing.T) {
+	specDir := t.TempDir()
+	outDir := t.TempDir()
+	exportRoot := t.TempDir()
+	specPath := filepath.Join(specDir, "demo.yaml")
+	exportTarget := filepath.Join(exportRoot, "tutorial")
+
+	require.NoError(t, os.MkdirAll(exportTarget, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(exportTarget, "stale.txt"), []byte("stale"), 0o644))
+
+	yaml := "steps:\n" +
+		"  - run: mkdir -p \"$HOME/group/context/cluster/app\"\n" +
+		"  - run: |\n" +
+		"      cat > \"$HOME/group/context/cluster/app/Chart.yaml\" <<EOF\n" +
+		"      apiVersion: v2\n" +
+		"      name: app\n" +
+		"      version: 0.1.0\n" +
+		"      EOF\n" +
+		"  - export-to-directory: " + exportTarget + "\n"
+	require.NoError(t, os.WriteFile(specPath, []byte(yaml), 0o644))
+
+	err := RecordOne(specPath, RecordOptions{SpecDir: specDir, OutputDir: outDir})
+	require.NoError(t, err)
+
+	_, err = os.Stat(filepath.Join(exportTarget, "stale.txt"))
+	assert.True(t, os.IsNotExist(err))
+
+	data, err := os.ReadFile(filepath.Join(exportTarget, "group", "context", "cluster", "app", "Chart.yaml"))
+	require.NoError(t, err)
+	assert.Contains(t, string(data), "apiVersion: v2")
+	assert.Contains(t, string(data), "name: app")
+}
+
+func TestRecordFile_ExportToDirectory_CreatesGitkeepForEmptyVirtualHome(t *testing.T) {
+	specDir := t.TempDir()
+	outDir := t.TempDir()
+	exportRoot := t.TempDir()
+	specPath := filepath.Join(specDir, "demo.yaml")
+	exportTarget := filepath.Join(exportRoot, "tutorial")
+
+	yaml := "steps:\n" +
+		"  - export-to-directory: " + exportTarget + "\n"
+	require.NoError(t, os.WriteFile(specPath, []byte(yaml), 0o644))
+
+	err := RecordOne(specPath, RecordOptions{SpecDir: specDir, OutputDir: outDir})
+	require.NoError(t, err)
+
+	_, err = os.Stat(filepath.Join(exportTarget, ".gitkeep"))
+	require.NoError(t, err)
+}
+
+func TestRecordFile_ExportToDirectory_CreatesGitkeepForEmptyNestedDirectories(t *testing.T) {
+	specDir := t.TempDir()
+	outDir := t.TempDir()
+	exportRoot := t.TempDir()
+	specPath := filepath.Join(specDir, "demo.yaml")
+	exportTarget := filepath.Join(exportRoot, "tutorial")
+
+	yaml := "steps:\n" +
+		"  - run: mkdir -p \"$HOME/group/context\"\n" +
+		"  - export-to-directory: " + exportTarget + "\n"
+	require.NoError(t, os.WriteFile(specPath, []byte(yaml), 0o644))
+
+	err := RecordOne(specPath, RecordOptions{SpecDir: specDir, OutputDir: outDir})
+	require.NoError(t, err)
+
+	_, err = os.Stat(filepath.Join(exportTarget, "group", "context", ".gitkeep"))
+	require.NoError(t, err)
+}
+
+func TestRecordFile_ExportToDirectory_SkipsChartArchives(t *testing.T) {
+	specDir := t.TempDir()
+	outDir := t.TempDir()
+	exportRoot := t.TempDir()
+	specPath := filepath.Join(specDir, "demo.yaml")
+	exportTarget := filepath.Join(exportRoot, "tutorial")
+
+	yaml := "steps:\n" +
+		"  - run: mkdir -p \"$HOME/group/context/cluster/app/charts\"\n" +
+		"  - run: printf 'archive' > \"$HOME/group/context/cluster/app/charts/demo-1.0.0.tgz\"\n" +
+		"  - run: printf 'keep' > \"$HOME/group/context/cluster/app/charts/README.md\"\n" +
+		"  - export-to-directory: " + exportTarget + "\n"
+	require.NoError(t, os.WriteFile(specPath, []byte(yaml), 0o644))
+
+	err := RecordOne(specPath, RecordOptions{SpecDir: specDir, OutputDir: outDir})
+	require.NoError(t, err)
+
+	_, err = os.Stat(filepath.Join(exportTarget, "group", "context", "cluster", "app", "charts", "demo-1.0.0.tgz"))
+	assert.True(t, os.IsNotExist(err))
+
+	data, err := os.ReadFile(filepath.Join(exportTarget, "group", "context", "cluster", "app", "charts", "README.md"))
+	require.NoError(t, err)
+	assert.Equal(t, "keep", string(data))
 }
 
 func TestSanitizeRecordFileOutput_HidesPromptPrefixedInternalRunWrapper(t *testing.T) {

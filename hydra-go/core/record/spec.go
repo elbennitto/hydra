@@ -30,8 +30,8 @@ type RecordStep struct {
 	ExpectedExitCode *int
 
 	CD string
-
 	Marker string
+	ExportToDirectory string
 
 	Env []RecordEnvEntry
 
@@ -59,10 +59,10 @@ type RecordAssert struct {
 }
 
 type RecordSpec struct {
-	Path       string
+	Path        string
 	DisplayPath string
-	OutputBase string
-	File       RecordFile
+	OutputBase  string
+	File        RecordFile
 }
 
 type rawRecordFile struct {
@@ -237,6 +237,7 @@ func parseRecordStep(path string, index int, stepMap map[string]interface{}) (Re
 	_, hasAssert := stepMap["assert"]
 	_, hasEnv := stepMap["env"]
 	_, hasColor := stepMap["color"]
+	_, hasExportToDirectory := stepMap["export-to-directory"]
 
 	primary := 0
 	if hasType {
@@ -266,8 +267,11 @@ func parseRecordStep(path string, index int, stepMap map[string]interface{}) (Re
 	if hasColor {
 		primary++
 	}
+	if hasExportToDirectory {
+		primary++
+	}
 	if primary != 1 {
-		return RecordStep{}, fmt.Errorf("record spec %q: step %d must define exactly one primary field (type/sleep/write/run/cd/marker/assert/env/color)", path, index)
+		return RecordStep{}, fmt.Errorf("record spec %q: step %d must define exactly one primary field (type/sleep/write/run/cd/marker/assert/env/color/export-to-directory)", path, index)
 	}
 
 	if hasType {
@@ -386,6 +390,14 @@ func parseRecordStep(path string, index int, stepMap map[string]interface{}) (Re
 			return RecordStep{}, err
 		}
 		return RecordStep{Kind: "color", Color: &color}, nil
+	}
+
+	if hasExportToDirectory {
+		dir, ok := asString(stepMap["export-to-directory"])
+		if !ok || strings.TrimSpace(dir) == "" {
+			return RecordStep{}, fmt.Errorf("record spec %q: step %d export-to-directory requires non-empty string", path, index)
+		}
+		return RecordStep{Kind: "export-to-directory", ExportToDirectory: strings.TrimSpace(dir)}, nil
 	}
 
 	envEntries, err := parseEnvEntries(path, index, stepMap["env"])

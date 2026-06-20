@@ -68,6 +68,7 @@ type historyState struct {
 	record        string
 	rootDir       string
 	currentDir    string
+	workspaceDir  string
 }
 
 var logIdRecordFile = log.Hydra().Child("core").Child("record")
@@ -147,6 +148,11 @@ func executeRecordFileSpec(spec RecordSpec, opts RecordOptions) ([]byte, error) 
 	}
 	defer os.RemoveAll(tmpDir)
 
+	workspaceDir, err := os.Getwd()
+	if err != nil {
+		return nil, fmt.Errorf("resolve working directory: %w", err)
+	}
+
 	virtualPath := recordFileVirtualRoot
 
 	var mirror io.Writer
@@ -162,11 +168,12 @@ func executeRecordFileSpec(spec RecordSpec, opts RecordOptions) ([]byte, error) 
 	defer session.Close()
 
 	history := historyState{
-		env:         envMapFromEnviron(os.Environ()),
-		virtualPath: virtualPath,
-		record:      spec.DisplayPath,
-		rootDir:     tmpDir,
-		currentDir:  tmpDir,
+		env:          envMapFromEnviron(os.Environ()),
+		virtualPath:  virtualPath,
+		record:       spec.DisplayPath,
+		rootDir:      tmpDir,
+		currentDir:   tmpDir,
+		workspaceDir: workspaceDir,
 	}
 	history.env["PWD"] = tmpDir
 	history.env["HOME"] = tmpDir
@@ -405,9 +412,116 @@ func runStep(session *recordFileShell, recordSlug, virtualPath string, step Reco
 			return nil
 		}
 		return session.WriteOutput(value)
+	case "export-to-directory":
+		return exportVirtualHome(history.rootDir, history.workspaceDir, step.ExportToDirectory)
 	default:
 		return fmt.Errorf("unsupported step type %q", step.Kind)
 	}
+}
+
+func exportVirtualHome(sourceRoot, workspaceDir, target string) error {
+	if strings.TrimSpace(target) == "" {
+		return fmt.Errorf("export target is empty")
+	}
+	targetPath := target
+	if !filepath.IsAbs(targetPath) {
+		targetPath = filepath.Join(workspaceDir, filepath.FromSlash(target))
+	}
+	targetPath = filepath.Clean(targetPath)
+
+	if err := os.RemoveAll(targetPath); err != nil {
+		return fmt.Errorf("remove export target %q: %w", targetPath, err)
+	}
+	if err := os.MkdirAll(targetPath, 0o755); err != nil {
+		return fmt.Errorf("create export target %q: %w", targetPath, err)
+	}
+
+	entries, err := os.ReadDir(sourceRoot)
+	if err != nil {
+		return fmt.Errorf("read virtual home %q: %w", sourceRoot, err)
+	}
+	if len(entries) == 0 {
+		if err := os.WriteFile(filepath.Join(targetPath, ".gitkeep"), nil, 0o644); err != nil {
+			return fmt.Errorf("create export marker in %q: %w", targetPath, err)
+		}
+		return nil
+	}
+	for _, entry := range entries {
+		sourcePath := filepath.Join(sourceRoot, entry.Name())
+		targetEntryPath := filepath.Join(targetPath, entry.Name())
+		if err := copyRecordTree(sourcePath, targetEntryPath); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func copyRecordTree(sourcePath, targetPath string) error {
+	if shouldSkipExportPath(sourcePath) {
+		return nil
+	}
+
+	info, err := os.Lstat(sourcePath)
+	if err != nil {
+		return fmt.Errorf("stat export source %q: %w", sourcePath, err)
+	}
+
+	if info.Mode()&os.ModeSymlink != 0 {
+		linkTarget, err := os.Readlink(sourcePath)
+		if err != nil {
+			return fmt.Errorf("read export symlink %q: %w", sourcePath, err)
+		}
+		if err := os.Symlink(linkTarget, targetPath); err != nil {
+			return fmt.Errorf("create export symlink %q: %w", targetPath, err)
+		}
+		return nil
+	}
+
+	if info.IsDir() {
+		if err := os.MkdirAll(targetPath, info.Mode().Perm()); err != nil {
+			return fmt.Errorf("create export dir %q: %w", targetPath, err)
+		}
+		entries, err := os.ReadDir(sourcePath)
+		if err != nil {
+			return fmt.Errorf("read export dir %q: %w", sourcePath, err)
+		}
+		if len(entries) == 0 {
+			if err := os.WriteFile(filepath.Join(targetPath, ".gitkeep"), nil, 0o644); err != nil {
+				return fmt.Errorf("create export marker in %q: %w", targetPath, err)
+			}
+			return nil
+		}
+		for _, entry := range entries {
+			if err := copyRecordTree(filepath.Join(sourcePath, entry.Name()), filepath.Join(targetPath, entry.Name())); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	in, err := os.Open(sourcePath)
+	if err != nil {
+		return fmt.Errorf("open export source file %q: %w", sourcePath, err)
+	}
+	defer in.Close()
+
+	out, err := os.OpenFile(targetPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, info.Mode().Perm())
+	if err != nil {
+		return fmt.Errorf("create export target file %q: %w", targetPath, err)
+	}
+	defer out.Close()
+
+	if _, err := io.Copy(out, in); err != nil {
+		return fmt.Errorf("copy export file %q: %w", sourcePath, err)
+	}
+	return nil
+}
+
+func shouldSkipExportPath(path string) bool {
+	if filepath.Base(filepath.Dir(path)) != "charts" {
+		return false
+	}
+	return strings.HasSuffix(filepath.Base(path), ".tgz")
 }
 
 func runCommandCaptureOutput(session *recordFileShell, command string, expectedExitCode int, index int, parentShell bool) (string, string, map[string]string, error) {
@@ -624,6 +738,8 @@ func stepCommandForLog(step RecordStep) string {
 		return strings.TrimSpace(step.CD)
 	case "marker":
 		return strings.TrimSpace(step.Marker)
+	case "export-to-directory":
+		return strings.TrimSpace(step.ExportToDirectory)
 	default:
 		return ""
 	}
