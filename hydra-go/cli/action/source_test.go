@@ -6,12 +6,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"hydra-gitops.org/hydra/hydra-go/base/log"
 	"hydra-gitops.org/hydra/hydra-go/cli/flags"
 	"hydra-gitops.org/hydra/hydra-go/core/hydra"
 	"hydra-gitops.org/hydra/hydra-go/core/types"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestChartDirectoryForBetaContainsDeploymentTemplate(t *testing.T) {
@@ -85,4 +85,44 @@ func TestSourceIncludePathNoMatchUsesEmptyMessage(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, out, sourceNoTemplates)
 	assert.NotContains(t, strings.TrimSpace(out), "# Source: templates/deployment.yaml")
+}
+
+func TestSourceIncludeFiltersToMatchedManifestSources(t *testing.T) {
+	configureFindTestLogging()
+	contextDir := writeFindTestContext(t)
+
+	_, out, err := Source(SourceFlags{
+		HelmNetworkModeFlag: flags.HelmNetworkModeFlag{HelmNetworkMode: types.HelmNetworkModeLocal},
+		ContextFlag:         flags.ContextFlag{HydraContext: types.HydraContext(contextDir)},
+		PredicatesFlag: flags.PredicatesFlag{
+			Predicates: []types.CelPredicate{`name == "alpha-user-a"`},
+		},
+		AppId: "target.platform.alpha",
+	})
+	require.NoError(t, err)
+
+	assert.Contains(t, out, "# Source: templates/kafkauser-a.yaml")
+	assert.NotContains(t, out, "kafkauser-b.yaml")
+	assert.NotContains(t, out, "shared-user.yaml")
+}
+
+func TestSourcePredicateAndIncludePathIntersect(t *testing.T) {
+	configureFindTestLogging()
+	contextDir := writeFindTestContext(t)
+
+	_, out, err := Source(SourceFlags{
+		HelmNetworkModeFlag: flags.HelmNetworkModeFlag{HelmNetworkMode: types.HelmNetworkModeLocal},
+		ContextFlag:         flags.ContextFlag{HydraContext: types.HydraContext(contextDir)},
+		PredicatesFlag: flags.PredicatesFlag{
+			Predicates: []types.CelPredicate{`name == "alpha-user-a"`},
+		},
+		IncludePathFlag: flags.IncludePathFlag{
+			IncludePathPrefixes: []string{"templates/kafkauser-b.yaml"},
+		},
+		AppId: "target.platform.alpha",
+	})
+	require.NoError(t, err)
+
+	assert.Contains(t, out, sourceNoTemplates)
+	assert.NotContains(t, strings.TrimSpace(out), "# Source: templates/kafkauser-a.yaml")
 }

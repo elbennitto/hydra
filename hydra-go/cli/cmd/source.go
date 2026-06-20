@@ -5,12 +5,12 @@ import (
 
 	"hydra-gitops.org/hydra/hydra-go/base/log"
 
+	"github.com/spf13/cobra"
 	"hydra-gitops.org/hydra/hydra-go/cli/action"
 	"hydra-gitops.org/hydra/hydra-go/cli/flags"
 	"hydra-gitops.org/hydra/hydra-go/core/commands"
 	"hydra-gitops.org/hydra/hydra-go/core/hydra"
 	"hydra-gitops.org/hydra/hydra-go/core/types"
-	"github.com/spf13/cobra"
 )
 
 // NewSourceCommand creates the hydra local source subcommand.
@@ -25,6 +25,7 @@ func registerLocalSourceFlags(cmd *cobra.Command, f *action.SourceFlags) error {
 		defineNetworkModeFlag,
 		defineExcludeAppFlag,
 		defineNoCacheFlag,
+		definePredicateFlags,
 		defineIncludePathFlag,
 	} {
 		if err := define(cmd, f); err != nil {
@@ -54,6 +55,9 @@ Paths in "# Source:" lines are relative to the chart root and use forward slashe
 
 Use --exclude-app to remove specific apps from the selection.
 
+Use --include and --exclude (CEL, repeatable) to select rendered manifests using the same logic as
+hydra local template, then print only the source template files those manifests came from.
+
 Use --include-path (repeatable) to print only files whose Helm template path matches a prefix at
 a path boundary, or contains the same multi-segment path after '/' anywhere (umbrella charts may
 prefix template paths with the chart name). Multiple flags are combined with OR semantics.
@@ -62,6 +66,8 @@ When color output is enabled, template bodies are syntax-highlighted (Chroma: YA
 		Example: `  hydra local source prod.infra.monitoring --hydra-context /path/to/context
 
   hydra local source prod.*.*
+
+  hydra local source prod.apps.my-service --include 'kind == "Deployment"'
 
   hydra local source prod.infra.prom --include-path charts/kube-prometheus-stack/templates/prometheus`,
 		Args: cobra.MinimumNArgs(1),

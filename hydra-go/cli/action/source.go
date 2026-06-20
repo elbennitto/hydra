@@ -1,10 +1,12 @@
 package action
 
 import (
+	"slices"
 	"strings"
 
 	"hydra-gitops.org/hydra/hydra-go/base/log"
 	"hydra-gitops.org/hydra/hydra-go/cli/flags"
+	"hydra-gitops.org/hydra/hydra-go/core/entity"
 	"hydra-gitops.org/hydra/hydra-go/core/helm"
 	"hydra-gitops.org/hydra/hydra-go/core/highlight"
 	"hydra-gitops.org/hydra/hydra-go/core/hydra"
@@ -23,6 +25,7 @@ type SourceFlags struct {
 	flags.ContextFlag
 	flags.ExcludeAppFlag
 	flags.NoCacheFlag
+	flags.PredicatesFlag
 	flags.IncludePathFlag
 	AppId types.AppId
 }
@@ -34,6 +37,7 @@ var _ flags.WithExcludeAppFlag = (*SourceFlags)(nil)
 var _ flags.WithHelmNetworkModeFlag = (*SourceFlags)(nil)
 var _ flags.WithIncludePathFlag = (*SourceFlags)(nil)
 var _ flags.WithNoCacheFlag = (*SourceFlags)(nil)
+var _ flags.WithPredicatesFlag = (*SourceFlags)(nil)
 
 func (f *SourceFlags) Flags() flags.Flags {
 	return f
@@ -63,10 +67,16 @@ func (f *SourceFlags) WithNoCacheFlag() *flags.NoCacheFlag {
 	return &f.NoCacheFlag
 }
 
+func (f *SourceFlags) WithPredicatesFlag() *flags.PredicatesFlag {
+	return &f.PredicatesFlag
+}
+
 // Source prints unrendered Helm chart template bodies for the resolved app. Templates are taken
 // from the loaded chart (including packaged charts/*.tgz dependencies), not only from loose
 // templates/ directories on disk.
-// Optional --include-path prefixes filter by Helm template path (OR semantics).
+// Optional --include-path prefixes filter by Helm template path (OR semantics). When --include or
+// --exclude are set, Hydra first applies the same rendered-manifest CEL filtering as
+// hydra local template, then prints only the source template files backing the matched manifests.
 func Source(f SourceFlags) (hydra.Hydra, string, error) {
 	l := log.Default()
 	config := flags.NewConfigFromFlags(&f, types.KubernetesConnectionAllowedNo)
@@ -79,20 +89,38 @@ func Source(f SourceFlags) (hydra.Hydra, string, error) {
 	if err != nil {
 		return nil, "", err
 	}
-	charter, err := chartDir.LoadChart(hydra.ChartCacheForHydraApp(app), f.HelmNetworkMode)
-	if err != nil {
-		return nil, "", err
-	}
-	prefixes := make([]string, 0, len(f.IncludePathPrefixes))
-	for _, p := range f.IncludePathPrefixes {
-		n := helm.NormalizeTemplateSourcePathPrefix(p)
-		if n != "" {
-			prefixes = append(prefixes, n)
+	prefixes := normalizedSourcePrefixes(f.IncludePathPrefixes)
+	noTemplates := false
+	if len(f.Predicates) > 0 {
+		selected, err := sourceTemplatePathsFromPredicates(h, f)
+		if err != nil {
+			return nil, "", err
 		}
+		selected = normalizedSourcePrefixes(selected)
+		if len(prefixes) > 0 {
+			filtered := selected[:0]
+			for _, path := range selected {
+				if helm.TemplateSourcePathMatchesAnyPrefix(path, prefixes) {
+					filtered = append(filtered, path)
+				}
+			}
+			selected = filtered
+		}
+		if len(selected) == 0 {
+			noTemplates = true
+		}
+		prefixes = selected
 	}
-	srcBlock, err := helm.ChartSourceTemplatesMultidoc(charter, prefixes)
-	if err != nil {
-		return nil, "", err
+	srcBlock := ""
+	if !noTemplates {
+		charter, err := chartDir.LoadChart(hydra.ChartCacheForHydraApp(app), f.HelmNetworkMode)
+		if err != nil {
+			return nil, "", err
+		}
+		srcBlock, err = helm.ChartSourceTemplatesMultidoc(charter, prefixes)
+		if err != nil {
+			return nil, "", err
+		}
 	}
 	if strings.TrimSpace(srcBlock) == "" {
 		srcBlock = sourceNoTemplates
@@ -107,4 +135,54 @@ func Source(f SourceFlags) (hydra.Hydra, string, error) {
 	}
 	out := sourceBannerUnrendered + body
 	return h, out, nil
+}
+
+func normalizedSourcePrefixes(paths []string) []string {
+	prefixes := make([]string, 0, len(paths))
+	for _, p := range paths {
+		n := helm.NormalizeTemplateSourcePathPrefix(p)
+		if idx := strings.Index(n, "/templates/"); idx >= 0 {
+			n = n[idx+1:]
+		} else if idx := strings.Index(n, "/charts/"); idx >= 0 {
+			n = n[idx+1:]
+		}
+		if n != "" {
+			prefixes = append(prefixes, n)
+		}
+	}
+	return prefixes
+}
+
+func sourceTemplatePathsFromPredicates(h hydra.Hydra, f SourceFlags) ([]string, error) {
+	entities, err := templateSortedEntitiesFromResolved(h, TemplateFlags{
+		HelmNetworkModeFlag: f.HelmNetworkModeFlag,
+		ContextFlag:         f.ContextFlag,
+		ExcludeAppFlag:      f.ExcludeAppFlag,
+		PredicatesFlag:      f.PredicatesFlag,
+		NoCacheFlag:         f.NoCacheFlag,
+		AppId:               f.AppId,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return uniqueTemplatePaths(entities), nil
+}
+
+func uniqueTemplatePaths(entities entity.Entities) []string {
+	seen := map[string]struct{}{}
+	paths := make([]string, 0, len(entities.Items))
+	for _, e := range entities.Items {
+		path, err := e.TemplatePath()
+		if err != nil || path == "" {
+			continue
+		}
+		p := string(path)
+		if _, ok := seen[p]; ok {
+			continue
+		}
+		seen[p] = struct{}{}
+		paths = append(paths, p)
+	}
+	slices.Sort(paths)
+	return paths
 }

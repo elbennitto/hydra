@@ -25,6 +25,12 @@ func NormalizeTemplateSourcePathPrefix(p string) string {
 	return p
 }
 
+// TemplateSourcePathMatchesAnyPrefix reports whether displayPath matches at least one normalized
+// source path prefix using the same rules as --include-path in hydra local source.
+func TemplateSourcePathMatchesAnyPrefix(displayPath string, prefixes []string) bool {
+	return displayPathMatchesAnySourcePrefix(displayPath, prefixes)
+}
+
 // displayPathMatchesAnySourcePrefix reports whether displayPath should be included for the given
 // non-empty prefixes (chart-relative, forward slashes). Matching uses a path boundary after the
 // prefix: exact equality, next rune is '/', or the prefix names a single file (full string match).
