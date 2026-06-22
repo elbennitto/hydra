@@ -246,6 +246,38 @@ func TestRecordFile_AssertStdoutStderrAndBoth(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestRecordFile_MergesStdoutAndStderrInEmissionOrder(t *testing.T) {
+	specDir := t.TempDir()
+	outDir := t.TempDir()
+	specPath := filepath.Join(specDir, "demo.yaml")
+	yaml := "steps:\n" +
+		"  - run: |\n" +
+		"      printf 'out-1\\n'\n" +
+		"      sleep 0.05\n" +
+		"      printf 'err-1\\n' >&2\n" +
+		"      sleep 0.05\n" +
+		"      printf 'out-2\\n'\n" +
+		"  - assert:\n" +
+		"      cast: plain(cast).contains(\"out-1\") && plain(cast).contains(\"err-1\") && plain(cast).contains(\"out-2\")\n"
+	require.NoError(t, os.WriteFile(specPath, []byte(yaml), 0o644))
+
+	err := RecordOne(specPath, RecordOptions{SpecDir: specDir, OutputDir: outDir})
+	require.NoError(t, err)
+
+	castPath := filepath.Join(outDir, "demo.cast")
+	castBytes, err := os.ReadFile(castPath)
+	require.NoError(t, err)
+	cast := string(castBytes)
+
+	out1 := strings.Index(cast, "out-1")
+	err1 := strings.Index(cast, "err-1")
+	out2 := strings.Index(cast, "out-2")
+	require.NotEqual(t, -1, out1)
+	require.NotEqual(t, -1, err1)
+	require.NotEqual(t, -1, out2)
+	assert.True(t, out1 < err1 && err1 < out2, "expected stdout/stderr lines to stay interleaved in cast output")
+}
+
 func TestRecordFile_RunHereDoc(t *testing.T) {
 	specDir := t.TempDir()
 	outDir := t.TempDir()

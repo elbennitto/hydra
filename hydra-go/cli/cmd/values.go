@@ -1,11 +1,9 @@
 package cmd
 
 import (
-	"fmt"
-
+	"github.com/spf13/cobra"
 	"hydra-gitops.org/hydra/hydra-go/cli/action"
 	"hydra-gitops.org/hydra/hydra-go/core/hydra"
-	"github.com/spf13/cobra"
 )
 
 // NewValuesCommand creates and returns the values subcommand
@@ -39,7 +37,9 @@ The output is YAML and can be used to inspect or debug value resolution.`,
 				return err
 			}
 
-			fmt.Println(result)
+			if err := writeCommandResult(result); err != nil {
+				return err
+			}
 
 			return nil
 		},

@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"fmt"
-
 	"hydra-gitops.org/hydra/hydra-go/base/log"
 
 	"github.com/spf13/cobra"
@@ -86,7 +84,9 @@ When color output is enabled, template bodies are syntax-highlighted (Chroma: YA
 				if err != nil {
 					return err
 				}
-				fmt.Println(result)
+				if err := writeCommandResult(result); err != nil {
+					return err
+				}
 				l.Info(logIdCmd, "printed chart template sources for AppId '{appId}'", log.String("appId", string(appId)))
 			}
 

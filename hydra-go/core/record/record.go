@@ -2,6 +2,7 @@ package record
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -11,9 +12,11 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/creack/pty"
+	"golang.org/x/sys/unix"
 	"hydra-gitops.org/hydra/hydra-go/base/colors"
 	"hydra-gitops.org/hydra/hydra-go/base/log"
 	"hydra-gitops.org/hydra/hydra-go/base/record/asciinema"
@@ -293,7 +296,7 @@ func runStep(session *recordFileShell, recordSlug, virtualPath string, step Reco
 			}
 		}
 
-		stdout, stderr, capturedEnv, err := runCommandCaptureOutput(session, command, expected, index, false)
+		stdout, stderr, combined, capturedEnv, err := runCommandCaptureOutput(session, command, expected, index, false)
 		if err != nil {
 			return err
 		}
@@ -304,8 +307,8 @@ func runStep(session *recordFileShell, recordSlug, virtualPath string, step Reco
 		if history.rootDir != "" && history.virtualPath != "" {
 			stdout = strings.ReplaceAll(stdout, history.rootDir, history.virtualPath)
 			stderr = strings.ReplaceAll(stderr, history.rootDir, history.virtualPath)
+			combined = strings.ReplaceAll(combined, history.rootDir, history.virtualPath)
 		}
-		combined := stdout + stderr
 		history.history += combined
 		history.stdoutHistory += stdout
 		history.stderrHistory += stderr
@@ -524,43 +527,249 @@ func shouldSkipExportPath(path string) bool {
 	return strings.HasSuffix(filepath.Base(path), ".tgz")
 }
 
-func runCommandCaptureOutput(session *recordFileShell, command string, expectedExitCode int, index int, parentShell bool) (string, string, map[string]string, error) {
-	stdoutFile := filepath.Join(session.controlDir, fmt.Sprintf("%04d.stdout", index+1))
-	stderrFile := filepath.Join(session.controlDir, fmt.Sprintf("%04d.stderr", index+1))
+func runCommandCaptureOutput(session *recordFileShell, command string, expectedExitCode int, index int, parentShell bool) (string, string, string, map[string]string, error) {
+	stdoutPipe := filepath.Join(session.controlDir, fmt.Sprintf("%04d.stdout.pipe", index+1))
+	stderrPipe := filepath.Join(session.controlDir, fmt.Sprintf("%04d.stderr.pipe", index+1))
 	envFile := filepath.Join(session.controlDir, fmt.Sprintf("%04d.env", index+1))
-	if err := os.RemoveAll(stdoutFile); err != nil {
-		return "", "", nil, fmt.Errorf("prepare stdout capture file: %w", err)
+	if err := os.RemoveAll(stdoutPipe); err != nil {
+		return "", "", "", nil, fmt.Errorf("prepare stdout capture pipe: %w", err)
 	}
-	if err := os.RemoveAll(stderrFile); err != nil {
-		return "", "", nil, fmt.Errorf("prepare stderr capture file: %w", err)
+	if err := os.RemoveAll(stderrPipe); err != nil {
+		return "", "", "", nil, fmt.Errorf("prepare stderr capture pipe: %w", err)
 	}
 	if err := os.RemoveAll(envFile); err != nil {
-		return "", "", nil, fmt.Errorf("prepare env capture file: %w", err)
+		return "", "", "", nil, fmt.Errorf("prepare env capture file: %w", err)
+	}
+	if err := syscall.Mkfifo(stdoutPipe, 0o600); err != nil {
+		return "", "", "", nil, fmt.Errorf("create stdout capture pipe: %w", err)
+	}
+	if err := syscall.Mkfifo(stderrPipe, 0o600); err != nil {
+		return "", "", "", nil, fmt.Errorf("create stderr capture pipe: %w", err)
 	}
 
-	captureCmd := fmt.Sprintf("(\n%s\n__hydra_record_status=$?\nenv -0 > %s\nexit $__hydra_record_status\n) > %s 2> %s", command, shellQuote(envFile), shellQuote(stdoutFile), shellQuote(stderrFile))
-	if err := runHiddenCommandSilently(session, captureCmd, expectedExitCode, index, parentShell); err != nil {
-		return "", "", nil, err
+	streamCapture := startRecordStreamCapture(stdoutPipe, stderrPipe)
+	captureCmd := fmt.Sprintf("(\n%s\n__hydra_record_status=$?\nenv -0 > %s\nexit $__hydra_record_status\n) > %s 2> %s", command, shellQuote(envFile), shellQuote(stdoutPipe), shellQuote(stderrPipe))
+	var runExitCode int
+	runErr := session.withOutputDiscarded(func() error {
+		var err error
+		runExitCode, err = runCommandWithStatusMode(session, captureCmd, index, parentShell, false)
+		return err
+	})
+	stdout, stderr, cast, captureErr := streamCapture.Wait()
+	if runErr != nil {
+		if captureErr != nil {
+			return "", "", "", nil, fmt.Errorf("%w (stream capture: %v)", runErr, captureErr)
+		}
+		return "", "", "", nil, runErr
+	}
+	if runExitCode != expectedExitCode {
+		if captureErr != nil {
+			return "", "", "", nil, fmt.Errorf("exit code %d, expected %d (stream capture: %v)", runExitCode, expectedExitCode, captureErr)
+		}
+		return "", "", "", nil, fmt.Errorf("exit code %d, expected %d", runExitCode, expectedExitCode)
+	}
+	if captureErr != nil {
+		return "", "", "", nil, captureErr
 	}
 
-	stdoutBytes, err := os.ReadFile(stdoutFile)
-	if err != nil && !os.IsNotExist(err) {
-		return "", "", nil, fmt.Errorf("read stdout capture file: %w", err)
-	}
-	stderrBytes, err := os.ReadFile(stderrFile)
-	if err != nil && !os.IsNotExist(err) {
-		return "", "", nil, fmt.Errorf("read stderr capture file: %w", err)
-	}
 	envBytes, err := os.ReadFile(envFile)
 	if err != nil && !os.IsNotExist(err) {
-		return "", "", nil, fmt.Errorf("read env capture file: %w", err)
+		return "", "", "", nil, fmt.Errorf("read env capture file: %w", err)
 	}
 
-	stdout := strings.ReplaceAll(string(stdoutBytes), "\r\n", "\n")
-	stderr := strings.ReplaceAll(string(stderrBytes), "\r\n", "\n")
-	stdout = strings.ReplaceAll(stdout, "\r", "\n")
-	stderr = strings.ReplaceAll(stderr, "\r", "\n")
-	return stdout, stderr, envMapFromNullDelimited(envBytes), nil
+	stdout = normalizeCapturedRecordStream(stdout)
+	stderr = normalizeCapturedRecordStream(stderr)
+	cast = normalizeCapturedRecordStream(cast)
+	return stdout, stderr, cast, envMapFromNullDelimited(envBytes), nil
+}
+
+type recordStreamResult struct {
+	stdout string
+	stderr string
+	cast   string
+	err    error
+}
+
+type recordStreamCapture struct {
+	results <-chan recordStreamResult
+}
+
+func startRecordStreamCapture(stdoutPipe, stderrPipe string) *recordStreamCapture {
+	results := make(chan recordStreamResult, 1)
+	go readRecordStreams(stdoutPipe, stderrPipe, results)
+	return &recordStreamCapture{results: results}
+}
+
+func (c *recordStreamCapture) Wait() (string, string, string, error) {
+	result := <-c.results
+	if result.err != nil {
+		return "", "", "", result.err
+	}
+	return result.stdout, result.stderr, result.cast, nil
+}
+
+type recordPipeState struct {
+	name    string
+	fd      int
+	open    bool
+	pending strings.Builder
+}
+
+func readRecordStreams(stdoutPipe, stderrPipe string, results chan<- recordStreamResult) {
+	stdoutFD, err := unix.Open(stdoutPipe, unix.O_RDONLY|unix.O_NONBLOCK, 0)
+	if err != nil {
+		results <- recordStreamResult{err: fmt.Errorf("open stdout capture pipe: %w", err)}
+		return
+	}
+	defer unix.Close(stdoutFD)
+
+	stderrFD, err := unix.Open(stderrPipe, unix.O_RDONLY|unix.O_NONBLOCK, 0)
+	if err != nil {
+		results <- recordStreamResult{err: fmt.Errorf("open stderr capture pipe: %w", err)}
+		return
+	}
+	defer unix.Close(stderrFD)
+
+	var stdout strings.Builder
+	var stderr strings.Builder
+	var cast strings.Builder
+	buf := make([]byte, 32*1024)
+	pipes := []*recordPipeState{
+		{name: "stdout", fd: stdoutFD, open: true},
+		{name: "stderr", fd: stderrFD, open: true},
+	}
+
+	for recordPipeStatesOpen(pipes) {
+		pollfds := make([]unix.PollFd, 0, len(pipes))
+		indexByFD := make(map[int]int, len(pipes))
+		for i, pipe := range pipes {
+			if !pipe.open {
+				continue
+			}
+			pollfds = append(pollfds, unix.PollFd{Fd: int32(pipe.fd), Events: unix.POLLIN | unix.POLLHUP})
+			indexByFD[pipe.fd] = i
+		}
+		if len(pollfds) == 0 {
+			break
+		}
+
+		n, err := unix.Poll(pollfds, -1)
+		if err != nil {
+			if err == unix.EINTR {
+				continue
+			}
+			results <- recordStreamResult{err: fmt.Errorf("poll capture pipes: %w", err)}
+			return
+		}
+		if n == 0 {
+			continue
+		}
+
+		for _, pollfd := range pollfds {
+			if pollfd.Revents == 0 {
+				continue
+			}
+			pipe := pipes[indexByFD[int(pollfd.Fd)]]
+			for {
+				readN, readErr := unix.Read(pipe.fd, buf)
+				if readN > 0 {
+					pipe.pending.WriteString(string(buf[:readN]))
+					if err := emitRecordStreamLines(pipe.name, &pipe.pending, &stdout, &stderr, &cast); err != nil {
+						results <- recordStreamResult{err: err}
+						return
+					}
+				}
+				if readErr == nil {
+					if readN == 0 {
+						if pipe.pending.Len() > 0 {
+							if err := appendRecordStreamChunk(pipe.name, pipe.pending.String(), &stdout, &stderr, &cast); err != nil {
+								results <- recordStreamResult{err: err}
+								return
+							}
+							pipe.pending.Reset()
+						}
+						pipe.open = false
+						break
+					}
+					continue
+				}
+				if errors.Is(readErr, unix.EAGAIN) {
+					break
+				}
+				if readErr == io.EOF {
+					if pipe.pending.Len() > 0 {
+						if err := appendRecordStreamChunk(pipe.name, pipe.pending.String(), &stdout, &stderr, &cast); err != nil {
+							results <- recordStreamResult{err: err}
+							return
+						}
+						pipe.pending.Reset()
+					}
+					pipe.open = false
+					break
+				}
+				results <- recordStreamResult{err: fmt.Errorf("read %s capture pipe: %w", pipe.name, readErr)}
+				return
+			}
+		}
+	}
+
+	for _, pipe := range pipes {
+		if pipe.pending.Len() > 0 {
+			if err := appendRecordStreamChunk(pipe.name, pipe.pending.String(), &stdout, &stderr, &cast); err != nil {
+				results <- recordStreamResult{err: err}
+				return
+			}
+		}
+	}
+
+	results <- recordStreamResult{
+		stdout: stdout.String(),
+		stderr: stderr.String(),
+		cast:   cast.String(),
+	}
+}
+
+func recordPipeStatesOpen(pipes []*recordPipeState) bool {
+	for _, pipe := range pipes {
+		if pipe.open {
+			return true
+		}
+	}
+	return false
+}
+
+func emitRecordStreamLines(stream string, pending *strings.Builder, stdout, stderr, cast *strings.Builder) error {
+	for {
+		text := pending.String()
+		idx := strings.IndexByte(text, '\n')
+		if idx < 0 {
+			return nil
+		}
+		if err := appendRecordStreamChunk(stream, text[:idx+1], stdout, stderr, cast); err != nil {
+			return err
+		}
+		remaining := text[idx+1:]
+		pending.Reset()
+		pending.WriteString(remaining)
+	}
+}
+
+func appendRecordStreamChunk(stream, chunk string, stdout, stderr, cast *strings.Builder) error {
+	switch stream {
+	case "stdout":
+		stdout.WriteString(chunk)
+	case "stderr":
+		stderr.WriteString(chunk)
+	default:
+		return fmt.Errorf("unknown record stream %q", stream)
+	}
+	cast.WriteString(chunk)
+	return nil
+}
+
+func normalizeCapturedRecordStream(text string) string {
+	text = strings.ReplaceAll(text, "\r\n", "\n")
+	return strings.ReplaceAll(text, "\r", "\n")
 }
 
 func syncShellEnv(session *recordFileShell, before map[string]string, after map[string]string, index int) error {
@@ -865,7 +1074,7 @@ func runHiddenCommandSilently(session *recordFileShell, command string, expected
 		err      error
 	)
 	if err := session.withOutputDiscarded(func() error {
-		exitCode, err = runCommandWithStatusMode(session, command, index, parentShell)
+		exitCode, err = runCommandWithStatusMode(session, command, index, parentShell, true)
 		return err
 	}); err != nil {
 		return err
@@ -925,10 +1134,10 @@ func runHiddenCommand(session *recordFileShell, command string, index int) error
 }
 
 func runCommandWithStatus(session *recordFileShell, command string, index int) (int, error) {
-	return runCommandWithStatusMode(session, command, index, false)
+	return runCommandWithStatusMode(session, command, index, false, true)
 }
 
-func runCommandWithStatusMode(session *recordFileShell, command string, index int, parentShell bool) (int, error) {
+func runCommandWithStatusMode(session *recordFileShell, command string, index int, parentShell bool, waitForIdle bool) (int, error) {
 	statusFile := filepath.Join(session.controlDir, fmt.Sprintf("%04d.status", index+1))
 	if err := os.RemoveAll(statusFile); err != nil {
 		return 0, fmt.Errorf("prepare status file: %w", err)
@@ -945,8 +1154,10 @@ func runCommandWithStatusMode(session *recordFileShell, command string, index in
 	if err != nil {
 		return 0, err
 	}
-	if err := session.WaitForIdle(recordFileIdleWait, recordFileStatusWait); err != nil {
-		return 0, err
+	if waitForIdle {
+		if err := session.WaitForIdle(recordFileIdleWait, recordFileStatusWait); err != nil {
+			return 0, err
+		}
 	}
 	exitCode, err := strconv.Atoi(strings.TrimSpace(string(data)))
 	if err != nil {

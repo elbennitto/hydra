@@ -58,7 +58,7 @@ func TestRecordFileGolden(t *testing.T) {
 			expectedPath := filepath.Join(goldenRoot, caseName+".expected.cast")
 			if *updateRecordFileGolden {
 				require.NoError(t, os.MkdirAll(filepath.Dir(expectedPath), 0o755))
-				require.NoError(t, os.WriteFile(expectedPath, gotBytes, 0o644))
+				require.NoError(t, os.WriteFile(expectedPath, normalizeCastHeaderCommand(gotBytes), 0o644))
 			}
 
 			expectedBytes, err := os.ReadFile(expectedPath)

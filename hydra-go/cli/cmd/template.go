@@ -1,16 +1,14 @@
 package cmd
 
 import (
-	"fmt"
-
 	"hydra-gitops.org/hydra/hydra-go/base/log"
 
+	"github.com/spf13/cobra"
 	"hydra-gitops.org/hydra/hydra-go/cli/action"
 	"hydra-gitops.org/hydra/hydra-go/cli/flags"
 	"hydra-gitops.org/hydra/hydra-go/core/commands"
 	"hydra-gitops.org/hydra/hydra-go/core/hydra"
 	"hydra-gitops.org/hydra/hydra-go/core/types"
-	"github.com/spf13/cobra"
 )
 
 // NewTemplateCommand creates and returns the template subcommand
@@ -96,13 +94,16 @@ Use --include and --exclude (CEL) to print only matching rendered resources, sam
 				if err != nil {
 					return err
 				}
-				fmt.Println(result)
+				if err := writeCommandResult(result); err != nil {
+					return err
+				}
 				l.Info(logIdCmd, "rendered templates for AppId '{appId}'", log.String("appId", string(appId)))
 			}
 
 			if len(cloneYaml) > 0 {
-				fmt.Println("---")
-				fmt.Println(string(cloneYaml))
+				if err := writeCommandResult("---\n" + string(cloneYaml)); err != nil {
+					return err
+				}
 			}
 
 			return nil

@@ -1,11 +1,9 @@
 package cmd
 
 import (
-	"fmt"
-
+	"github.com/spf13/cobra"
 	"hydra-gitops.org/hydra/hydra-go/cli/action"
 	"hydra-gitops.org/hydra/hydra-go/core/hydra"
-	"github.com/spf13/cobra"
 )
 
 // NewClusterValuesCommand creates hydra gitops values.
@@ -32,7 +30,9 @@ extract ConfigMap payloads.`,
 			if err != nil {
 				return err
 			}
-			fmt.Println(result)
+			if err := writeCommandResult(result); err != nil {
+				return err
+			}
 			return nil
 		},
 	}

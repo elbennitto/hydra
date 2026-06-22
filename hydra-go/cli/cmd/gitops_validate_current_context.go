@@ -1,11 +1,9 @@
 package cmd
 
 import (
-	"fmt"
-
+	"github.com/spf13/cobra"
 	"hydra-gitops.org/hydra/hydra-go/cli/action"
 	"hydra-gitops.org/hydra/hydra-go/core/hydra"
-	"github.com/spf13/cobra"
 )
 
 // NewClusterValidateCurrentContextCommand creates and returns the validate-current-context subcommand
@@ -32,7 +30,9 @@ Both the kubeconfig context name and the API server endpoint are verified.`,
 			if err != nil {
 				return err
 			}
-			fmt.Println(result)
+			if err := writeCommandResult(result); err != nil {
+				return err
+			}
 			return nil
 		},
 	}
