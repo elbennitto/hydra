@@ -20,12 +20,14 @@ type RecordStep struct {
 
 	SleepSeconds float64
 	Color        *RecordColor
+	Background   *RecordBackground
 
 	Write string
 	Speed *float64
 
 	Run              string
 	Input            *bool
+	Typed            *bool
 	Output           *bool
 	ExpectedExitCode *int
 
@@ -43,6 +45,11 @@ type RecordColor struct {
 	FG    string
 	BG    string
 	Bold  bool
+}
+
+type RecordBackground struct {
+	Reset bool
+	Name  string
 }
 
 type RecordEnvEntry struct {
@@ -237,6 +244,7 @@ func parseRecordStep(path string, index int, stepMap map[string]interface{}) (Re
 	_, hasAssert := stepMap["assert"]
 	_, hasEnv := stepMap["env"]
 	_, hasColor := stepMap["color"]
+	_, hasBackground := stepMap["background"]
 	_, hasExportToDirectory := stepMap["export-to-directory"]
 
 	primary := 0
@@ -267,11 +275,14 @@ func parseRecordStep(path string, index int, stepMap map[string]interface{}) (Re
 	if hasColor {
 		primary++
 	}
+	if hasBackground {
+		primary++
+	}
 	if hasExportToDirectory {
 		primary++
 	}
 	if primary != 1 {
-		return RecordStep{}, fmt.Errorf("record spec %q: step %d must define exactly one primary field (type/sleep/write/run/cd/marker/assert/env/color/export-to-directory)", path, index)
+		return RecordStep{}, fmt.Errorf("record spec %q: step %d must define exactly one primary field (type/sleep/write/run/cd/marker/assert/env/color/background/export-to-directory)", path, index)
 	}
 
 	if hasType {
@@ -320,6 +331,13 @@ func parseRecordStep(path string, index int, stepMap map[string]interface{}) (Re
 				return RecordStep{}, fmt.Errorf("record spec %q: step %d input requires bool", path, index)
 			}
 			step.Input = &b
+		}
+		if v, exists := stepMap["typed"]; exists {
+			b, ok := asBool(v)
+			if !ok {
+				return RecordStep{}, fmt.Errorf("record spec %q: step %d typed requires bool", path, index)
+			}
+			step.Typed = &b
 		}
 		if v, exists := stepMap["output"]; exists {
 			b, ok := asBool(v)
@@ -392,6 +410,14 @@ func parseRecordStep(path string, index int, stepMap map[string]interface{}) (Re
 		return RecordStep{Kind: "color", Color: &color}, nil
 	}
 
+	if hasBackground {
+		background, err := parseRecordBackground(path, index, stepMap["background"])
+		if err != nil {
+			return RecordStep{}, err
+		}
+		return RecordStep{Kind: "background", Background: &background}, nil
+	}
+
 	if hasExportToDirectory {
 		dir, ok := asString(stepMap["export-to-directory"])
 		if !ok || strings.TrimSpace(dir) == "" {
@@ -434,6 +460,9 @@ func parseRecordColor(path string, index int, raw interface{}) (RecordColor, err
 			return RecordColor{}, fmt.Errorf("record spec %q: step %d color.fg requires non-empty string", path, index)
 		}
 		color.FG = strings.TrimSpace(s)
+		if _, ok := lookupRecordColorSequence(color.FG, false); !ok {
+			return RecordColor{}, fmt.Errorf("record spec %q: step %d color.fg requires supported color name or #RRGGBB", path, index)
+		}
 	}
 	if v, exists := m["bg"]; exists {
 		s, ok := asString(v)
@@ -441,6 +470,9 @@ func parseRecordColor(path string, index int, raw interface{}) (RecordColor, err
 			return RecordColor{}, fmt.Errorf("record spec %q: step %d color.bg requires non-empty string", path, index)
 		}
 		color.BG = strings.TrimSpace(s)
+		if _, ok := lookupRecordColorSequence(color.BG, true); !ok {
+			return RecordColor{}, fmt.Errorf("record spec %q: step %d color.bg requires supported color name or #RRGGBB", path, index)
+		}
 	}
 	if v, exists := m["bold"]; exists {
 		b, ok := asBool(v)
@@ -455,6 +487,24 @@ func parseRecordColor(path string, index int, raw interface{}) (RecordColor, err
 	}
 
 	return color, nil
+}
+
+func parseRecordBackground(path string, index int, raw interface{}) (RecordBackground, error) {
+	value, ok := asString(raw)
+	if !ok || strings.TrimSpace(value) == "" {
+		return RecordBackground{}, fmt.Errorf("record spec %q: step %d background requires non-empty string", path, index)
+	}
+
+	value = strings.TrimSpace(value)
+	if strings.EqualFold(value, "reset") {
+		return RecordBackground{Reset: true}, nil
+	}
+
+	if _, ok := lookupRecordColorSequence(value, true); !ok {
+		return RecordBackground{}, fmt.Errorf("record spec %q: step %d background requires supported color name, #RRGGBB, or %q", path, index, "reset")
+	}
+
+	return RecordBackground{Name: value}, nil
 }
 
 func parseEnvEntries(path string, index int, raw interface{}) ([]RecordEnvEntry, error) {

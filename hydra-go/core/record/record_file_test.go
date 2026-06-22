@@ -63,6 +63,53 @@ func TestLoadRecordSpec_MarkerStep(t *testing.T) {
 	assert.Equal(t, "Create Chart.yaml", spec.Steps[0].Marker)
 }
 
+func TestLoadRecordSpec_BackgroundStep(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "demo.yaml")
+	yaml := "steps:\n" +
+		"  - background: lightblue\n" +
+		"  - background: reset\n"
+	require.NoError(t, os.WriteFile(path, []byte(yaml), 0o644))
+
+	spec, err := Load(path)
+	require.NoError(t, err)
+	require.Len(t, spec.Steps, 2)
+	assert.Equal(t, "background", spec.Steps[0].Kind)
+	require.NotNil(t, spec.Steps[0].Background)
+	assert.Equal(t, "lightblue", spec.Steps[0].Background.Name)
+	assert.Equal(t, "background", spec.Steps[1].Kind)
+	require.NotNil(t, spec.Steps[1].Background)
+	assert.True(t, spec.Steps[1].Background.Reset)
+}
+
+func TestLoadRecordSpec_BackgroundHexStep(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "demo.yaml")
+	yaml := "steps:\n" +
+		"  - background: '#0b1f4d'\n"
+	require.NoError(t, os.WriteFile(path, []byte(yaml), 0o644))
+
+	spec, err := Load(path)
+	require.NoError(t, err)
+	require.Len(t, spec.Steps, 1)
+	require.NotNil(t, spec.Steps[0].Background)
+	assert.Equal(t, "#0b1f4d", spec.Steps[0].Background.Name)
+}
+
+func TestDecorateRecordOutputWithBackground_ReappliesAfterReset(t *testing.T) {
+	got := decorateRecordOutputWithBackground(colors.RecordingShellPrompt()+colors.RecordingShellCommand()+"hydra message"+colors.Reset.String(), "\x1b[104m")
+	assert.Equal(t, "\x1b[104m"+colors.BoldLightMagenta()+" $ "+"\x1b[0m\x1b[104m"+colors.BoldWhite()+"hydra message"+colors.Reset.String()+"\x1b[104m", got)
+}
+
+func TestDecorateRecordOutputWithBackground_FillsLineBeforeNewline(t *testing.T) {
+	got := decorateRecordOutputWithBackground("setup\r\nnext line\r\n", "\x1b[44m")
+	assert.Equal(t, "\x1b[44msetup\x1b[K\r\nnext line\x1b[K\r\n", got)
+}
+
+func TestRenderRecordBackground_Hex(t *testing.T) {
+	got, ok := renderRecordBackground(&RecordBackground{Name: "#0b1f4d"})
+	require.True(t, ok)
+	assert.Equal(t, "\x1b[48;2;11;31;77m", got)
+}
+
 func TestLoadRecordSpec_ExportToDirectoryStep(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "demo.yaml")
 	yaml := "steps:\n" +
@@ -74,6 +121,21 @@ func TestLoadRecordSpec_ExportToDirectoryStep(t *testing.T) {
 	require.Len(t, spec.Steps, 1)
 	assert.Equal(t, "export-to-directory", spec.Steps[0].Kind)
 	assert.Equal(t, "docs/tutorials/introduction/demo", spec.Steps[0].ExportToDirectory)
+}
+
+func TestLoadRecordSpec_RunTypedFlag(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "demo.yaml")
+	yaml := "steps:\n" +
+		"  - run: hydra local apps\n" +
+		"    typed: true\n"
+	require.NoError(t, os.WriteFile(path, []byte(yaml), 0o644))
+
+	spec, err := Load(path)
+	require.NoError(t, err)
+	require.Len(t, spec.Steps, 1)
+	assert.Equal(t, "run", spec.Steps[0].Kind)
+	require.NotNil(t, spec.Steps[0].Typed)
+	assert.True(t, *spec.Steps[0].Typed)
 }
 
 func TestLoadRecordSpec_EnvRequiresListSyntax(t *testing.T) {

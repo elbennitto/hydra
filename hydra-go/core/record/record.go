@@ -217,12 +217,13 @@ func buildRecordFileOutputs(steps []RecordStep) []RecordFileOutput {
 				continue
 			}
 			runes := []rune(strings.TrimSpace(step.Run))
+			speed := execTypingSpeed(step)
 			for i, r := range runes {
 				outputs = append(outputs, RecordFileOutput{Kind: RecordFileOutputText, Value: string(r)})
 				if i == len(runes)-1 {
-					outputs = append(outputs, RecordFileOutput{Kind: RecordFileOutputControl, Value: strings.TrimSpace(directive.SleepLine(*step.Speed))})
+					outputs = append(outputs, RecordFileOutput{Kind: RecordFileOutputControl, Value: strings.TrimSpace(directive.SleepLine(speed))})
 				} else {
-					outputs = append(outputs, RecordFileOutput{Kind: RecordFileOutputControl, Value: strings.TrimSpace(directive.SleepLine(*step.Speed))})
+					outputs = append(outputs, RecordFileOutput{Kind: RecordFileOutputControl, Value: strings.TrimSpace(directive.SleepLine(speed))})
 				}
 			}
 			outputs = append(outputs, RecordFileOutput{Kind: RecordFileOutputControl, Value: "newline"})
@@ -260,6 +261,10 @@ func buildRecordFileOutputs(steps []RecordStep) []RecordFileOutput {
 			if value, ok := renderRecordColor(step.Color); ok {
 				outputs = append(outputs, RecordFileOutput{Kind: RecordFileOutputText, Value: value})
 			}
+		case "background":
+			if value, ok := renderRecordBackground(step.Background); ok && step.Background != nil && step.Background.Reset {
+				outputs = append(outputs, RecordFileOutput{Kind: RecordFileOutputText, Value: value})
+			}
 		}
 	}
 	return outputs
@@ -284,7 +289,7 @@ func runStep(session *recordFileShell, recordSlug, virtualPath string, step Reco
 		if semantics.showCommand {
 			display := command
 			if semantics.slow {
-				chunk := buildPromptTypingOutput(display, false, true, *step.Speed)
+				chunk := buildPromptTypingOutput(display, false, true, execTypingSpeed(step))
 				if err := session.WriteOutput(chunk); err != nil {
 					return err
 				}
@@ -415,6 +420,17 @@ func runStep(session *recordFileShell, recordSlug, virtualPath string, step Reco
 			return nil
 		}
 		return session.WriteOutput(value)
+	case "background":
+		if step.Background != nil && step.Background.Reset {
+			session.SetBackground(nil)
+			value, ok := renderRecordBackground(step.Background)
+			if !ok {
+				return nil
+			}
+			return session.WriteRawOutput(value)
+		}
+		session.SetBackground(step.Background)
+		return nil
 	case "export-to-directory":
 		return exportVirtualHome(history.rootDir, history.workspaceDir, step.ExportToDirectory)
 	default:
@@ -845,14 +861,14 @@ func renderRecordColor(spec *RecordColor) (string, bool) {
 		parts = append(parts, "1")
 	}
 	if spec.FG != "" {
-		fg, ok := lookupRecordColorCode(spec.FG, false)
+		fg, ok := lookupRecordColorSequence(spec.FG, false)
 		if !ok {
 			return "", false
 		}
 		parts = append(parts, fg)
 	}
 	if spec.BG != "" {
-		bg, ok := lookupRecordColorCode(spec.BG, true)
+		bg, ok := lookupRecordColorSequence(spec.BG, true)
 		if !ok {
 			return "", false
 		}
@@ -864,6 +880,33 @@ func renderRecordColor(spec *RecordColor) (string, bool) {
 	}
 
 	return "\x1b[" + strings.Join(parts, ";") + "m", true
+}
+
+func renderRecordBackground(spec *RecordBackground) (string, bool) {
+	if spec == nil {
+		return "", false
+	}
+	if spec.Reset {
+		return "\x1b[49m", true
+	}
+	if spec.Name == "" {
+		return "", false
+	}
+	bg, ok := lookupRecordColorSequence(spec.Name, true)
+	if !ok {
+		return "", false
+	}
+	return "\x1b[" + bg + "m", true
+}
+
+func lookupRecordColorSequence(name string, background bool) (string, bool) {
+	if hex, ok := parseRecordHexColor(name); ok {
+		if background {
+			return fmt.Sprintf("48;2;%d;%d;%d", hex[0], hex[1], hex[2]), true
+		}
+		return fmt.Sprintf("38;2;%d;%d;%d", hex[0], hex[1], hex[2]), true
+	}
+	return lookupRecordColorCode(name, background)
 }
 
 func lookupRecordColorCode(name string, background bool) (string, bool) {
@@ -923,6 +966,36 @@ func lookupRecordColorCode(name string, background bool) (string, bool) {
 	return bg, ok
 }
 
+func parseRecordHexColor(value string) ([3]int, bool) {
+	trimmed := strings.TrimSpace(value)
+	if len(trimmed) != 7 || trimmed[0] != '#' {
+		return [3]int{}, false
+	}
+
+	parse := func(part string) (int, bool) {
+		n, err := strconv.ParseInt(part, 16, 0)
+		if err != nil {
+			return 0, false
+		}
+		return int(n), true
+	}
+
+	r, ok := parse(trimmed[1:3])
+	if !ok {
+		return [3]int{}, false
+	}
+	g, ok := parse(trimmed[3:5])
+	if !ok {
+		return [3]int{}, false
+	}
+	b, ok := parse(trimmed[5:7])
+	if !ok {
+		return [3]int{}, false
+	}
+
+	return [3]int{r, g, b}, true
+}
+
 func resolveExecSemantics(step RecordStep) (execStepSemantics, error) {
 	showCommand := true
 	if step.Input != nil {
@@ -933,8 +1006,15 @@ func resolveExecSemantics(step RecordStep) (execStepSemantics, error) {
 	if step.Output != nil {
 		showOutput = *step.Output
 	}
-	slow := step.Speed != nil && *step.Speed > 0
+	slow := (step.Speed != nil && *step.Speed > 0) || (step.Typed != nil && *step.Typed)
 	return execStepSemantics{showCommand: showCommand, showOutput: showOutput, slow: slow}, nil
+}
+
+func execTypingSpeed(step RecordStep) float64 {
+	if step.Speed != nil {
+		return *step.Speed
+	}
+	return recordFileTypeCharWait
 }
 
 func stepCommandForLog(step RecordStep) string {
@@ -1205,6 +1285,7 @@ type recordFileShell struct {
 	lastOutput time.Time
 	readErr    error
 	readerDone chan struct{}
+	background string
 }
 
 type recordFileMirror struct {
@@ -1429,6 +1510,32 @@ func (s *recordFileShell) WriteOutput(text string) error {
 		return nil
 	}
 
+	s.mu.Lock()
+	text = decorateRecordOutputWithBackground(text, s.background)
+	chunk := []byte(text)
+	if !s.discardRaw {
+		_, _ = s.raw.Write(chunk)
+	}
+	s.lastOutput = time.Now()
+	s.mu.Unlock()
+
+	s.mirrorMu.RLock()
+	mirror := s.mirror
+	s.mirrorMu.RUnlock()
+	if mirror != nil {
+		if _, err := mirror.Write(chunk); err != nil {
+			return fmt.Errorf("write to record file mirror: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func (s *recordFileShell) WriteRawOutput(text string) error {
+	if text == "" {
+		return nil
+	}
+
 	chunk := []byte(text)
 
 	s.mu.Lock()
@@ -1448,6 +1555,35 @@ func (s *recordFileShell) WriteOutput(text string) error {
 	}
 
 	return nil
+}
+
+func (s *recordFileShell) SetBackground(spec *RecordBackground) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	value, ok := renderRecordBackground(spec)
+	if !ok || spec == nil || spec.Reset {
+		s.background = ""
+		return
+	}
+	s.background = value
+}
+
+func decorateRecordOutputWithBackground(text string, background string) string {
+	if text == "" || background == "" {
+		return text
+	}
+
+	const crlfPlaceholder = "\x00__hydra_record_crlf__\x00"
+
+	text = strings.ReplaceAll(text, "\x1b[0m", "\x1b[0m"+background)
+	text = strings.ReplaceAll(text, "\x1b[m", "\x1b[m"+background)
+	text = strings.ReplaceAll(text, "\x1b[49m", "\x1b[49m"+background)
+	text = strings.ReplaceAll(text, "\r\n", crlfPlaceholder)
+	text = strings.ReplaceAll(text, "\n", "\x1b[K\n")
+	text = strings.ReplaceAll(text, "\r", "\x1b[K\r")
+	text = strings.ReplaceAll(text, crlfPlaceholder, "\x1b[K\r\n")
+	return background + text
 }
 
 func newRecordFileMirror(dst io.Writer, actualPath, virtualPath string) *recordFileMirror {
