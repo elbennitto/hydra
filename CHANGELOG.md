@@ -1,3 +1,9 @@
+## [1.2.0](https://github.com/[secure]/compare/v1.1.0...v1.2.0) (2026-06-23)
+
+### Features
+
+* **go:** add --include and --exclude support to "hydra local source" ([6e76389](https://github.com/[secure]/commit/6e7638922c970e650bc5296e91ba982eb9b08c9b))
+
 ## [1.1.0](https://github.com/[secure]/compare/v1.0.2...v1.1.0) (2026-06-18)
 
 ### Features
