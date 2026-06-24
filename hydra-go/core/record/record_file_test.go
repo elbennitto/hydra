@@ -110,6 +110,18 @@ func TestRenderRecordBackground_Hex(t *testing.T) {
 	assert.Equal(t, "\x1b[48;2;11;31;77m", got)
 }
 
+func TestRunStep_BackgroundResetWritesClearToEndOfLine(t *testing.T) {
+	var shell recordFileShell
+
+	err := runStep(&shell, "demo", recordFileVirtualRoot, RecordStep{
+		Kind:       "background",
+		Background: &RecordBackground{Reset: true},
+	}, 0, &historyState{})
+
+	require.NoError(t, err)
+	assert.Equal(t, "\x1b[49m\x1b[K", shell.raw.String())
+}
+
 func TestLoadRecordSpec_ExportToDirectoryStep(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "demo.yaml")
 	yaml := "steps:\n" +

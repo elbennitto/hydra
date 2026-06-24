@@ -427,7 +427,7 @@ func runStep(session *recordFileShell, recordSlug, virtualPath string, step Reco
 			if !ok {
 				return nil
 			}
-			return session.WriteRawOutput(value)
+			return session.WriteRawOutput(value + "\x1b[K")
 		}
 		session.SetBackground(step.Background)
 		return nil
