@@ -41,6 +41,7 @@ manual_pages_domain=""
 manual_site_url=""
 manual_target_repo=""
 manual_target_dir=""
+release_public_config_file=""
 dst_dir=""
 fork_path_regex=""
 fork_public_key_default=""
@@ -273,6 +274,14 @@ load_existing_defaults_for_fork() {
 
   if [[ -f "${selected_dir}/publish.yaml" ]]; then
     existing_homebrew_tap_target_repo="$(extract_yaml_section_scalar "${selected_dir}/publish.yaml" "homebrew" "tap_deploy_target_repo")"
+  fi
+
+  if [[ -f "${selected_dir}/release.yaml" ]]; then
+    existing_manual_pages_domain="$(extract_yaml_section_scalar "${selected_dir}/release.yaml" "manual" "pages_domain")"
+    existing_manual_site_url="$(extract_yaml_section_scalar "${selected_dir}/release.yaml" "manual" "site_url")"
+    existing_manual_target_repo="$(extract_yaml_section_scalar "${selected_dir}/release.yaml" "manual" "target_repo")"
+    existing_manual_target_dir="$(extract_yaml_section_scalar "${selected_dir}/release.yaml" "manual" "target_dir")"
+  elif [[ -f "${selected_dir}/publish.yaml" ]]; then
     existing_manual_pages_domain="$(extract_yaml_section_scalar "${selected_dir}/publish.yaml" "manual" "pages_domain")"
     existing_manual_site_url="$(extract_yaml_section_scalar "${selected_dir}/publish.yaml" "manual" "site_url")"
     existing_manual_target_repo="$(extract_yaml_section_scalar "${selected_dir}/publish.yaml" "manual" "target_repo")"
@@ -289,6 +298,7 @@ prompt_key_regeneration_choices() {
   git_secrets_file="${dst_dir}/git.sops.yaml"
   publish_secrets_file="${dst_dir}/publish.sops.yaml"
   renovate_secrets_file="${dst_dir}/renovate.sops.yaml"
+  release_public_config_file="${dst_dir}/release.yaml"
 
   recreate_age_bundle="true"
   recreate_git_signing="true"
@@ -1109,8 +1119,9 @@ create_plain_file "${dst_dir}/git.yaml" "user:
   email: \"${release_sender_email}\""
 
 create_plain_file "${dst_dir}/publish.yaml" "homebrew:
-  tap_deploy_target_repo: \"${homebrew_tap_target_repo}\"
-manual:
+  tap_deploy_target_repo: \"${homebrew_tap_target_repo}\""
+
+create_plain_file "${dst_dir}/release.yaml" "manual:
   pages_domain: \"${manual_pages_domain}\"
   site_url: \"${manual_site_url}\"${publish_manual_target_repo_block}${publish_manual_target_dir_block}"
 
@@ -1122,7 +1133,8 @@ This directory contains repository scoped secret material for \`${fork_path}\`.
 
 - \`public-keys.yaml\`: non-sensitive public keys and target GitHub secret names.
 - \`git.yaml\`: non-sensitive git identity settings (user/author/committer).
-- \`publish.yaml\`: non-sensitive publish settings (Homebrew tap deploy target repository plus manual GitHub Pages domain/site URL and optional target repo/target dir).
+- \`publish.yaml\`: non-sensitive publish settings (Homebrew tap deploy target repository).
+- \`release.yaml\`: non-sensitive release/manual settings (manual GitHub Pages domain/site URL and optional target repo/target dir).
 - \`age-pipeline-keys.sops.yaml\`: encrypted age private keys for CI decryption.
 - \`git.sops.yaml\`: encrypted semantic-release signing private key.
 - \`publish.sops.yaml\`: encrypted cosign private key, Homebrew tap deploy key, and optional manual pages deploy SSH key.
@@ -1201,10 +1213,10 @@ $(if [[ -n "${manual_pages_deploy_public_key}" ]]; then cat <<EOF
 EOF
 fi)
 - Homebrew tap deploy target repository in \`publish.yaml\` at \`homebrew.tap_deploy_target_repo\`.
-- Manual pages domain in \`publish.yaml\` at \`manual.pages_domain\`.
-- Manual pages site URL in \`publish.yaml\` at \`manual.site_url\`.
-$(if [[ -n "${manual_target_repo}" ]]; then printf '%s\n' "- Manual pages target repository in \`publish.yaml\` at \`manual.target_repo\`."; fi)
-$(if [[ -n "${manual_target_dir}" ]]; then printf '%s\n' "- Manual pages target directory in \`publish.yaml\` at \`manual.target_dir\`."; fi)"
+- Manual pages domain in \`release.yaml\` at \`manual.pages_domain\`.
+- Manual pages site URL in \`release.yaml\` at \`manual.site_url\`.
+$(if [[ -n "${manual_target_repo}" ]]; then printf '%s\n' "- Manual pages target repository in \`release.yaml\` at \`manual.target_repo\`."; fi)
+$(if [[ -n "${manual_target_dir}" ]]; then printf '%s\n' "- Manual pages target directory in \`release.yaml\` at \`manual.target_dir\`."; fi)"
 
 upsert_rule "git.sops.yaml" "${git_recipients}"
 upsert_rule "publish.sops.yaml" "${publish_recipients}"
@@ -1269,6 +1281,6 @@ echo "   - Target repository (publish.yaml -> homebrew.tap_deploy_target_repo): 
 echo "   - Deploy SSH public key (public-keys.yaml -> homebrew_tap.public_key_openssh): ${homebrew_tap_public_key}"
 if [[ -n "${manual_pages_deploy_public_key}" ]]; then
   echo "3) Add the manual pages deploy SSH key as deploy key to the manual target repository"
-  echo "   - Target repository (publish.yaml -> manual.target_repo): ${manual_target_repo:-${fork_path}}"
+  echo "   - Target repository (release.yaml -> manual.target_repo): ${manual_target_repo:-${fork_path}}"
   echo "   - Deploy SSH public key (public-keys.yaml -> manual_pages.public_key_openssh): ${manual_pages_deploy_public_key}"
 fi

@@ -24,18 +24,6 @@ jobs:
           fetch-depth: 0
           ref: refs/tags/${{ github.ref_name }}
 
-      - name: Setup Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: "24"
-          cache: npm
-          cache-dependency-path: docs/site/package-lock.json
-
       - name: Install cosign
         uses: ./.github/actions/install-cosign
 
@@ -50,17 +38,6 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
           SOPS_AGE_KEY_PUBLISH: ${{ secrets.SOPS_AGE_KEY_PUBLISH }}
         run: ./scripts/publish.sh verify
-
-      - name: Build and publish manual
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          GITHUB_SHA: ${{ github.sha }}
-          HYDRA_MANUAL_PAGES_TARGET_DIR: docs
-          HYDRA_MANUAL_PAGES_TARGET_REPO: ${{ github.repository }}
-          RELEASE_TAG: ${{ github.ref_name }}
-          SOPS_AGE_KEY_PUBLISH: ${{ secrets.SOPS_AGE_KEY_PUBLISH }}
-        run: ./scripts/publish.sh manual
 
       - name: Build and publish CLI
         env:

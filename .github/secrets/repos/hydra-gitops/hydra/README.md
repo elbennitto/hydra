@@ -6,7 +6,8 @@ This directory contains repository scoped secret material for `hydra-gitops/hydr
 
 - `public-keys.yaml`: non-sensitive public keys and target GitHub secret names.
 - `git.yaml`: non-sensitive git identity settings (user/author/committer).
-- `publish.yaml`: non-sensitive publish settings (Homebrew tap deploy target repository plus manual GitHub Pages domain/site URL/target repo/target dir).
+- `publish.yaml`: non-sensitive publish settings (Homebrew tap deploy target repository).
+- `release.yaml`: non-sensitive release/manual settings (manual GitHub Pages domain/site URL/target repo/target dir).
 - `age-pipeline-keys.sops.yaml`: encrypted age private keys for CI decryption.
 - `git.sops.yaml`: encrypted semantic-release signing private key.
 - `publish.sops.yaml`: encrypted cosign private key, Homebrew tap deploy key, and manual pages deploy SSH key.
@@ -82,7 +83,7 @@ The script configures:
   - public key in `public-keys.yaml` at `manual_pages.public_key_openssh`
   - private key in `publish.sops.yaml` at `manual.pages_deploy_key`
 - Homebrew tap deploy target repository in `publish.yaml` at `homebrew.tap_deploy_target_repo`.
-- Manual pages domain in `publish.yaml` at `manual.pages_domain`.
-- Manual pages site URL in `publish.yaml` at `manual.site_url`.
-- Manual pages target repository in `publish.yaml` at `manual.target_repo`.
-- Manual pages target directory in `publish.yaml` at `manual.target_dir`.
+- Manual pages domain in `release.yaml` at `manual.pages_domain`.
+- Manual pages site URL in `release.yaml` at `manual.site_url`.
+- Manual pages target repository in `release.yaml` at `manual.target_repo`.
+- Manual pages target directory in `release.yaml` at `manual.target_dir`.

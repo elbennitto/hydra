@@ -180,8 +180,18 @@ extract_git_identity_field() {
 }
 
 extract_publish_field() {
-  local section_name="$1"
-  local field_name="$2"
+  local file_path=""
+  local section_name=""
+  local field_name=""
+  if [[ $# -eq 3 ]]; then
+    file_path="$1"
+    section_name="$2"
+    field_name="$3"
+  else
+    file_path="${secrets_dir}/publish.yaml"
+    section_name="$1"
+    field_name="$2"
+  fi
 
   awk -v section="${section_name}" -v field="${field_name}" '
     $0 ~ "^[[:space:]]*" section ":[[:space:]]*$" { in_section=1; next }
@@ -196,7 +206,7 @@ extract_publish_field() {
       print value
       exit
     }
-  ' "${secrets_dir}/publish.yaml"
+  ' "${file_path}"
 }
 
 load_git_identity_from_config() {
@@ -332,21 +342,21 @@ load_publish_secrets() {
 load_manual_publish_settings() {
   ensure_sops_key
 
-  local publish_public_config_file="${secrets_dir}/publish.yaml"
-  if [[ ! -f "${publish_public_config_file}" ]]; then
-    echo "Missing required publish config: ${publish_public_config_file}" >&2
+  local release_public_config_file="${secrets_dir}/release.yaml"
+  if [[ ! -f "${release_public_config_file}" ]]; then
+    echo "Missing required release config: ${release_public_config_file}" >&2
     exit 1
   fi
 
   manual_pages_domain="${HYDRA_MANUAL_PAGES_DOMAIN:-}"
   if [[ -z "${manual_pages_domain}" ]]; then
-    manual_pages_domain="$(extract_publish_field "manual" "pages_domain")"
+    manual_pages_domain="$(extract_publish_field "${release_public_config_file}" "manual" "pages_domain")"
   fi
   manual_pages_domain="${manual_pages_domain:-docs.hydra-gitops.org}"
 
   manual_site_url="${HYDRA_DOCS_SITE_URL:-}"
   if [[ -z "${manual_site_url}" ]]; then
-    manual_site_url="$(extract_publish_field "manual" "site_url")"
+    manual_site_url="$(extract_publish_field "${release_public_config_file}" "manual" "site_url")"
   fi
   if [[ -z "${manual_site_url}" ]]; then
     manual_site_url="https://${manual_pages_domain}/"
@@ -354,7 +364,7 @@ load_manual_publish_settings() {
 
   manual_pages_target_repo="${HYDRA_MANUAL_PAGES_TARGET_REPO:-}"
   if [[ -z "${manual_pages_target_repo}" ]]; then
-    manual_pages_target_repo="$(extract_publish_field "manual" "target_repo")"
+    manual_pages_target_repo="$(extract_publish_field "${release_public_config_file}" "manual" "target_repo")"
   fi
   if [[ -z "${manual_pages_target_repo}" ]]; then
     manual_pages_target_repo="${GITHUB_REPOSITORY:-${HYDRA_SECRETS_REPO:-}}"
@@ -362,7 +372,7 @@ load_manual_publish_settings() {
 
   manual_pages_target_dir="${HYDRA_MANUAL_PAGES_TARGET_DIR:-}"
   if [[ -z "${manual_pages_target_dir}" ]]; then
-    manual_pages_target_dir="$(extract_publish_field "manual" "target_dir")"
+    manual_pages_target_dir="$(extract_publish_field "${release_public_config_file}" "manual" "target_dir")"
   fi
   manual_pages_target_dir="${manual_pages_target_dir:-.}"
   manual_pages_target_dir="${manual_pages_target_dir#/}"
@@ -667,16 +677,6 @@ run_manual() {
     git -C "${target_dir}" remote add origin "${deploy_remote}"
   fi
 
-  if [[ "${manual_pages_target_dir}" == "." ]]; then
-    find "${target_dir}" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
-    cp -a "${source_dir}/." "${target_dir}/"
-  else
-    deploy_path="${target_dir}/${manual_pages_target_dir}"
-    rm -rf "${deploy_path}"
-    mkdir -p "${deploy_path}"
-    cp -a "${source_dir}/." "${deploy_path}/"
-  fi
-
   git -C "${target_dir}" config user.name "${git_user_name}"
   git -C "${target_dir}" config user.email "${git_user_email}"
   git -C "${target_dir}" config gpg.format ssh
@@ -684,31 +684,73 @@ run_manual() {
   git -C "${target_dir}" config commit.gpgsign true
   git -C "${target_dir}" config gpg.ssh.allowedSignersFile "${git_signing_allowed_signers}"
 
-  git -C "${target_dir}" add --all
-  if git -C "${target_dir}" diff --cached --quiet; then
-    echo "Manual site already up to date; nothing to publish"
-    return
-  fi
-
   local source_revision
   source_revision="${GITHUB_SHA:-$(git -C "${repo_root}" rev-parse HEAD)}"
 
-  if git -C "${target_dir}" rev-parse --verify gh-pages >/dev/null 2>&1; then
-    git -C "${target_dir}" checkout gh-pages
-  elif git -C "${target_dir}" rev-parse --verify main >/dev/null 2>&1; then
-    git -C "${target_dir}" checkout -B gh-pages
-  else
-    git -C "${target_dir}" checkout --orphan gh-pages
-  fi
+  local max_push_attempts push_attempt branch_exists="false"
+  max_push_attempts=3
 
-  git -C "${target_dir}" add --all
-  git -C "${target_dir}" commit -S -m "docs: publish manual from ${source_revision}"
+  for ((push_attempt = 1; push_attempt <= max_push_attempts; push_attempt++)); do
+    if [[ "${use_https_token}" == "true" ]]; then
+      if git -C "${target_dir}" -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" fetch --depth 1 origin gh-pages:refs/remotes/origin/gh-pages >/dev/null 2>&1; then
+        branch_exists="true"
+      else
+        branch_exists="false"
+      fi
+    elif GIT_SSH_COMMAND="${deploy_ssh_command}" git -C "${target_dir}" fetch --depth 1 origin gh-pages:refs/remotes/origin/gh-pages >/dev/null 2>&1; then
+      branch_exists="true"
+    else
+      branch_exists="false"
+    fi
 
-  if [[ "${use_https_token}" == "true" ]]; then
-    git -C "${target_dir}" -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" push origin HEAD:gh-pages
-  else
-    GIT_SSH_COMMAND="${deploy_ssh_command}" git -C "${target_dir}" push origin HEAD:gh-pages
-  fi
+    if [[ "${branch_exists}" == "true" ]]; then
+      if git -C "${target_dir}" show-ref --verify --quiet refs/heads/gh-pages; then
+        git -C "${target_dir}" checkout gh-pages
+      else
+        git -C "${target_dir}" checkout -B gh-pages refs/remotes/origin/gh-pages
+      fi
+      git -C "${target_dir}" reset --hard refs/remotes/origin/gh-pages
+    elif git -C "${target_dir}" rev-parse --verify main >/dev/null 2>&1; then
+      git -C "${target_dir}" checkout -B gh-pages
+      find "${target_dir}" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+    else
+      git -C "${target_dir}" checkout --orphan gh-pages
+      find "${target_dir}" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+    fi
+
+    if [[ "${manual_pages_target_dir}" == "." ]]; then
+      find "${target_dir}" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+      cp -a "${source_dir}/." "${target_dir}/"
+    else
+      deploy_path="${target_dir}/${manual_pages_target_dir}"
+      rm -rf "${deploy_path}"
+      mkdir -p "${deploy_path}"
+      cp -a "${source_dir}/." "${deploy_path}/"
+    fi
+
+    git -C "${target_dir}" add --all
+    if git -C "${target_dir}" diff --cached --quiet; then
+      echo "Manual site already up to date; nothing to publish"
+      return
+    fi
+
+    git -C "${target_dir}" commit -S -m "docs: publish manual from ${source_revision}"
+
+    if [[ "${use_https_token}" == "true" ]]; then
+      if git -C "${target_dir}" -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" push origin HEAD:gh-pages; then
+        return
+      fi
+    elif GIT_SSH_COMMAND="${deploy_ssh_command}" git -C "${target_dir}" push origin HEAD:gh-pages; then
+      return
+    fi
+
+    if (( push_attempt < max_push_attempts )); then
+      echo "Push to gh-pages was rejected; refreshing remote branch and retrying (${push_attempt}/${max_push_attempts})"
+    fi
+  done
+
+  echo "Failed to publish manual after ${max_push_attempts} attempts because gh-pages kept changing" >&2
+  exit 1
 }
 
 usage() {

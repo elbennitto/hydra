@@ -12,6 +12,61 @@ permissions:
   pull-requests: write # semantic-release/github may comment on PRs
 
 jobs:
+  manual:
+    name: Deploy manual
+    environment: release
+    runs-on: ubuntu-24.04
+    env:
+      HYDRA_SECRETS_REPO: ${{ github.repository }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Detect manual changes
+        id: manual_changes
+        uses: dorny/paths-filter@v4
+        with:
+          filters: |
+            manual:
+              - 'docs/manual/**'
+              - 'docs/site/**'
+              - 'scripts/publish.sh'
+              - '.github/secrets/**'
+
+      - name: Setup Python
+        if: steps.manual_changes.outputs.manual == 'true'
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Setup Node.js
+        if: steps.manual_changes.outputs.manual == 'true'
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: docs/site/package-lock.json
+
+      - name: Install sops
+        if: steps.manual_changes.outputs.manual == 'true'
+        uses: ./.github/actions/install-sops
+
+      - name: Build and publish manual
+        if: steps.manual_changes.outputs.manual == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_SHA: ${{ github.sha }}
+          HYDRA_MANUAL_PAGES_TARGET_DIR: docs
+          HYDRA_MANUAL_PAGES_TARGET_REPO: ${{ github.repository }}
+          SOPS_AGE_KEY_RELEASE: ${{ secrets.SOPS_AGE_KEY_RELEASE }}
+        run: |
+          export SOPS_AGE_KEY_PUBLISH="${SOPS_AGE_KEY_RELEASE}"
+          ./scripts/publish.sh manual
+
   release:
     name: Release
     environment: release

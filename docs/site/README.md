@@ -98,11 +98,11 @@ Then rebuild or restart `mkdocs serve`.
 
 ## Production deploy
 
-GitHub Actions workflow: `.github/workflows/publish.yml` (step `Build and publish manual`)
+GitHub Actions workflow: `.github/workflows/release.yml` (job `Deploy manual`)
 Publishes `hydra/docs/site/site/` to GitHub Pages (`gh-pages`) with custom domain (default `docs.hydra-gitops.org`).
 
-Per-fork domain and site URL are configured in `.github/secrets/repos/<owner>/<repo>/publish.yaml` under `manual.pages_domain` and `manual.site_url`.
-Optional overrides for target repository and target directory can be set via `manual.target_repo` and `manual.target_dir`.
+Per-fork domain and site URL are configured in `.github/secrets/repos/<owner>/<repo>/release.yaml` under `manual.pages_domain` and `manual.site_url`.
+Optional overrides for target repository and target directory can be set there via `manual.target_repo` and `manual.target_dir`.
 Manual deploy uses an SSH deploy key loaded from `.github/secrets/repos/<owner>/<repo>/publish.sops.yaml` at `manual.pages_deploy_key` only when the publish target requires SSH authentication.
 
 ## Troubleshooting

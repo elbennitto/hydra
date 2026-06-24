@@ -39,9 +39,17 @@ fork_secrets_dir_rel="${2:-.github/secrets/repos/${repo}}"
 fork_secrets_dir="${repo_root}/${fork_secrets_dir_rel}"
 age_keys_file="${fork_secrets_dir}/age-pipeline-keys.sops.yaml"
 public_keys_file="${fork_secrets_dir}/public-keys.yaml"
+publish_public_config_file="${fork_secrets_dir}/publish.yaml"
+release_public_config_file="${fork_secrets_dir}/release.yaml"
 
 hydra_bin=""
 signed_commits_ruleset_name="Hydra Require Signed Commits"
+manual_pages_repo=""
+manual_pages_owner=""
+manual_pages_name=""
+manual_pages_domain=""
+manual_pages_source_branch="gh-pages"
+manual_pages_source_path="/docs"
 
 require_command() {
   local cmd="$1"
@@ -97,6 +105,25 @@ set_environment_secret_from_age_file() {
   gh secret set "${secret_name}" --env "${environment}" --repo "${repo}" < <(
     sops -d "${age_keys_file}" | "${hydra_bin}" yq eval -r "${yq_path}" -
   )
+}
+
+read_config_value() {
+  local file_path=""
+  local yq_path=""
+  if [[ $# -eq 2 ]]; then
+    file_path="$1"
+    yq_path="$2"
+  else
+    file_path="${publish_public_config_file}"
+    yq_path="$1"
+  fi
+  local value=""
+
+  value="$("${hydra_bin}" yq eval -r "${yq_path} // \"\"" "${file_path}")"
+  if [[ "${value}" == "null" ]]; then
+    value=""
+  fi
+  printf '%s\n' "${value}"
 }
 
 ensure_user_ssh_signing_key() {
@@ -308,6 +335,66 @@ JSON
 JSON
 }
 
+load_manual_pages_settings() {
+  manual_pages_domain="$(read_config_value "${release_public_config_file}" '.manual.pages_domain')"
+  manual_pages_repo="$(read_config_value "${release_public_config_file}" '.manual.target_repo')"
+
+  if [[ -z "${manual_pages_domain}" ]]; then
+    manual_pages_domain="docs.hydra-gitops.org"
+  fi
+
+  if [[ -z "${manual_pages_repo}" ]]; then
+    manual_pages_repo="${repo}"
+  fi
+
+  if [[ ! "${manual_pages_repo}" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
+    echo "Invalid manual.target_repo in ${release_public_config_file}: ${manual_pages_repo}" >&2
+    exit 1
+  fi
+
+  manual_pages_owner="${manual_pages_repo%/*}"
+  manual_pages_name="${manual_pages_repo#*/}"
+}
+
+ensure_github_pages_site() {
+  local pages_endpoint="repos/${manual_pages_owner}/${manual_pages_name}/pages"
+
+  if gh api "${pages_endpoint}" >/dev/null 2>&1; then
+    gh api --method PUT "${pages_endpoint}" --input - >/dev/null <<JSON
+{
+  "build_type": "legacy",
+  "cname": "${manual_pages_domain}",
+  "source": {
+    "branch": "${manual_pages_source_branch}",
+    "path": "${manual_pages_source_path}"
+  }
+}
+JSON
+    return
+  fi
+
+  gh api --method POST "${pages_endpoint}" --input - >/dev/null <<JSON
+{
+  "build_type": "legacy",
+  "source": {
+    "branch": "${manual_pages_source_branch}",
+    "path": "${manual_pages_source_path}"
+  }
+}
+JSON
+
+  gh api --method PUT "${pages_endpoint}" --input - >/dev/null <<JSON
+{
+  "build_type": "legacy",
+  "cname": "${manual_pages_domain}",
+  "source": {
+    "branch": "${manual_pages_source_branch}",
+    "path": "${manual_pages_source_path}"
+  }
+}
+JSON
+}
+
 ensure_signed_commits_ruleset() {
   local full_ref
   local include_ref
@@ -375,11 +462,22 @@ if [[ ! -f "${public_keys_file}" ]]; then
   exit 1
 fi
 
+if [[ ! -f "${publish_public_config_file}" ]]; then
+  echo "Missing file: ${publish_public_config_file}" >&2
+  exit 1
+fi
+
+if [[ ! -f "${release_public_config_file}" ]]; then
+  echo "Missing file: ${release_public_config_file}" >&2
+  exit 1
+fi
+
 echo "Configuring GitHub settings for ${repo}"
 
 owner="${repo%/*}"
 name="${repo#*/}"
 default_branch="$(gh repo view "${repo}" --json defaultBranchRef --jq '.defaultBranchRef.name')"
+load_manual_pages_settings
 
 echo "Ensuring GitHub Actions is enabled"
 ensure_github_actions_enabled
@@ -417,6 +515,9 @@ ensure_release_signing_key_accepted
 
 echo "Ensuring signed commits are required on the default branch"
 ensure_signed_commits_ruleset
+
+echo "Ensuring GitHub Pages publishes ${manual_pages_repo} from ${manual_pages_source_branch}:${manual_pages_source_path} with CNAME ${manual_pages_domain}"
+ensure_github_pages_site
 
 echo "Running settings validation"
 GITHUB_REPOSITORY="${repo}" "${script_dir}/check-github-repository-settings.sh"
