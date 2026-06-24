@@ -60,6 +60,9 @@ steps:
     typed: true
   - assert:
       cast: 'plain(cast).contains("/home/hydra/group/context/cluster/app/templates") && plain(cast).contains("/home/hydra/group/context/cluster/app/templates/deployment.yaml") && plain(cast).contains("/home/hydra/group/context/cluster/app/values.yaml")'
+  - run: hydra local apps
+    typed: true
+  - marker: hydra local apps
   - run: helm template "$HYDRA_CONTEXT/cluster/app"
     typed: true
   - marker: helm template

@@ -60,6 +60,9 @@ steps:
   - run: hydra message --text 'setup finished'
     input: false
   - background: reset
+  - run: helm show values "$HYDRA_CONTEXT/cluster/app"
+    typed: true
+  - marker: helm show values
   - run: hydra local values cluster.app
     typed: true
   - marker: hydra local values

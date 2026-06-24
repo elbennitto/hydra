@@ -8,6 +8,7 @@ By the end of this chapter, the app chart renders its own `Deployment` and resou
 
 ## Related CLI Pages
 
+- [`hydra local apps`](../../commands/local/apps.md) — resolve app-id patterns and verify app discovery before rendering
 - [`hydra local template`](../../commands/local/template.md) — render manifests locally
 - [`hydra local source`](../../commands/local/source.md) — print chart template sources, including dependencies
 - [`hydra local values`](../../commands/local/values.md) — print the computed Helm values for one app
@@ -65,7 +66,15 @@ global:
 
 This is still a very small Helm chart, but now the container image comes from `values.yaml` via `.Values.image`. The added `global.hydra.path: .` also gives Hydra the minimal app metadata it needs for local rendering. Together, that keeps the manifest reusable and makes later value overrides easier, while still giving Hydra one simple Kubernetes resource it can render locally.
 
-So far, there is still no difference in the chart render itself between Hydra and Helm. You can render the new chart with [`hydra local template`](../../commands/local/template.md); internally, Hydra uses [`helm template`](../../commands/wrapped/helm.md) for that local render.
+So far, there is still no difference in the chart render itself between Hydra and Helm. Before rendering, it is useful to verify that Hydra discovers the app as expected:
+
+```bash
+hydra local apps
+```
+
+For this example, the output should include `cluster.app`.
+
+You can then render the new chart with [`hydra local template`](../../commands/local/template.md); internally, Hydra uses [`helm template`](../../commands/wrapped/helm.md) for that local render.
 
 That is why it is useful to compare both commands:
 
@@ -190,7 +199,15 @@ Example files on GitHub: <https://github.com/hydra-gitops/hydra/tree/main/docs/t
 
 ## Step 6: Show the Computed Values
 
-Before looking at rendered manifests or template sources, it is often useful to inspect the values that actually reach the chart after Hydra has merged the available value layers.
+Before looking at rendered manifests or template sources, it is often useful to compare the chart defaults from Helm with the values that actually reach the chart after Hydra has merged the available value layers.
+
+With plain Helm, you can inspect only the chart's own default values like this:
+
+```bash
+helm show values "$HYDRA_CONTEXT/cluster/app"
+```
+
+That shows the defaults defined by the app chart itself, but it does not include any extra value layers from the surrounding Hydra context.
 
 With [`hydra local values`](../../commands/local/values.md), you can print those computed Helm values directly:
 
@@ -200,7 +217,7 @@ hydra local values cluster.app
 
 This is especially useful once a chart has its own `values.yaml`, inherits defaults from the surrounding Hydra context, and may later receive more overrides from higher levels.
 
-Plain Helm does not offer the same view in this form. With Helm, you usually inspect the individual `values.yaml` files or keep track of the `-f` files you pass yourself. [`hydra local values`](../../commands/local/values.md) instead shows the merged result that Hydra computes for one app inside the context hierarchy, so you can verify the effective input before looking at manifests.
+Plain Helm does not offer the same merged view in this form. With Helm, you usually inspect the individual `values.yaml` files, run `helm show values` for chart defaults, or keep track of the `-f` files you pass yourself. [`hydra local values`](../../commands/local/values.md) instead shows the merged result that Hydra computes for one app inside the context hierarchy, so you can verify the effective input before looking at manifests.
 
 You can place `values.yaml` files at group, context, cluster, and root app level. Each file applies to its own level and everything below it. For example, a `values.yaml` on cluster level applies to all root apps in that cluster. [`hydra local values`](../../commands/local/values.md) shows the merged result of those value layers.
 

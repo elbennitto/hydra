@@ -52,6 +52,7 @@ hydra local apps in-cluster.** --exclude-app in-cluster.apps.argocd
 ## Tutorials
 
 - [Create a Hydra App](../../tutorials/introduction/01-00-create-a-hydra-app.md) — uses `hydra local apps` to validate the context layout and verify app discovery
+- [Adding Manifests to the Helm Charts](../../tutorials/introduction/02-00-adding-manifests-to-the-helm-charts.md) — uses `hydra local apps` as a quick app-discovery check before local rendering
 
 ## See Also
 
