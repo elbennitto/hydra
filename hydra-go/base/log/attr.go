@@ -2,6 +2,11 @@ package log
 
 import "log/slog"
 
+type extendedHelpArg struct {
+	key   string
+	value any
+}
+
 // Attr is an alias for slog.Attr
 type Attr = slog.Attr
 
@@ -44,4 +49,10 @@ func Any(key string, value any) Attr {
 // Err returns an Attr for an error value with key "err".
 func Err(err error) Attr {
 	return slog.Any("err", err)
+}
+
+// ExtendedHelp passes structured data to error markdown templates.
+// This argument is not emitted to the logger output.
+func ExtendedHelp(key string, value any) any {
+	return extendedHelpArg{key: key, value: value}
 }

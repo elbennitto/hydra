@@ -794,7 +794,7 @@ func ResolvePatterns(patterns []string, allAppNames []string) ([]string, []strin
 		}
 
 		if matched == 0 {
-			return nil, nil, log.CreateError(errors.ErrSyncWindowFailed,
+			return nil, nil, log.CreateError(errors.ErrAppPatternNoMatch,
 				"pattern '{pattern}' matched no applications",
 				log.String("pattern", pattern))
 		}

@@ -1,8 +1,17 @@
 package errors
 
+import stderrors "errors"
+
 type Error interface {
 	error
 	ErrorId() ErrorId
+}
+
+// ErrorTemplateParamsProvider optionally exposes structured parameters captured
+// when an error was created. Callers can use these values for rich output,
+// such as rendering markdown templates.
+type ErrorTemplateParamsProvider interface {
+	ErrorTemplateParams() map[string]any
 }
 
 type ErrorId string
@@ -25,6 +34,16 @@ func IsKnownError(err error) bool {
 	return errorId(err) != ErrUnknown
 }
 
+// TemplateParams returns structured template parameters when err implements
+// [ErrorTemplateParamsProvider]. Wrapped errors are supported via errors.As.
+func TemplateParams(err error) (map[string]any, bool) {
+	var withParams ErrorTemplateParamsProvider
+	if stderrors.As(err, &withParams) {
+		return withParams.ErrorTemplateParams(), true
+	}
+	return nil, false
+}
+
 const ErrUnknown ErrorId = ""
 
 func (id ErrorId) MatchesError(err error) bool {
@@ -36,6 +55,7 @@ const (
 	ErrBootstrapGuard                             ErrorId = "ErrBootstrapGuard"
 	ErrAppIdIsNoRootApp                           ErrorId = "ErrAppIdIsNoRootApp"
 	ErrAppIdsDifferentClusters                    ErrorId = "ErrAppIdsDifferentClusters"
+	ErrAppPatternNoMatch                          ErrorId = "ErrAppPatternNoMatch"
 	ErrAppNotEnabled                              ErrorId = "ErrAppNotEnabled"
 	ErrAppNotFound                                ErrorId = "ErrAppNotFound"
 	ErrCelCompileFailed                           ErrorId = "ErrCelCompileFailed"
@@ -56,6 +76,7 @@ const (
 	ErrFailedToParseReplicas                      ErrorId = "ErrFailedToParseReplicas"
 	ErrHelmTemplateFailed                         ErrorId = "ErrHelmTemplateFailed"
 	ErrHydraConfigError                           ErrorId = "ErrHydraConfigError"
+	ErrCloneTargetOwnerAmbiguous                  ErrorId = "ErrCloneTargetOwnerAmbiguous"
 	ErrHydraContextProblem                        ErrorId = "ErrHydraContextProblem"
 	ErrInternalError                              ErrorId = "ErrInternalError"
 	ErrInvalidCrdMode                             ErrorId = "ErrInvalidCrdMode"

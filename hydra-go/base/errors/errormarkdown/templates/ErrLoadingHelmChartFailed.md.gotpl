@@ -1,0 +1,32 @@
+# Extended Error Help: {{ .errorCode }}
+
+## What happened?
+Hydra could not load the Helm chart at:
+
+```text
+{{ .path }}
+```
+
+{{- if .chartYamlPath }}
+The first file to check is:
+
+```text
+{{ .chartYamlPath }}
+```
+{{- end }}
+
+## Why Hydra stops here
+Root apps are discovered and rendered from a valid Helm chart.
+If `Chart.yaml` is missing or invalid, Hydra cannot determine chart metadata, dependencies, or child apps.
+
+## Resolution
+1. Make sure the app directory contains a valid `Chart.yaml`.
+2. A minimal chart file looks like this:
+
+```yaml
+apiVersion: v2
+name: app
+version: 0.1.0
+```
+
+3. Retry `hydra local apps` or the render command after fixing the chart.

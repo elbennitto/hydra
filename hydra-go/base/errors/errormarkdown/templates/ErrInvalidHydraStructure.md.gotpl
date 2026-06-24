@@ -1,0 +1,59 @@
+# Extended Error Help: {{ .errorCode }}
+
+## What happened?
+Hydra found a repository or directory layout that does not match the structure it expects.
+
+{{- if eq .reason "directory-missing" }}
+The configured context path does not exist yet:
+
+```text
+{{ .path }}
+```
+{{- else if .groupValuesPath }}
+Hydra checked this directory as the intended context:
+
+```text
+{{ .path }}
+```
+
+It could not confirm that this directory belongs to a valid Hydra group/context hierarchy.
+{{- else if .level }}
+Hydra resolved an invalid type for this repository level:
+
+```text
+level={{ .level }}
+path={{ .path }}
+```
+{{- end }}
+
+## Why Hydra stops here
+Hydra resolves apps from the repository structure.
+If the context directory is missing, or the required `global.hydra.type` metadata is not set correctly, later commands would inspect the wrong location or infer the wrong app layout.
+
+## Resolution
+{{- if eq .reason "directory-missing" }}
+1. Create the directory first.
+2. Point `HYDRA_CONTEXT` or `--hydra-context` to that existing directory.
+{{- else if eq .reason "context-values-missing" }}
+1. Create `{{ .groupValuesPath }}` with `global.hydra.type: group`.
+2. Or add `global.hydra.type: context` to `{{ .valuesPath }}`.
+3. Retry the command after one of those files exists.
+{{- else if eq .reason "context-type-missing" }}
+1. Add `global.hydra.type: group` to `{{ .groupValuesPath }}`.
+2. Or add `global.hydra.type: context` to `{{ .valuesPath }}`.
+{{- else if eq .reason "context-type-mismatch" }}
+1. Recommended: mark the parent group in `{{ .groupValuesPath }}` with `global.hydra.type: group`.
+2. Alternative: change `{{ .valuesPath }}` from `global.hydra.type: {{ .actualType }}` to `global.hydra.type: {{ .expectedType }}`.
+{{- else if .level }}
+1. Check the `global.hydra.type` values on this path and its parent directories.
+2. Make sure this level resolves to the expected type instead of `{{ .actual }}`.
+{{- else }}
+1. Check the directory layout around `{{ .path }}`.
+2. Verify the required `global.hydra.type` values in the matching `values.yaml` files.
+{{- end }}
+
+## Common causes
+This usually means one of these setup steps is still missing:
+- the context directory itself
+- the parent `values.yaml` with `global.hydra.type: group`
+- a valid context or cluster hierarchy below that group

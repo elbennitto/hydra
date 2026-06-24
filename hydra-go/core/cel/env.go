@@ -325,10 +325,10 @@ func (p program) evalBool(input any, missingKeys types.MissingKeys) (bool, error
 			log.Any("result", refVal),
 			log.Any("entity", input),
 		)
-		return false, log.CreateError(errors.ErrEvaluationFailed,
+		return false, log.CreateError(errors.ErrDidNotEvalToBool,
 			"code '{code}' did not return a boolean result for entity {entity}: got '{result}'",
+			log.String("code", p.code),
 			log.Any("result", refVal),
-			log.String("predicate", p.code),
 			log.Any("entity", input),
 		)
 	}

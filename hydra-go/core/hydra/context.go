@@ -125,6 +125,7 @@ func createMissingContextError(l log.Logger, path string) error {
 			errors.ErrInvalidHydraStructure,
 			"could not use Hydra context path '{path}': directory does not exist. Hint: set HYDRA_CONTEXT (or --hydra-context) to an existing Hydra context root directory.",
 			log.String("path", path),
+			log.String("reason", "directory-missing"),
 		)
 	}
 
@@ -137,6 +138,7 @@ func createMissingContextError(l log.Logger, path string) error {
 			log.String("path", path),
 			log.String("valuesPath", valuesPath),
 			log.String("groupValuesPath", groupValuesPath),
+			log.String("reason", "context-values-missing"),
 		)
 	}
 
@@ -153,6 +155,7 @@ func createMissingContextError(l log.Logger, path string) error {
 			log.String("groupValuesPath", groupValuesPath),
 			log.String("actualType", directive.Type),
 			log.String("expectedType", hydraTypeContext),
+			log.String("reason", "context-type-mismatch"),
 		)
 	}
 	if !directive.HasType {
@@ -162,6 +165,7 @@ func createMissingContextError(l log.Logger, path string) error {
 			log.String("path", path),
 			log.String("valuesPath", valuesPath),
 			log.String("groupValuesPath", groupValuesPath),
+			log.String("reason", "context-type-missing"),
 		)
 	}
 
@@ -171,6 +175,7 @@ func createMissingContextError(l log.Logger, path string) error {
 		log.String("path", path),
 		log.String("valuesPath", valuesPath),
 		log.String("groupValuesPath", groupValuesPath),
+		log.String("reason", "context-invalid"),
 	)
 }
 

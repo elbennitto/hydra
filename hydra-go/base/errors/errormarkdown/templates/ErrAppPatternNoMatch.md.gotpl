@@ -1,0 +1,21 @@
+# Extended Error Help: {{ .errorCode }}
+
+## What happened?
+The app-id pattern below did not match any applications:
+
+```text
+{{ .pattern }}
+```
+
+## Why Hydra stops here
+Hydra resolved the current context successfully, but it did not find any app IDs for the requested pattern.
+This often means the context is valid already, but no root app chart exists yet.
+
+## Resolution
+{{- if eq .pattern "**" }}
+1. If you expected at least one app, create a root app directory and add a valid `Chart.yaml`.
+2. Otherwise, verify that app discovery is configured where you expect it.
+{{- else }}
+1. Check whether the requested app-id pattern is correct.
+2. Run `hydra local apps **` to inspect which app IDs Hydra currently sees.
+{{- end }}

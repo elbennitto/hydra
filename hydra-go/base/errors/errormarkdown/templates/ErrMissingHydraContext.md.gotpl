@@ -1,0 +1,25 @@
+# Extended Error Help: {{ .errorCode }}
+
+## What happened?
+Hydra needs a context path before it can inspect apps, values, or manifests.
+Neither the `--hydra-context` flag nor the `{{ .ENV }}` environment variable was set.
+
+## Why Hydra stops here
+Most local commands need to know which Hydra repository context they should read from.
+Without that path, Hydra cannot resolve clusters or applications safely.
+
+## Resolution
+Set one of these before retrying:
+
+```bash
+export {{ .ENV }}=/path/to/context
+```
+
+or:
+
+```bash
+hydra local apps --hydra-context /path/to/context
+```
+
+## Next step
+Create or choose the target context directory first, then point Hydra at it.

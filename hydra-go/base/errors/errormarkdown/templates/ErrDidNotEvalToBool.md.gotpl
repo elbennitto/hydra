@@ -1,0 +1,30 @@
+# Extended Error Help: {{ .errorCode }}
+
+## What happened?
+This CEL predicate did not return a boolean value:
+
+```text
+{{ .code }}
+```
+
+## Why Hydra stops here
+Filter flags like `--include`, `--exclude`, and `--predicate` must evaluate to `true` or `false` for each entity.
+The expression above returned some other value instead.
+
+## Resolution
+Convert the expression into an explicit boolean check.
+
+Example:
+
+```bash
+hydra local find cluster.app --include 'templateEntity.spec.template.spec.containers != null'
+```
+
+Instead of:
+
+```bash
+hydra local find cluster.app --include 'templateEntity.spec.template.spec.containers'
+```
+
+## Next step
+Make the predicate return an explicit `true` or `false` value for every entity.

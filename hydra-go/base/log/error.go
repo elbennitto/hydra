@@ -5,6 +5,7 @@ import (
 	stderrors "errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"runtime"
 	"strings"
 	"time"
@@ -15,6 +16,7 @@ import (
 type lazyError struct {
 	id      errors.ErrorId
 	message string
+	params  map[string]any
 	Log     func()
 }
 
@@ -27,6 +29,13 @@ func (e lazyError) Error() string {
 
 func (e lazyError) ErrorId() errors.ErrorId {
 	return e.id
+}
+
+func (e lazyError) ErrorTemplateParams() map[string]any {
+	if len(e.params) == 0 {
+		return nil
+	}
+	return maps.Clone(e.params)
 }
 
 // CreateError returns a lazily logged error value.
@@ -79,6 +88,8 @@ func captureStack(skip int) (uintptr, string) {
 func logWithCaller(level slog.Level, id errors.ErrorId, msg string, args ...any) error {
 	// Replace placeholders in message (no color codes for error logging)
 	message := ReplacePlaceholdersWithArgs(msg, args, "", "").Message
+	params := attrsToParamMap(args)
+	logArgs := argsForLogger(args)
 
 	// Capture the real caller PC and stack trace now (skip: Callers, captureStack, logWithCaller, CreateError/CreateWarn/CreateInfo)
 	callerPC, stack := captureStack(4)
@@ -86,19 +97,60 @@ func logWithCaller(level slog.Level, id errors.ErrorId, msg string, args ...any)
 	return &lazyError{
 		id:      id,
 		message: message,
+		params:  params,
 		Log: func() {
 			// Build a slog.Record manually with the real caller's PC
 			r := slog.NewRecord(time.Now(), level, msg, callerPC)
 			if slog.Default().Enabled(context.Background(), slog.LevelDebug) {
 				r.Add(slog.String("logId", string(id)))
 			}
-			r.Add(args...)
+			r.Add(logArgs...)
 			if level >= slog.LevelError && stack != "" && slog.Default().Enabled(context.Background(), slog.LevelDebug) {
 				r.Add(slog.String("stack", "\n"+stack))
 			}
 			_ = slog.Default().Handler().Handle(context.Background(), r)
 		},
 	}
+}
+
+func attrsToParamMap(args []any) map[string]any {
+	if len(args) == 0 {
+		return nil
+	}
+	out := map[string]any{}
+	for i := range args {
+		switch arg := args[i].(type) {
+		case slog.Attr:
+			if arg.Key == "" {
+				continue
+			}
+			out[arg.Key] = arg.Value.Any()
+		case extendedHelpArg:
+			if arg.key == "" {
+				continue
+			}
+			// ExtendedHelp is markdown-only and can intentionally override string attrs.
+			out[arg.key] = arg.value
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func argsForLogger(args []any) []any {
+	if len(args) == 0 {
+		return nil
+	}
+	out := make([]any, 0, len(args))
+	for i := range args {
+		if _, ok := args[i].(extendedHelpArg); ok {
+			continue
+		}
+		out = append(out, args[i])
+	}
+	return out
 }
 
 // returnedErrorAlreadyEmitted wraps an error whose causes were already emitted via [LogLazy]
@@ -121,6 +173,13 @@ func (e *returnedErrorAlreadyEmitted) ErrorId() errors.ErrorId {
 		return he.ErrorId()
 	}
 	return errors.ErrUnknown
+}
+
+func (e *returnedErrorAlreadyEmitted) ErrorTemplateParams() map[string]any {
+	if withParams, ok := e.err.(errors.ErrorTemplateParamsProvider); ok {
+		return withParams.ErrorTemplateParams()
+	}
+	return nil
 }
 
 var _ errors.Error = (*returnedErrorAlreadyEmitted)(nil)

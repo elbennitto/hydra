@@ -102,17 +102,27 @@ func BuildNamespaceOwnerMap(entities entity.Entities, key types.EntityKeyUnstruc
 			return strings.Compare(string(a.ns), string(b.ns))
 		})
 		var parts []string
+		var ambiguousHelp []map[string]any
 		for _, a := range ambiguous {
 			appStrs := make([]string, len(a.apps))
 			for i, id := range a.apps {
 				appStrs[i] = string(id)
 			}
 			parts = append(parts, string(a.ns)+": ["+strings.Join(appStrs, ", ")+"]")
+			ambiguousHelp = append(ambiguousHelp, map[string]any{
+				"namespace": string(a.ns),
+				"apps":      appStrs,
+			})
 		}
 		summary := strings.Join(parts, "; ")
-		return nil, log.CreateError(errors.ErrHydraConfigError,
+		return nil, log.CreateError(errors.ErrCloneTargetOwnerAmbiguous,
 			"ambiguous app owners for clone target resolution in {count} namespace(s): {summary} — to fix this, add each namespace to global.hydra.ownerNamespaces in the owning app's values so ownership is declared explicitly",
-			log.Int("count", len(ambiguous)), log.String("summary", summary))
+			log.Int("count", len(ambiguous)),
+			log.String("summary", summary),
+			log.String("ambiguous", summary),
+			log.Any("namespaces", parts),
+			log.ExtendedHelp("ambiguous", ambiguousHelp),
+		)
 	}
 	return owner, nil
 }

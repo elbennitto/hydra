@@ -1,0 +1,45 @@
+# Extended Error Help: {{ .errorCode }}
+
+## What happened?
+Hydra could not determine a unique app owner for clone target ownership mapping.
+At least one namespace matched multiple possible owning apps.
+
+## What is clone target ownership mapping?
+Clone target ownership mapping is Hydra's step that decides which app owns cloned resources in each target namespace.
+Hydra uses this ownership to assign the correct app context, ownership metadata, and follow-up lifecycle actions for clones.
+If more than one app can own the same target namespace, the mapping is ambiguous and Hydra cannot proceed safely.
+
+## Why does Hydra stop here?
+Without a unique owner, Hydra cannot assign clone targets safely.
+This may lead to incorrect ownership decisions later.
+
+{{- if .ambiguous }}
+## Detailed ambiguous ownership data
+{{- range .ambiguous }}
+- Namespace: {{ .namespace }}
+  Possible owner apps:
+{{- range .apps }}
+    - {{ . }}
+{{- end }}
+{{- end }}
+{{- end }}
+
+## Resolution
+1. Choose exactly one owning app for each affected namespace.
+2. Add the namespace to that app's values under `global.hydra.ownerNamespaces`.
+3. Make sure the same namespace is not declared as owned by multiple apps.
+
+Example:
+
+```yaml
+global:
+  hydra:
+    ownerNamespaces:
+{{- if and .ambiguous (gt (len .ambiguous) 0) }}
+    - {{ (index .ambiguous 0).namespace }}
+{{- else if and .namespaces (gt (len .namespaces) 0) }}
+    - {{ index .namespaces 0 }}
+{{- else }}
+    - <namespace>
+{{- end }}
+```

@@ -18,6 +18,11 @@ type Config struct {
 // lastLogConfig is the most recent [Configure] argument, used to restore plain stderr logging after [CloseActiveProgressBars].
 var lastLogConfig Config
 
+// ColorEnabled reports whether the current log configuration uses ANSI colors.
+func ColorEnabled() bool {
+	return lastLogConfig.Colors != nil
+}
+
 func Configure(config Config) {
 	lastLogConfig = config
 	activeProgressBars = config.ProgressBars

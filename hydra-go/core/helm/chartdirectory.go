@@ -141,6 +141,7 @@ func (p PersistentChartDirectory) loadChart(
 		return ChartCacheEntry{
 			Error: log.CreateError(errors.ErrLoadingHelmChartFailed, "failed to load chart from path '{path}' in '{mode}' mode",
 				log.String("path", p.path),
+				log.String("chartYamlPath", filepath.Join(p.path, "Chart.yaml")),
 				log.String("mode", mode.String()),
 				log.Err(err)),
 		}
