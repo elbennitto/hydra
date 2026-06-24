@@ -605,7 +605,7 @@ run_container() {
 
 run_manual() {
   load_manual_publish_settings
-  load_git_identity_from_config
+  configure_git_release_identity_env
 
   local release_repo source_dir target_dir deploy_remote deploy_path
   local deploy_ssh_command="" auth_header="" use_https_token="false"
@@ -679,6 +679,10 @@ run_manual() {
 
   git -C "${target_dir}" config user.name "${git_user_name}"
   git -C "${target_dir}" config user.email "${git_user_email}"
+  git -C "${target_dir}" config gpg.format ssh
+  git -C "${target_dir}" config user.signingkey "${git_signing_key}"
+  git -C "${target_dir}" config commit.gpgsign true
+  git -C "${target_dir}" config gpg.ssh.allowedSignersFile "${git_signing_allowed_signers}"
 
   git -C "${target_dir}" add --all
   if git -C "${target_dir}" diff --cached --quiet; then
@@ -698,7 +702,7 @@ run_manual() {
   fi
 
   git -C "${target_dir}" add --all
-  git -C "${target_dir}" commit -m "docs: publish manual from ${source_revision}"
+  git -C "${target_dir}" commit -S -m "docs: publish manual from ${source_revision}"
 
   if [[ "${use_https_token}" == "true" ]]; then
     git -C "${target_dir}" -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" push origin HEAD:gh-pages
