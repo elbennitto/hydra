@@ -79,7 +79,11 @@ func NewEnv(extraOptions ...cel.EnvOption) (Env, error) {
 	options := []cel.EnvOption{
 		cel.OptionalTypes(),
 		cel.EnableIdentifierEscapeSyntax(),
-		cel.ExtendedValidations(),
+		cel.ASTValidators(
+			cel.ValidateDurationLiterals(),
+			cel.ValidateTimestampLiterals(),
+			cel.ValidateRegexLiterals(),
+		),
 		ext.Encoders(),
 		ext.Strings(),
 		ext.Lists(),

@@ -77,6 +77,30 @@ func TestFindSupportsCrossClusterMapProjection(t *testing.T) {
 	}, actual)
 }
 
+func TestFindSupportsMapProjectionWithDynamicValues(t *testing.T) {
+	configureFindTestLogging()
+	contextDir := writeFindTestContext(t)
+
+	_, result, err := Find(FindFlags{
+		HelmNetworkModeFlag: flags.HelmNetworkModeFlag{HelmNetworkMode: types.HelmNetworkModeLocal},
+		ContextFlag:         flags.ContextFlag{HydraContext: types.HydraContext(contextDir)},
+		PredicatesFlag:      flags.PredicatesFlag{Predicates: []types.CelPredicate{`kind == "KafkaUser"`}},
+		PickFlag:            flags.PickFlag{Pick: `{"id": id, "images": []}`},
+		UniqFlag:            flags.UniqFlag{Uniq: true},
+		AppIdPatterns:       []types.AppIdPattern{"target.platform.*"},
+	})
+	require.NoError(t, err)
+
+	actual, err := hyaml.FromYaml[[]map[string]any](types.YamlString(result))
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []map[string]any{
+		{"id": "kafka.strimzi.io/v1beta2/KafkaUser/alpha-ns/alpha-user-a", "images": []any{}},
+		{"id": "kafka.strimzi.io/v1beta2/KafkaUser/alpha-ns/alpha-user-b", "images": []any{}},
+		{"id": "kafka.strimzi.io/v1beta2/KafkaUser/alpha-ns/shared-user", "images": []any{}},
+		{"id": "kafka.strimzi.io/v1beta2/KafkaUser/alpha-ns/shared-user-delta", "images": []any{}},
+	}, actual)
+}
+
 func TestFindRejectsMissingNestedKeysForIncludeFilter(t *testing.T) {
 	configureFindTestLogging()
 	contextDir := writeFindTestContext(t)
