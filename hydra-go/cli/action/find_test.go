@@ -1,7 +1,9 @@
 package action
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -118,6 +120,49 @@ func TestFindRejectsMissingNestedKeysForIncludeFilter(t *testing.T) {
 	actual, err := hyaml.FromYaml[[]string](types.YamlString(result))
 	require.NoError(t, err)
 	assert.Equal(t, []string{"target.platform.beta"}, actual)
+}
+
+func TestFindSkipsMissingPickKeysPerEntity(t *testing.T) {
+	configureFindTestLogging()
+	contextDir := writeFindTestContext(t)
+
+	_, result, err := Find(FindFlags{
+		HelmNetworkModeFlag: flags.HelmNetworkModeFlag{HelmNetworkMode: types.HelmNetworkModeLocal},
+		ContextFlag:         flags.ContextFlag{HydraContext: types.HydraContext(contextDir)},
+		PredicatesFlag:      flags.PredicatesFlag{Predicates: []types.CelPredicate{`kind == "KafkaUser" || kind == "Deployment"`}},
+		PickFlag:            flags.PickFlag{Pick: `templateEntity.spec.template.spec.containers[0].name`},
+		UniqFlag:            flags.UniqFlag{Uniq: true},
+		AppIdPatterns:       []types.AppIdPattern{"target.platform.*"},
+	})
+	require.NoError(t, err)
+
+	actual, err := hyaml.FromYaml[[]string](types.YamlString(result))
+	require.NoError(t, err)
+	assert.Equal(t, []string{"beta-api"}, actual)
+}
+
+func TestFindLogsHintWhenPickSkipsAllMatches(t *testing.T) {
+	var logOutput bytes.Buffer
+	configureFindTestLoggingWithOutput(slog.LevelInfo, &logOutput)
+	contextDir := writeFindTestContext(t)
+
+	_, result, err := Find(FindFlags{
+		HelmNetworkModeFlag: flags.HelmNetworkModeFlag{HelmNetworkMode: types.HelmNetworkModeLocal},
+		ContextFlag:         flags.ContextFlag{HydraContext: types.HydraContext(contextDir)},
+		PredicatesFlag:      flags.PredicatesFlag{Predicates: []types.CelPredicate{`kind == "KafkaUser"`}},
+		PickFlag:            flags.PickFlag{Pick: `templateEntity.spec.template.spec.containers[0].name`},
+		UniqFlag:            flags.UniqFlag{Uniq: true},
+		AppIdPatterns:       []types.AppIdPattern{"target.platform.*"},
+	})
+	require.NoError(t, err)
+
+	actual, err := hyaml.FromYaml[[]string](types.YamlString(result))
+	require.NoError(t, err)
+	assert.Empty(t, actual)
+
+	logs := logOutput.String()
+	assert.Contains(t, logs, "Hint: --pick")
+	assert.Contains(t, logs, "key not found")
 }
 
 func TestFindRejectsInvalidPickExpression(t *testing.T) {
@@ -292,8 +337,18 @@ func writeFindTestFile(t *testing.T, path string, content string) {
 }
 
 func configureFindTestLogging() {
+	configureFindTestLoggingWithOutput(slog.LevelWarn, nil)
+}
+
+func configureFindTestLoggingWithOutput(level slog.Level, output io.Writer) {
+	var progressBars hlog.ProgressBars
+	if output != nil {
+		progressBars = hlog.NewDummyProgressBarsTo(output)
+	}
+
 	hlog.Configure(hlog.Config{
-		Level:      slog.LevelWarn,
-		Timestamps: false,
+		Level:        level,
+		Timestamps:   false,
+		ProgressBars: progressBars,
 	})
 }

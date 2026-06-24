@@ -83,10 +83,15 @@ func Find(f FindFlags) (hydra.Hydra, string, error) {
 	}
 
 	projected := make([]any, 0, matched.Len())
+	var lastPickKeyNotFoundErr error
 	seen := map[string]struct{}{}
 	for _, item := range matched.Items {
 		value, err := expression.Eval(item)
 		if err != nil {
+			if errors.ErrKeyNotFound.MatchesError(err) {
+				lastPickKeyNotFoundErr = err
+				continue
+			}
 			return nil, "", err
 		}
 
@@ -107,6 +112,14 @@ func Find(f FindFlags) (hydra.Hydra, string, error) {
 		}
 
 		projected = append(projected, nativeValue)
+	}
+
+	if len(projected) == 0 && lastPickKeyNotFoundErr != nil {
+		l.Info(logIdAction,
+			"Hint: --pick '{pick}' skipped all matched entities due to missing keys; last error: {err}",
+			log.String("pick", string(f.Pick)),
+			log.String("err", lastPickKeyNotFoundErr.Error()),
+		)
 	}
 
 	result, err := yq.ToYaml(f.Color, projected)
