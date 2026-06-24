@@ -1,3 +1,9 @@
+## [1.2.1](https://github.com/[secure]/compare/v1.2.0...v1.2.1) (2026-06-24)
+
+### Bug Fixes
+
+* **build:** sign github pages commit ([a5d7c4e](https://github.com/[secure]/commit/a5d7c4eb7c59778a050bfd8f51c73489ee91c076))
+
 ## [1.2.0](https://github.com/[secure]/compare/v1.1.0...v1.2.0) (2026-06-23)
 
 ### Features
