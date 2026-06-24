@@ -88,8 +88,6 @@ hydra local template cluster.app
 
 <div class="hydra-asciinema" data-cast-path="tutorials/introduction/02-01-simple-deployment.cast"></div>
 
-Example files on GitHub: <https://github.com/hydra-gitops/hydra/tree/main/docs/tutorials/introduction/02-01-simple-deployment>
-
 In this step, [`hydra local template`](../../commands/local/template.md) uses [`helm template`](../../commands/wrapped/helm.md) for the chart render. One small difference is that, when the output is written to a terminal, Hydra automatically uses `yq` for syntax highlighting.
 
 ## Step 2: Add a Regular Helm Dependency
@@ -122,8 +120,6 @@ Hydra still renders the app through Helm, so the dependency is resolved with the
 
 <div class="hydra-asciinema" data-cast-path="tutorials/introduction/02-02-helm-dependency.cast"></div>
 
-Example files on GitHub: <https://github.com/hydra-gitops/hydra/tree/main/docs/tutorials/introduction/02-02-helm-dependency>
-
 ## Step 3: Show the Source Templates
 
 One feature that plain Helm does not offer in this form is printing all source templates of a chart, including templates that come from dependencies.
@@ -141,8 +137,6 @@ This prints the unrendered Helm template files, including templates from package
 As with [`hydra local template`](../../commands/local/template.md), terminal output is shown with syntax highlighting.
 
 <div class="hydra-asciinema" data-cast-path="tutorials/introduction/02-03-source-templates.cast"></div>
-
-Example files on GitHub: <https://github.com/hydra-gitops/hydra/tree/main/docs/tutorials/introduction/02-03-source-templates>
 
 ## Step 4: Filter the Rendered Output with `--include` and `--exclude`
 
@@ -173,8 +167,6 @@ This is especially useful when a chart has many dependency objects and you want 
 
 <div class="hydra-asciinema" data-cast-path="tutorials/introduction/02-04-template-filters.cast"></div>
 
-Example files on GitHub: <https://github.com/hydra-gitops/hydra/tree/main/docs/tutorials/introduction/02-04-template-filters>
-
 ## Step 5: Filter the Source Templates with `--include` and `--exclude`
 
 The same `--include` / `--exclude` logic is also available on [`hydra local source`](../../commands/local/source.md). There the effect is slightly different: Hydra still evaluates the filters against the rendered manifests first, but instead of printing those manifests, it prints only the source template files that produced the matching resources.
@@ -194,8 +186,6 @@ hydra local source cluster.app --exclude 'apiVersion == "v1"' --exclude 'apiVers
 That is useful when you already know which rendered resource kind you care about, but want to jump back to the exact Helm template source files responsible for it.
 
 <div class="hydra-asciinema" data-cast-path="tutorials/introduction/02-05-source-filters.cast"></div>
-
-Example files on GitHub: <https://github.com/hydra-gitops/hydra/tree/main/docs/tutorials/introduction/02-05-source-filters>
 
 ## Step 6: Show the Computed Values
 
@@ -224,8 +214,6 @@ You can place `values.yaml` files at group, context, cluster, and root app level
 As with [`hydra local template`](../../commands/local/template.md) and [`hydra local source`](../../commands/local/source.md), terminal output is shown with syntax highlighting.
 
 <div class="hydra-asciinema" data-cast-path="tutorials/introduction/02-06-local-values.cast"></div>
-
-Example files on GitHub: <https://github.com/hydra-gitops/hydra/tree/main/docs/tutorials/introduction/02-06-local-values>
 
 ## Summary
 

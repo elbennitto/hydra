@@ -179,6 +179,13 @@
   overflow-wrap: anywhere;
 }
 
+.hydra-asciinema-panel__examples {
+  margin: 0;
+  font-size: 0.88rem;
+  opacity: 0.9;
+  overflow-wrap: anywhere;
+}
+
 .hydra-tree {
   --hydra-tree-axis-x: 0.78rem;
   margin: 1rem 0;

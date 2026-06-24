@@ -20,8 +20,6 @@ If neither `--hydra-context` nor `HYDRA_CONTEXT` is set, Hydra stops immediately
 
 <div class="hydra-asciinema" data-cast-path="tutorials/introduction/01-01-no-context.cast"></div>
 
-Example files on GitHub: <https://github.com/hydra-gitops/hydra/tree/main/docs/tutorials/introduction/01-01-no-context>
-
 ## Step 2: Point `HYDRA_CONTEXT` at the Future GitOps Directory
 
 Now choose where the GitOps directory for your first cluster should live:
@@ -40,8 +38,6 @@ Because the directory does not exist yet, Hydra stops immediately and explains t
 
 <div class="hydra-asciinema" data-cast-path="tutorials/introduction/01-02-missing-dir.cast"></div>
 
-Example files on GitHub: <https://github.com/hydra-gitops/hydra/tree/main/docs/tutorials/introduction/01-02-missing-dir>
-
 ## Step 3: Create the Directory and Try Again
 
 Now create the directory and rerun the same command:
@@ -56,8 +52,6 @@ This time the path exists, so Hydra moves on to the next validation step. The di
 Continue with Step 4 to add that required declaration.
 
 <div class="hydra-asciinema" data-cast-path="tutorials/introduction/01-03-empty-dir.cast"></div>
-
-Example files on GitHub: <https://github.com/hydra-gitops/hydra/tree/main/docs/tutorials/introduction/01-03-empty-dir>
 
 ## Step 4: Mark the Parent Directory as a Hydra Group
 
@@ -78,8 +72,6 @@ hydra local apps
 If Hydra now shows `pattern '**' matched no applications`, the context is valid, but there are no applications defined yet.
 
 <div class="hydra-asciinema" data-cast-path="tutorials/introduction/01-04-group-values.cast"></div>
-
-Example files on GitHub: <https://github.com/hydra-gitops/hydra/tree/main/docs/tutorials/introduction/01-04-group-values>
 
 ## Step 5: Create the First Cluster and Root App Directories
 
@@ -110,8 +102,6 @@ Hydra app IDs always follow `<cluster>.<root-app>[.<child-app>]`, so the first p
 
 <div class="hydra-asciinema" data-cast-path="tutorials/introduction/01-05-cluster-root-app.cast"></div>
 
-Example files on GitHub: <https://github.com/hydra-gitops/hydra/tree/main/docs/tutorials/introduction/01-05-cluster-root-app>
-
 ## Step 6: Add a Minimal Root App Chart and Verify App Discovery
 
 To be discovered by `hydra local apps`, a root app directory must contain a valid Helm chart. At minimum, create `Chart.yaml`:
@@ -129,8 +119,6 @@ hydra local apps
 Expected result: Hydra now prints `cluster.app`.
 
 <div class="hydra-asciinema" data-cast-path="tutorials/introduction/01-06-root-app-chart.cast"></div>
-
-Example files on GitHub: <https://github.com/hydra-gitops/hydra/tree/main/docs/tutorials/introduction/01-06-root-app-chart>
 
 If `Chart.yaml` is missing, Hydra cannot load the root app chart and app discovery fails.
 

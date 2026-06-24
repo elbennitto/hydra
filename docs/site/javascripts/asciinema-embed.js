@@ -20,6 +20,41 @@
     return basePrefix() + "asciinema/" + path;
   }
 
+  function tutorialExamplesGithubUrl(castPath) {
+    if (typeof castPath !== "string") {
+      return null;
+    }
+
+    var normalizedPath = castPath.trim();
+    if (!normalizedPath.startsWith("tutorials/") || !normalizedPath.endsWith(".cast")) {
+      return null;
+    }
+
+    var examplesDir = normalizedPath.slice(0, -".cast".length);
+    return "https://github.com/hydra-gitops/hydra/tree/main/docs/" + examplesDir;
+  }
+
+  function createTutorialExamplesLink(castPath) {
+    var url = tutorialExamplesGithubUrl(castPath);
+    if (!url) {
+      return null;
+    }
+
+    var paragraph = document.createElement("p");
+    paragraph.className = "hydra-asciinema-panel__examples";
+
+    paragraph.appendChild(document.createTextNode("Example files on GitHub: "));
+
+    var link = document.createElement("a");
+    link.href = url;
+    link.textContent = url;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    paragraph.appendChild(link);
+
+    return paragraph;
+  }
+
   function createKeyboardButton(playerEl) {
     var playerButton = playerEl.querySelector(".ap-kbd-button");
     if (!playerButton) {
@@ -228,7 +263,7 @@
     window.setInterval(refresh, 250);
   }
 
-  function ensurePlayerExtras(playerEl, player, markerData) {
+  function ensurePlayerExtras(playerEl, player, markerData, castPath) {
     if (playerEl.dataset.extraUiInitialized === "1") {
       return;
     }
@@ -334,6 +369,11 @@
       toc.appendChild(list);
       panel.appendChild(toc);
       installMarkerTracking(player, buttons, tocMarkers);
+    }
+
+    var examplesLink = createTutorialExamplesLink(castPath);
+    if (examplesLink) {
+      panel.appendChild(examplesLink);
     }
 
     playerEl.parentNode.insertBefore(panel, playerEl.nextSibling);
@@ -461,7 +501,7 @@
 
       function renderPlayerExtras() {
         resolvePlayerTimeline(player, metadataEvent).then(function (markerData) {
-          ensurePlayerExtras(el, player, markerData);
+          ensurePlayerExtras(el, player, markerData, castPath);
           seekPlayerToEndOnLoad(el, player, markerData);
         });
       }
