@@ -61,15 +61,18 @@
     );
   }
 
-  function createFrameButton(playerEl, key, label, title) {
+  function createFrameButton(playerEl, key, label, title, stepCount) {
     var button = document.createElement("button");
     button.type = "button";
     button.className = "hydra-asciinema-button";
     button.textContent = label;
     button.title = title;
     button.setAttribute("aria-label", title);
+    var steps = Number.isFinite(stepCount) && stepCount > 0 ? Math.floor(stepCount) : 1;
     button.addEventListener("click", function () {
-      dispatchPlayerShortcut(playerEl, key);
+      for (var index = 0; index < steps; index += 1) {
+        dispatchPlayerShortcut(playerEl, key);
+      }
     });
     return button;
   }
@@ -259,10 +262,16 @@
     }
 
     controls.appendChild(
+      createFrameButton(playerEl, ",", "<< Frame", "Previous 10 frames (, x10)", 10)
+    );
+    controls.appendChild(
       createFrameButton(playerEl, ",", "< Frame", "Previous frame (,)")
     );
     controls.appendChild(
       createFrameButton(playerEl, ".", "Frame >", "Next frame (.)")
+    );
+    controls.appendChild(
+      createFrameButton(playerEl, ".", "Frame >>", "Next 10 frames (. x10)", 10)
     );
 
     if (navigableMarkers.length > 0) {
@@ -329,6 +338,27 @@
 
     playerEl.parentNode.insertBefore(panel, playerEl.nextSibling);
     playerEl.dataset.extraUiInitialized = "1";
+  }
+
+  function seekPlayerToEndOnLoad(playerEl, player, markerData) {
+    if (playerEl.dataset.initialSeekToEndDone === "1") {
+      return;
+    }
+
+    var markers = markerData && Array.isArray(markerData.markers) ? markerData.markers : [];
+    var endTime = markerData && typeof markerData.duration === "number"
+      ? markerData.duration
+      : (markers.length > 0 ? markers[markers.length - 1].time : undefined);
+
+    if (!Number.isFinite(endTime) || endTime < 0) {
+      return;
+    }
+
+    player.seek(endTime);
+    if (typeof player.pause === "function") {
+      player.pause();
+    }
+    playerEl.dataset.initialSeekToEndDone = "1";
   }
 
   function ensureTutorialInfoBox(playerEl) {
@@ -432,6 +462,7 @@
       function renderPlayerExtras() {
         resolvePlayerTimeline(player, metadataEvent).then(function (markerData) {
           ensurePlayerExtras(el, player, markerData);
+          seekPlayerToEndOnLoad(el, player, markerData);
         });
       }
 

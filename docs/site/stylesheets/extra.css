@@ -94,24 +94,35 @@
 
 .hydra-asciinema-panel__controls {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 0.6rem;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: clamp(0.18rem, 0.7vw, 0.5rem);
+  padding: 0.25rem;
+  border: 1px solid rgb(0 0 0 / 0.12);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.38);
+  overflow-x: hidden;
+  scrollbar-width: thin;
 }
 
 .hydra-asciinema-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 2.3rem;
-  padding: 0.45rem 0.85rem;
+  flex: 1 1 0;
+  min-height: 1.7rem;
+  min-width: 0;
+  padding: 0.2rem 0.45rem;
   border: 1px solid rgb(0 0 0 / 0.16);
   border-radius: 999px;
   background: rgb(255 255 255 / 0.56);
   color: inherit;
   cursor: pointer;
   font: inherit;
+  font-size: 0.74rem;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .hydra-asciinema-button:hover {
@@ -308,6 +319,11 @@
   border-color: rgb(0 0 0 / 0.12);
 }
 
+[data-md-color-scheme="default"] .hydra-asciinema-panel__controls {
+  background: rgb(255 255 255 / 0.42);
+  border-color: rgb(0 0 0 / 0.12);
+}
+
 [data-md-color-scheme="default"] .hydra-asciinema-button,
 [data-md-color-scheme="default"] .hydra-asciinema-toc__item {
   color: #1e2f38;
@@ -335,6 +351,11 @@
 }
 
 [data-md-color-scheme="slate"] .hydra-asciinema-info {
+  background: rgb(20 24 28 / 0.35);
+  border-color: rgb(255 255 255 / 0.1);
+}
+
+[data-md-color-scheme="slate"] .hydra-asciinema-panel__controls {
   background: rgb(20 24 28 / 0.35);
   border-color: rgb(255 255 255 / 0.1);
 }
