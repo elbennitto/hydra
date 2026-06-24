@@ -1,3 +1,13 @@
+## [1.2.2](https://github.com/[secure]/compare/v1.2.1...v1.2.2) (2026-06-24)
+
+### Bug Fixes
+
+* **go:** added "hydra local find" support for map(string, dyn) return types ([014796d](https://github.com/[secure]/commit/014796d4c7452f171016d41893f8f2caf3ae9436))
+* **go:** ignore "key not found" in "hydra local find" --pick CEL-Expressions ([d85fb9e](https://github.com/[secure]/commit/d85fb9e4718df95de9fec42417824f9db5450128))
+* **go:** make --pick optional with default "id" ([148424a](https://github.com/[secure]/commit/148424aecc1054c98f714f0b3cf78e78144be375))
+* **go:** reset background color correctly in "hydra record file" ([2924ad0](https://github.com/[secure]/commit/2924ad0fa52a6d04844154a748be4add46c543ff))
+* **go:** use 0.01s default for marker events to ensure unique timestamps ([afc4710](https://github.com/[secure]/commit/afc4710f04a8508050e4d49b6fa03e6e17e8fa14))
+
 ## [1.2.1](https://github.com/[secure]/compare/v1.2.0...v1.2.1) (2026-06-24)
 
 ### Bug Fixes

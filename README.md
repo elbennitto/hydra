@@ -1,12 +1,12 @@
 # Hydra
 
-[![Latest release](https://img.shields.io/github/v/release/hydra-gitops/hydra?sort=semver)](https://github.com/hydra-gitops/hydra/releases/tag/v1.2.1)
+[![Latest release](https://img.shields.io/github/v/release/hydra-gitops/hydra?sort=semver)](https://github.com/hydra-gitops/hydra/releases/tag/v1.2.2)
 [![release](https://github.com/hydra-gitops/hydra/actions/workflows/release.yml/badge.svg)](https://github.com/hydra-gitops/hydra/actions/workflows/release.yml)
 ![Container image](https://img.shields.io/badge/container-ghcr.io-blue)
 
 Hydra provides a standardized GitOps workflow for Helm and Argo CD with a CLI-first toolchain and reproducible release pipelines.
 
-Latest signed release: [v1.2.1](https://github.com/hydra-gitops/hydra/releases/tag/v1.2.1)
+Latest signed release: [v1.2.2](https://github.com/hydra-gitops/hydra/releases/tag/v1.2.2)
 
 ## Install
 
@@ -77,12 +77,12 @@ Stable releases also publish `vX.Y.Z`, `vX.Y`, `vX`, and `latest` tags.
 
 Release assets are published on each signed version tag:
 
-- https://github.com/hydra-gitops/hydra/releases/tag/v1.2.1
+- https://github.com/hydra-gitops/hydra/releases/tag/v1.2.2
 
 Verify downloaded archives with the published checksum file:
 
 ```bash
-curl -LO https://github.com/hydra-gitops/hydra/releases/download/v1.2.1/checksums.txt
+curl -LO https://github.com/hydra-gitops/hydra/releases/download/v1.2.2/checksums.txt
 shasum -a 256 --check checksums.txt
 ```
 
