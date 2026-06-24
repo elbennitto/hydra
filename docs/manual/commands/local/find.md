@@ -20,7 +20,7 @@ Unlike [`hydra local template`](template.md), this command is not meant to print
 
 The command is local and read-only. It does not connect to Kubernetes.
 
-`--pick` is required and exists only on `hydra local find`. It evaluates a CEL expression per matched resource and serializes the results as a single YAML array.
+`--pick` exists only on `hydra local find`. It evaluates a CEL expression per matched resource and serializes the results as a single YAML array. If omitted, it defaults to `id`.
 
 ## When To Use It
 
@@ -51,7 +51,7 @@ Use [`hydra local template`](template.md) when you need the full rendered manife
 | `--exclude-app` | | Glob pattern to exclude applications (repeatable) |
 | `--include` | `-i` | [CEL expression](../README.md#cel-resource-filters) to filter rendered resources |
 | `--exclude` | `-e` | [CEL expression](../README.md#cel-resource-filters) to exclude rendered resources |
-| `--pick` | | Required CEL expression to project each matched resource into the output array |
+| `--pick` | | CEL expression to project each matched resource into the output array (default: `id`) |
 | `--uniq` | | Deduplicate projected values after `--pick` evaluation |
 
 ## Projection Rules

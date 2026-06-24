@@ -37,7 +37,7 @@ func (f *FindFlags) Flags() flags.Flags {
 func Find(f FindFlags) (hydra.Hydra, string, error) {
 	l := log.Default()
 	if f.Pick == "" {
-		return nil, "", log.CreateError(errors.ErrHydraConfigError, "--pick is required for hydra local find")
+		f.Pick = "id"
 	}
 
 	config := flags.NewConfigFromFlags(&f, types.KubernetesConnectionAllowedNo)

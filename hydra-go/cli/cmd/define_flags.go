@@ -561,10 +561,10 @@ func definePickFlag(cmd *cobra.Command, f any) error {
 	}
 
 	if pickFlag != nil {
-		pickFlag.Pick = ""
+		pickFlag.Pick = "id"
 
 		var pick string
-		cmd.Flags().StringVar(&pick, "pick", "", "CEL expression to project matched resources into a YAML array")
+		cmd.Flags().StringVar(&pick, "pick", "id", "CEL expression to project matched resources into a YAML array")
 		hc.AddPreRunE(cmd, func(cmd *cobra.Command, args []string) error {
 			pickFlag.Pick = types.CelExpression(pick)
 			return nil

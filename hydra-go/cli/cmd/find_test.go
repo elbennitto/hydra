@@ -11,18 +11,21 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestFindCommandRequiresPick(t *testing.T) {
+func TestFindCommandDefaultsPickToId(t *testing.T) {
+	var captured *action.FindFlags
+
 	cmd := newFindCommand(func(flags action.FindFlags) (hydra.Hydra, string, error) {
-		t.Fatal("find action should not be called when --pick is missing")
-		return nil, "", nil
+		captured = &flags
+		return nil, "[]", nil
 	})
 
 	defer utils.EnvWrapper("HYDRA_CONTEXT", "/tmp/hydra-context")()
 
 	cmd.SetArgs([]string{"prod.*.*"})
 	err := cmd.Execute()
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "required flag(s) \"pick\" not set")
+	require.NoError(t, err)
+	require.NotNil(t, captured)
+	assert.Equal(t, types.CelExpression("id"), captured.Pick)
 }
 
 func TestFindCommandParsesFlags(t *testing.T) {

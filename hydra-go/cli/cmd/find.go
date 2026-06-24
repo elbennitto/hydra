@@ -27,10 +27,10 @@ App IDs support glob-style wildcard matching:
   *            matches any characters except '.' (stays within one segment)
   **           matches any characters including '.' (crosses segments)
 
-The --pick flag is required and is only available on this command. It
-evaluates a CEL expression for every matched resource and serializes the
-result as a YAML array. Use --uniq to deduplicate projected values after
-evaluation.`,
+The --pick flag is only available on this command. It evaluates a CEL
+expression for every matched resource and serializes the result as a YAML
+array. If not specified, --pick defaults to 'id'. Use --uniq to deduplicate
+projected values after evaluation.`,
 		Example: `  # Which child apps render KafkaUser resources?
   hydra local find prod.*.* --include 'kind == "KafkaUser"' --pick 'appIds[0]' --uniq
 
@@ -56,7 +56,6 @@ evaluation.`,
 	}
 
 	DefineFlags(cmd, &flags)
-	_ = cmd.MarkFlagRequired("pick")
 
 	return cmd
 }
