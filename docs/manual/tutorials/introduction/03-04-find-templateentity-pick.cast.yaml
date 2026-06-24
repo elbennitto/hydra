@@ -1,0 +1,66 @@
+name: First Context - Local Find TemplateEntity Pick
+steps:
+  - background: '#0b1f4d'
+  - run: hydra message --text 'setup'
+    input: false
+  - run: mkdir -p "$HYDRA_CONTEXT/cluster/app/templates"
+  - run: |
+      cat > "$HYDRA_CONTEXT/../values.yaml" <<EOF
+      global:
+        hydra:
+          type: group
+      EOF
+    speed: 0
+  - marker: values.yaml created
+  - run: |
+      cat > "$HYDRA_CONTEXT/cluster/app/templates/deployment.yaml" <<EOF
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: app
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: app
+        template:
+          metadata:
+            labels:
+              app: app
+          spec:
+            containers:
+              - name: app
+                image: {{ .Values.image }}
+                ports:
+                  - containerPort: 8080
+      EOF
+    speed: 0
+  - marker: deployment.yaml created
+  - run: |
+      cat > "$HYDRA_CONTEXT/cluster/app/values.yaml" <<EOF
+      image: traefik/whoami:v1.11.0
+      global:
+        hydra:
+          path: .
+      EOF
+    speed: 0
+  - marker: app values.yaml created
+  - run: |
+      cat > "$HYDRA_CONTEXT/cluster/app/Chart.yaml" <<EOF
+      apiVersion: v2
+      name: app
+      version: 0.1.0
+      dependencies:
+        - name: mosquitto
+          version: 1.3.2
+          repository: oci://ghcr.io/helmforgedev/helm
+      EOF
+    speed: 0
+  - run: hydra message --text 'setup finished'
+    input: false
+  - marker: Chart.yaml created
+  - background: reset
+  - run: "hydra local find cluster.app --pick '{\"id\":id, \"images\":templateEntity.spec.template.spec.containers.map(c, c.image)}'"
+    typed: true
+  - marker: pick images from templateEntity
+  - export-to-directory: docs/tutorials/introduction/03-04-find-templateentity-pick

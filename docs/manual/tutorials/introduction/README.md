@@ -32,3 +32,4 @@ One context can contain multiple clusters, for example all `dev` servers, with `
 
 - [Create a Hydra App](01-00-create-a-hydra-app.md) — set `HYDRA_CONTEXT`, walk through the first validation errors, and create the first Helm chart for a Hydra app
 - [Inspect Manifests and Their Templates](02-00-adding-manifests-to-the-helm-charts.md) — inspect rendered manifests, template sources, and filters in a Hydra app chart
+- [Extracting Data from Manifests](03-00-local-find-with-cel-pick-and-filters.md) — shape result lists with `--pick` and filter entities via `--include` / `--exclude`

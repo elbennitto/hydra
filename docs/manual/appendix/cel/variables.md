@@ -13,6 +13,7 @@ These are available in all CEL contexts (ref-parsers, presets, CLI filters, valu
 | `id` | `string` | Full resource ID: `"apps/v1/Deployment/default/myapp"` |
 | `kind` | `string` | Kind only: `"Deployment"` |
 | `group` | `string` | API group: `"apps"` |
+| `version` | `string` | API version part: `"v1"` |
 | `apiVersion` | `string` | API version: `"apps/v1"` |
 | `resource` | `string` | Resource type (plural) |
 | `name` | `string` | Resource name |
