@@ -31,7 +31,7 @@
 [0.01,"o","Recommended: set 'global.hydra.type: group' in '/home/hydra/group/values.yaml' so '/home/hydra/group/context' resolves as a context beneath that group.\r\n"]
 [0.01,"o","Alternative: add 'global.hydra.type: context' to '/home/hydra/group/context/values.yaml'.\r\n"]
 [0.01,"o","Missing file: '/home/hydra/group/context/values.yaml'.\u001b[97m\u001b[0m\r\n"]
-[0,"m","Checked empty context"]
+[0.01,"m","Checked empty context"]
 [0.01,"o","\u001b[38;5;228m╭─────────────────────────────────────────────────────────────────────────╮\u001b[0m\r\n"]
 [0.01,"o","\u001b[38;5;228m│\u001b[0m\u001b[1;38;5;16;48;5;228m  Expected error                                                         \u001b[0m\u001b[38;5;228m│\u001b[0m\r\n"]
 [0.01,"o","\u001b[38;5;228m│\u001b[0m\u001b[38;5;231m  The path now exists, but Hydra still needs a valid context structure.  \u001b[0m\u001b[38;5;228m│\u001b[0m\r\n"]

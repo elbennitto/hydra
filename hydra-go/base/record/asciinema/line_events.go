@@ -36,7 +36,7 @@ func linesToEvents(lines []string, kind string) []castEvent {
 				pendingTime = segment.delayBefore
 			}
 			for _, markerLabel := range segment.markersBefore {
-				t := 0.0
+				t := defaultLineDelaySeconds
 				if pendingTime != nil {
 					t = *pendingTime
 					pendingTime = nil
@@ -72,7 +72,7 @@ func linesToEvents(lines []string, kind string) []castEvent {
 			pendingTime = trailingDelay
 		}
 		for _, markerLabel := range trailingMarkers {
-			t := 0.0
+			t := defaultLineDelaySeconds
 			if pendingTime != nil {
 				t = *pendingTime
 				pendingTime = nil
