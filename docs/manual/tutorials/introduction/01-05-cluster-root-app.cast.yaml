@@ -21,9 +21,9 @@ steps:
   - run: hydra local apps
     typed: true
     expectedExitCode: 1
-  - marker: Checked root app
   - assert:
       cast: 'plain(cast).contains("Chart.yaml: no such file or directory")'
   - run: hydra message --title 'Structure prepared' --text 'The cluster directory and root app directory are now in place.\nYou need to create a helm chart in the root app directory to proceed to the next step.'
     input: false
+  - marker: Checked root app
   - export-to-directory: docs/tutorials/introduction/01-05-cluster-root-app

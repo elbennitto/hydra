@@ -10,9 +10,9 @@ steps:
   - run: hydra local apps
     typed: true
     expectedExitCode: 1
-  - marker: Checked empty context
   - assert:
       cast: 'plain(cast).contains("could not find a valid Hydra context") && plain(cast).contains("global.hydra.type: context")'
   - run: hydra message --title 'Expected error' --text 'The path now exists, but Hydra still needs a valid context structure.\nThe next step is to add the required values.yaml metadata.'
     input: false
+  - marker: Checked empty context
   - export-to-directory: docs/tutorials/introduction/01-03-empty-dir

@@ -21,9 +21,9 @@ steps:
   - run: hydra local apps
     typed: true
     expectedExitCode: 1
-  - marker: Checked apps in group context
   - assert:
       cast: plain(cast).contains("matched no applications")
   - run: hydra message --title 'Context is valid' --text 'Hydra now accepts HYDRA_CONTEXT as valid.\nNo applications are defined yet, so this is the expected next error.'
     input: false
+  - marker: Checked apps in group context
   - export-to-directory: docs/tutorials/introduction/01-04-group-values

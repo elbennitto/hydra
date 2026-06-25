@@ -5,9 +5,9 @@ steps:
   - run: hydra local apps
     typed: true
     expectedExitCode: 1
-  - marker: Checked apps with missing directory
   - assert:
       cast: plain(cast).contains("directory does not exist") && plain(cast).contains("HYDRA_CONTEXT")
   - run: hydra message --title 'Expected error' --text 'The "directory does not exist" error is expected here.\nThe target directory has not been created yet.'
     input: false
+  - marker: Checked apps with missing directory
   - export-to-directory: docs/tutorials/introduction/01-02-missing-dir
