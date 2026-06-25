@@ -1,12 +1,14 @@
 package commands
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
-	"hydra-gitops.org/hydra/hydra-go/base/log"
-	"hydra-gitops.org/hydra/hydra-go/core/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"hydra-gitops.org/hydra/hydra-go/base/log"
+	"hydra-gitops.org/hydra/hydra-go/core/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
@@ -236,6 +238,66 @@ func TestResolveAppIdsFromConfig_ExcludeExactWithoutWildcardInIncludes(t *testin
 	assert.Equal(t, 1, result.Len())
 }
 
+func TestResolveAppIdsFromConfig_RecognizesDependencyDefinedArgoCDManagedRootApps(t *testing.T) {
+	contextDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(contextDir, "values.yaml"), []byte("global:\n  hydra:\n    type: context\n"), 0o644))
+
+	require.NoError(t, os.MkdirAll(filepath.Join(contextDir, "in-cluster", "argocd"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(contextDir, "in-cluster", "values.yaml"), []byte("global:\n  hydra:\n    type: cluster\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(contextDir, "in-cluster", "argocd", "values.yaml"), []byte("global:\n  hydra:\n    type: root-app\nargocd: {}\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(contextDir, "in-cluster", "argocd", "Chart.yaml"), []byte("apiVersion: v2\nname: argocd\nversion: 0.1.0\n"), 0o644))
+
+	require.NoError(t, os.MkdirAll(filepath.Join(contextDir, "target", "platform"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(contextDir, "target", "workloads"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(contextDir, "target", "values.yaml"), []byte("global:\n  hydra:\n    type: cluster\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(contextDir, "target", "platform", "values.yaml"), []byte("global:\n  hydra:\n    type: root-app\nplatform:\n  global:\n    hydra:\n      argocd: true\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(contextDir, "target", "platform", "Chart.yaml"), []byte("apiVersion: v2\nname: platform\nversion: 0.1.0\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(contextDir, "target", "workloads", "values.yaml"), []byte("global:\n  hydra:\n    type: root-app\nworkloads: {}\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(contextDir, "target", "workloads", "Chart.yaml"), []byte("apiVersion: v2\nname: workloads\nversion: 0.1.0\n"), 0o644))
+
+	config := types.NewConfig(types.ColorNo, types.DryRunNo, types.KubernetesConnectionAllowedNo, true)
+
+	exact, err := ResolveAppIdsFromConfig(
+		log.Default(),
+		types.HydraContext(contextDir),
+		config,
+		[]types.AppIdPattern{"target.platform"},
+		nil,
+		types.HelmNetworkModeOffline,
+		true,
+	)
+	require.NoError(t, err)
+	assert.Equal(t, sets.New[types.AppId](types.AppId("target.platform")), exact)
+
+	wildcard, err := ResolveAppIdsFromConfig(
+		log.Default(),
+		types.HydraContext(contextDir),
+		config,
+		[]types.AppIdPattern{"target.*"},
+		nil,
+		types.HelmNetworkModeOffline,
+		true,
+	)
+	require.NoError(t, err)
+	assert.Equal(t, sets.New[types.AppId](types.AppId("target.workloads")), wildcard)
+
+	inClusterWildcard, err := ResolveAppIdsFromConfig(
+		log.Default(),
+		types.HydraContext(contextDir),
+		config,
+		[]types.AppIdPattern{"in-cluster.*"},
+		nil,
+		types.HelmNetworkModeOffline,
+		true,
+	)
+	require.NoError(t, err)
+	assert.Equal(t, sets.New[types.AppId](
+		types.AppId("in-cluster.argocd"),
+		types.AppId("target.platform"),
+	), inClusterWildcard)
+	assert.False(t, inClusterWildcard.Has(types.AppId("target.workloads")))
+}
+
 // --- helpers ---
 
 func resolveAppIdsExactWithValidation(patterns []types.AppIdPattern, allAppNames []string) (sets.Set[types.AppId], error) {
@@ -259,7 +321,7 @@ func resolveAppIdsWithAllApps(patterns []types.AppIdPattern, excludePatterns []t
 	for i, p := range patterns {
 		raw[i] = string(p)
 	}
-	resolved, _, err := ResolvePatterns(raw, allAppNames)
+	resolved, _, err := resolveAppPatterns(raw, patternCandidatesFromAppNames(allAppNames))
 	if err != nil {
 		return nil, err
 	}
@@ -274,7 +336,7 @@ func resolveAppIdsWithAllApps(patterns []types.AppIdPattern, excludePatterns []t
 		for i, p := range excludePatterns {
 			rawExclude[i] = string(p)
 		}
-		result, err = applyExcludes(log.Default(), result, rawExclude, allAppNames)
+		result, err = applyExcludes(log.Default(), result, rawExclude, patternCandidatesFromAppNames(allAppNames))
 		if err != nil {
 			return nil, err
 		}

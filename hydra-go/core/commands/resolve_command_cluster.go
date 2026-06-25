@@ -54,7 +54,7 @@ func commandClusterNameFromOptions(opts ResolveCommandClusterOptions) (types.Clu
 	// A non-nil AppIds (even when empty) selects the app-id-derived path; nil/absent AppIds
 	// means the caller chose the explicit ClusterName path.
 	if opts.AppIds != nil {
-		return clusterNameFromAppIds(opts.AppIds)
+		return effectiveClusterNameFromAppIds(opts.HydraContext, opts.Config, opts.AppIds)
 	}
 	return opts.ClusterName, nil
 }
@@ -79,6 +79,78 @@ func clusterNameFromAppIds(appIds sets.Set[types.AppId]) (types.ClusterName, err
 				log.String("app1", string(oneAppId)),
 				log.String("app2", string(appId)))
 		}
+	}
+	return clusterName, nil
+}
+
+func effectiveClusterNameFromAppIds(
+	hydraContext types.HydraContext,
+	config types.Config,
+	appIds sets.Set[types.AppId],
+) (types.ClusterName, error) {
+	if len(appIds) == 0 {
+		return "", log.CreateError(errors.ErrNoAppsSpecified, "no apps specified")
+	}
+	offlineConfig := types.NewConfig(config.Color(), config.DryRun(), types.KubernetesConnectionAllowedNo, config.HelmTemplateCacheEnabled())
+	ctxHydra, err := hydra.ResolvePath(log.Default(), hydraContext, offlineConfig)
+	if err != nil {
+		return "", err
+	}
+	ctx := ctxHydra.AsContext()
+	if ctx == nil {
+		return "", log.CreateError(errors.ErrInvalidHydraStructure,
+			"hydra context path does not resolve to a context")
+	}
+
+	var effectiveCluster types.ClusterName
+	var firstApp types.AppId
+	for appId := range appIds {
+		clusterName, err := effectiveClusterNameForApp(ctx, appId)
+		if err != nil {
+			return "", err
+		}
+		if firstApp == "" {
+			firstApp = appId
+			effectiveCluster = clusterName
+			continue
+		}
+		if clusterName != effectiveCluster {
+			return "", log.CreateError(errors.ErrAppIdsDifferentClusters,
+				"all app ids must belong to the same effective cluster",
+				log.String("app1", string(firstApp)),
+				log.String("app2", string(appId)))
+		}
+	}
+	return effectiveCluster, nil
+}
+
+func effectiveClusterNameForApp(ctx *hydra.Context, appId types.AppId) (types.ClusterName, error) {
+	clusterName, err := appId.ClusterName()
+	if err != nil {
+		return "", err
+	}
+	if !appId.IsRootApp() {
+		return clusterName, nil
+	}
+
+	cluster, err := ctx.WithCluster(clusterName, hydra.RESTClientLimits{})
+	if err != nil {
+		return "", err
+	}
+	rootAppName, err := appId.RootAppName()
+	if err != nil {
+		return "", err
+	}
+	rootApp, err := hydra.NewRootApp(cluster, rootAppName)
+	if err != nil {
+		return "", err
+	}
+	inClusterArgoCD, err := rootApp.IsManagedByInClusterArgoCD(types.HelmNetworkModeOffline)
+	if err != nil {
+		return "", err
+	}
+	if inClusterArgoCD {
+		return types.InCluster, nil
 	}
 	return clusterName, nil
 }

@@ -12,6 +12,11 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
+type appPatternCandidate struct {
+	actual     string
+	matchNames []string
+}
+
 // ResolveAppIdsFromConfig resolves wildcard patterns against config-based app IDs
 // from the filesystem. Without wildcards, patterns are directly converted to AppIds.
 // With wildcards, all clusters and their apps are enumerated to match against.
@@ -33,7 +38,7 @@ func ResolveAppIdsFromConfig(
 		return sets.New[types.AppId](), nil
 	}
 
-	allAppNames, err := enumerateAllAppNames(l, hydraContext, config, networkMode)
+	allAppNames, patternCandidates, err := enumerateAllAppNames(l, hydraContext, config, networkMode)
 	if err != nil {
 		return nil, err
 	}
@@ -82,14 +87,14 @@ func ResolveAppIdsFromConfig(
 		if err := validateAppIdsAgainstEnumerated(result, allAppNames); err != nil {
 			return nil, err
 		}
-		result, err = applyExcludes(l, result, rawExclude, allAppNames)
+		result, err = applyExcludes(l, result, rawExclude, patternCandidates)
 		if err != nil {
 			return nil, err
 		}
 		return result, nil
 	}
 
-	resolved, warnings, err := ResolvePatterns(raw, allAppNames)
+	resolved, warnings, err := resolveAppPatterns(raw, patternCandidates)
 	if err != nil {
 		return nil, err
 	}
@@ -104,7 +109,7 @@ func ResolveAppIdsFromConfig(
 	}
 
 	if len(rawExclude) > 0 {
-		result, err = applyExcludes(l, result, rawExclude, allAppNames)
+		result, err = applyExcludes(l, result, rawExclude, patternCandidates)
 		if err != nil {
 			return nil, err
 		}
@@ -119,7 +124,7 @@ func ResolveAppIdsFromConfig(
 			log.Int("count", len(result)),
 			log.Int("patterns", len(patterns)),
 			log.Int("excludePatterns", len(excludePatterns)),
-			log.String("appIds", formatResolvedByPattern(raw, result)))
+			log.String("appIds", formatResolvedByPattern(raw, result, patternCandidates)))
 	}
 
 	return result, nil
@@ -168,7 +173,7 @@ func validateAppIdsAgainstEnumerated(requested sets.Set[types.AppId], allAppName
 		log.String("ids", strings.Join(unknown, ", ")))
 }
 
-func formatResolvedByPattern(patterns []string, result sets.Set[types.AppId]) string {
+func formatResolvedByPattern(patterns []string, result sets.Set[types.AppId], candidates []appPatternCandidate) string {
 	var b strings.Builder
 	for i, pattern := range patterns {
 		if i > 0 {
@@ -178,14 +183,12 @@ func formatResolvedByPattern(patterns []string, result sets.Set[types.AppId]) st
 		b.WriteString(":")
 
 		var matched []string
-		for id := range result {
-			s := string(id)
-			if types.IsGlobPattern(pattern) {
-				if types.MatchAppIdGlob(pattern, s) {
-					matched = append(matched, s)
-				}
-			} else if s == pattern {
-				matched = append(matched, s)
+		for _, candidate := range candidates {
+			if !result.Has(types.AppId(candidate.actual)) {
+				continue
+			}
+			if appPatternMatchesCandidate(pattern, candidate) {
+				matched = append(matched, candidate.actual)
 			}
 		}
 		slices.Sort(matched)
@@ -202,42 +205,84 @@ func enumerateAllAppNames(
 	hydraContext types.HydraContext,
 	config types.Config,
 	networkMode types.HelmNetworkMode,
-) ([]string, error) {
+) ([]string, []appPatternCandidate, error) {
 	offlineConfig := types.NewConfig(config.Color(), config.DryRun(), types.KubernetesConnectionAllowedNo, config.HelmTemplateCacheEnabled())
 	h, err := hydra.ResolvePath(l, hydraContext, offlineConfig)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	ctx := h.AsContext()
 	if ctx == nil {
-		return nil, log.CreateError(errors.ErrInvalidHydraStructure,
+		return nil, nil, log.CreateError(errors.ErrInvalidHydraStructure,
 			"hydra context path does not resolve to a context")
 	}
 
 	clusters, err := ctx.GetClusters()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	var allAppNames []string
+	seen := map[string]*appPatternCandidate{}
 	for _, cluster := range clusters {
 		appIds, err := cluster.AppIds(networkMode)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		for appId := range appIds {
-			allAppNames = append(allAppNames, string(appId))
+			actual := string(appId)
+			allAppNames = append(allAppNames, actual)
+
+			candidate := seen[actual]
+			if candidate == nil {
+				candidate = &appPatternCandidate{actual: actual}
+				seen[actual] = candidate
+			}
+
+			if !appId.IsRootApp() {
+				candidate.matchNames = appendIfMissing(candidate.matchNames, actual)
+				continue
+			}
+
+			effectiveCluster, err := effectiveClusterNameForApp(ctx, appId)
+			if err != nil {
+				return nil, nil, err
+			}
+			clusterName, err := appId.ClusterName()
+			if err != nil {
+				return nil, nil, err
+			}
+			if effectiveCluster == clusterName {
+				candidate.matchNames = appendIfMissing(candidate.matchNames, actual)
+				continue
+			}
+			rootAppName, err := appId.RootAppName()
+			if err != nil {
+				return nil, nil, err
+			}
+			alias := string(types.NewRootAppId(effectiveCluster, rootAppName))
+			candidate.matchNames = appendIfMissing(candidate.matchNames, alias)
 		}
 	}
-	return allAppNames, nil
+
+	patternCandidates := make([]appPatternCandidate, 0, len(seen))
+	for _, actual := range allAppNames {
+		candidate := seen[actual]
+		if candidate == nil {
+			continue
+		}
+		patternCandidates = append(patternCandidates, *candidate)
+		delete(seen, actual)
+	}
+	return allAppNames, patternCandidates, nil
 }
 
 func applyExcludes(
 	l log.Logger,
 	included sets.Set[types.AppId],
 	rawExclude []string,
-	allAppNames []string,
+	candidates []appPatternCandidate,
 ) (sets.Set[types.AppId], error) {
 	for _, pattern := range rawExclude {
 		if !types.IsGlobPattern(pattern) {
@@ -252,13 +297,14 @@ func applyExcludes(
 		}
 
 		matched := 0
-		for _, name := range allAppNames {
-			if types.MatchAppIdGlob(pattern, name) {
-				appId := types.AppId(name)
-				if included.Has(appId) {
-					included.Delete(appId)
-					matched++
-				}
+		for _, candidate := range candidates {
+			if !appPatternMatchesCandidate(pattern, candidate) {
+				continue
+			}
+			appId := types.AppId(candidate.actual)
+			if included.Has(appId) {
+				included.Delete(appId)
+				matched++
 			}
 		}
 		if matched == 0 {
@@ -267,6 +313,76 @@ func applyExcludes(
 		}
 	}
 	return included, nil
+}
+
+func resolveAppPatterns(patterns []string, candidates []appPatternCandidate) ([]string, []string, error) {
+	resultSet := map[string]bool{}
+	var warnings []string
+
+	for _, pattern := range patterns {
+		if !types.IsGlobPattern(pattern) {
+			resultSet[pattern] = true
+			continue
+		}
+
+		matched := 0
+		var singleMatch string
+		for _, candidate := range candidates {
+			if !appPatternMatchesCandidate(pattern, candidate) {
+				continue
+			}
+			resultSet[candidate.actual] = true
+			matched++
+			singleMatch = candidate.actual
+		}
+
+		if matched == 0 {
+			return nil, nil, log.CreateError(errors.ErrAppPatternNoMatch,
+				"pattern '{pattern}' matched no applications",
+				log.String("pattern", pattern))
+		}
+
+		if matched == 1 {
+			warnings = append(warnings,
+				fmt.Sprintf("pattern '%s' matched only 1 application: '%s'", pattern, singleMatch))
+		}
+	}
+
+	result := make([]string, 0, len(resultSet))
+	for name := range resultSet {
+		result = append(result, name)
+	}
+	slices.Sort(result)
+	return result, warnings, nil
+}
+
+func appPatternMatchesCandidate(pattern string, candidate appPatternCandidate) bool {
+	for _, matchName := range candidate.matchNames {
+		if types.MatchAppIdGlob(pattern, matchName) {
+			return true
+		}
+	}
+	return false
+}
+
+func appendIfMissing(values []string, value string) []string {
+	for _, existing := range values {
+		if existing == value {
+			return values
+		}
+	}
+	return append(values, value)
+}
+
+func patternCandidatesFromAppNames(appNames []string) []appPatternCandidate {
+	candidates := make([]appPatternCandidate, 0, len(appNames))
+	for _, name := range appNames {
+		candidates = append(candidates, appPatternCandidate{
+			actual:     name,
+			matchNames: []string{name},
+		})
+	}
+	return candidates
 }
 
 // ResolveAppIdsInClusterWithExcludes returns all applications defined for the given cluster in the
@@ -304,5 +420,5 @@ func ResolveAppIdsInClusterWithExcludes(
 		appNames = append(appNames, string(id))
 	}
 	slices.Sort(appNames)
-	return applyExcludes(l, included, rawExclude, appNames)
+	return applyExcludes(l, included, rawExclude, patternCandidatesFromAppNames(appNames))
 }

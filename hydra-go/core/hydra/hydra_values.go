@@ -1489,6 +1489,44 @@ func LoadValuesYaml(h Hydra, mode types.HelmNetworkMode) (types.YamlString, erro
 	return yaml.ToYaml(valuesMap)
 }
 
+func rootAppHydraValuesMap(rootApp *RootApp, valuesMap types.ValuesMap) (types.ValuesMap, error) {
+	topLevelHydra, err := yaml.LookupMap(valuesMap, "global", "hydra")
+	if err != nil {
+		return nil, err
+	}
+	if rootApp == nil {
+		return topLevelHydra, nil
+	}
+
+	dependencyHydra, err := yaml.LookupMap(valuesMap, string(rootApp.RootAppName), "global", "hydra")
+	if err != nil {
+		return nil, err
+	}
+	switch {
+	case dependencyHydra == nil:
+		return topLevelHydra, nil
+	case topLevelHydra == nil:
+		return dependencyHydra, nil
+	default:
+		return values.MergeValues(dependencyHydra, topLevelHydra), nil
+	}
+}
+
+func mergeRootAppHydraValuesIntoGlobal(valuesMap types.ValuesMap, rootApp *RootApp) (types.ValuesMap, error) {
+	hydraMap, err := rootAppHydraValuesMap(rootApp, valuesMap)
+	if err != nil {
+		return nil, err
+	}
+	if hydraMap == nil {
+		return valuesMap, nil
+	}
+	return values.MergeValues(map[string]any{
+		"global": map[string]any{
+			"hydra": hydraMap,
+		},
+	}, valuesMap), nil
+}
+
 // HydraValues retrieves the Hydra configuration values from a Hydra implementation.
 func HydraValues(h Hydra, networkMode types.HelmNetworkMode) (*types.HydraValues, error) {
 	if h.AsCluster() == nil {
@@ -1505,19 +1543,9 @@ func HydraValues(h Hydra, networkMode types.HelmNetworkMode) (*types.HydraValues
 			log.Err(err))
 	}
 
-	// load dependency hydra settings
-	if rootApp := h.AsRootApp(); rootApp != nil {
-		hydra, err := yaml.LookupMap(valuesMap, string(rootApp.RootAppName), "global", "hydra")
-		if err != nil {
-			return nil, err
-		}
-		if hydra != nil {
-			valuesMap = values.MergeValues(map[string]any{
-				"global": map[string]any{
-					"hydra": hydra,
-				},
-			}, valuesMap)
-		}
+	valuesMap, err = mergeRootAppHydraValuesIntoGlobal(valuesMap, h.AsRootApp())
+	if err != nil {
+		return nil, err
 	}
 
 	valuesYaml, err := yaml.ToYaml(valuesMap)

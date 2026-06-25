@@ -96,6 +96,25 @@ A Hydra context follows this directory layout:
 - Subdirectories within a cluster directory are **root applications**, not clusters.
 - Root apps generate ArgoCD Application CRs for their child apps.
 
+### ArgoCD-managed foreign root apps
+
+Some root apps belong logically to a target cluster but must be rendered on the management cluster because they
+produce ArgoCD `Application` resources there. Mark those root apps in their own `values.yaml`:
+
+```yaml
+global:
+  hydra:
+    argocd: true
+```
+
+Developer-facing semantics:
+
+- On a normal cluster, a root app with `global.hydra.argocd: true` is **not** part of that cluster's root-app render set.
+- Its child apps still belong to the target cluster as usual.
+- On `in-cluster`, Hydra additionally enumerates all root apps from the current context and pulls in every foreign root app that has `global.hydra.argocd: true`.
+- Cluster commands therefore use an **effective cluster** concept: such a root app keeps its app id (for example `target.platform`) but resolves operationally to `in-cluster`.
+- Mixing a foreign ArgoCD-managed root app with ordinary target-cluster apps in one single-cluster command is rejected, because their effective clusters differ.
+
 ## Path Resolution
 
 ### `GetClusters()` → []\*Cluster

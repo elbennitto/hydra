@@ -10,6 +10,7 @@ import (
 	"hydra-gitops.org/hydra/hydra-go/base/log"
 
 	"github.com/goccy/go-yaml"
+	v2chart "helm.sh/helm/v4/pkg/chart/v2"
 	"hydra-gitops.org/hydra/hydra-go/base/cache"
 	"hydra-gitops.org/hydra/hydra-go/base/errors"
 	"hydra-gitops.org/hydra/hydra-go/base/utils"
@@ -17,7 +18,6 @@ import (
 	"hydra-gitops.org/hydra/hydra-go/core/types"
 	"hydra-gitops.org/hydra/hydra-go/core/values"
 	"hydra-gitops.org/hydra/hydra-go/core/yq"
-	v2chart "helm.sh/helm/v4/pkg/chart/v2"
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
@@ -370,6 +370,32 @@ func (a *RootApp) AppIds(networkMode types.HelmNetworkMode) (sets.Set[types.AppI
 	appIds = appIds.Union(childAppIds)
 
 	return appIds, nil
+}
+
+// IsManagedByInClusterArgoCD reports whether this root app should be rendered on the
+// management cluster (`in-cluster`) instead of on its own target cluster.
+// The flag lives in merged root-app values at global.hydra.argocd.
+func (a *RootApp) IsManagedByInClusterArgoCD(networkMode types.HelmNetworkMode) (bool, error) {
+	vals, err := a.LoadValuesMap(networkMode)
+	if err != nil {
+		return false, err
+	}
+	hydraMap, err := rootAppHydraValuesMap(a, vals)
+	if err != nil {
+		return false, err
+	}
+	v := values.Lookup(hydraMap, "argocd")
+	if v == nil {
+		return false, nil
+	}
+	b, ok := v.(bool)
+	if !ok {
+		return false, log.CreateError(
+			errors.ErrHydraConfigError,
+			"invalid global.hydra.argocd value in root app '{app}': expected boolean",
+			log.String("app", string(a.RootAppId())))
+	}
+	return b, nil
 }
 
 func (a *RootApp) GetChildAppIds(networkMode types.HelmNetworkMode) (sets.Set[types.AppId], error) {

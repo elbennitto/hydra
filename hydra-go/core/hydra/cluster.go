@@ -147,12 +147,45 @@ func (c *Cluster) AppIds(networkMode types.HelmNetworkMode) (sets.Set[types.AppI
 
 	appIds := sets.New[types.AppId]()
 	for _, rootApp := range rootApps {
-		appIds = appIds.Insert(rootApp.AppId())
+		inClusterArgoCD, err := rootApp.IsManagedByInClusterArgoCD(networkMode)
+		if err != nil {
+			return nil, err
+		}
+		if !inClusterArgoCD || c.ClusterName == types.InCluster {
+			appIds = appIds.Insert(rootApp.AppId())
+		}
 		childAppIds, err := rootApp.GetChildAppIds(networkMode)
 		if err != nil {
 			return nil, err
 		}
 		appIds = appIds.Union(childAppIds)
+	}
+
+	if c.ClusterName != types.InCluster {
+		return appIds, nil
+	}
+
+	clusters, err := c.Context.GetClusters()
+	if err != nil {
+		return nil, err
+	}
+	for _, other := range clusters {
+		if other.ClusterName == types.InCluster {
+			continue
+		}
+		otherRootApps, err := other.GetRootApps()
+		if err != nil {
+			return nil, err
+		}
+		for _, rootApp := range otherRootApps {
+			inClusterArgoCD, err := rootApp.IsManagedByInClusterArgoCD(networkMode)
+			if err != nil {
+				return nil, err
+			}
+			if inClusterArgoCD {
+				appIds.Insert(rootApp.AppId())
+			}
+		}
 	}
 
 	return appIds, nil
@@ -199,7 +232,17 @@ func (c *Cluster) AsCluster() *Cluster {
 // delegates to the corresponding RootApp.
 func (c *Cluster) WithApp(app types.AppId) (HydraApp, error) {
 	if err := validateCluster(app, c.ClusterName); err != nil {
-		return nil, err
+		if c.ClusterName != types.InCluster || !app.IsRootApp() {
+			return nil, err
+		}
+		appIds, appErr := c.AppIds(types.HelmNetworkModeOffline)
+		if appErr != nil {
+			return nil, appErr
+		}
+		if !appIds.Has(app) {
+			return nil, err
+		}
+		return c.Context.WithApp(app)
 	}
 
 	rootAppName, err := app.RootAppName()
