@@ -1,0 +1,26 @@
+# Readability metrics for Hydra docs (readability-pass experiment).
+# Run: ./scripts/report-readability-docs.sh
+# Grade-level scores are signals for technical prose — not hard plain-English targets.
+---
+thresholds:
+  max_grade: 14
+  max_ari: 14
+  min_ease: 30
+  max_fog: 16
+  max_lines: 400
+  # Hydra tutorials use asciinema embeds, not MkDocs admonitions.
+  min_admonitions: -1
+  max_dash_density: 0
+
+overrides:
+  - path: docs/develop/
+    thresholds:
+      max_grade: 30
+      max_ari: 35
+      max_fog: 26
+      min_ease: -100
+      max_lines: 800
+      min_admonitions: -1
+
+  - path: CHANGELOG.md
+    exclude: true

@@ -1,0 +1,71 @@
+name: docs-prose-quality
+
+on:
+  pull_request:
+    paths:
+      - "docs/**"
+      - ".vale.ini"
+      - ".vale/**"
+      - ".readability.yml"
+      - "scripts/lint-prose-docs.sh"
+      - "scripts/report-readability-docs.sh"
+      - "scripts/report-prose-docs.sh"
+      - "scripts/generate-prose-quality-report.py"
+      - "tools/vale/**"
+      - "tools/readability/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  prose-quality:
+    name: Docs prose quality
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Node (markdownlint)
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: tools/markdownlint/package-lock.json
+
+      - name: Install markdownlint
+        run: cd tools/markdownlint && npm ci
+
+      - name: Markdown structure lint
+        run: ./scripts/lint-markdown-docs.sh docs/
+
+      - name: Prose lint (Vale)
+        run: ./scripts/lint-prose-docs.sh docs/
+        continue-on-error: true
+
+      - name: Readability metrics
+        run: ./scripts/report-readability-docs.sh --check docs/
+        continue-on-error: true
+
+      - name: HTML quality report (hotspots)
+        run: ./scripts/report-prose-docs.sh docs/ --output-dir prose-quality-report
+
+      - name: Upload prose quality report
+        uses: actions/upload-artifact@v5
+        with:
+          name: docs-prose-quality-report
+          path: prose-quality-report/
+          if-no-files-found: error
+
+      - name: Summarize for PR
+        if: always()
+        run: |
+          {
+            echo "## Docs prose quality"
+            echo ""
+            echo "Download the **docs-prose-quality-report** artifact for a Sonar-style HTML report:"
+            echo "line hotspots, per-line issues, snippets, and reading-level metrics."
+            echo ""
+            echo "Local: \`./scripts/report-prose-docs.sh docs/\`"
+          } >> "${GITHUB_STEP_SUMMARY}"

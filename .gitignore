@@ -4,5 +4,10 @@
 __debug_bin*
 node_modules
 __pycache__
+tools/vale/vale
+tools/readability/readability
+.vale/styles/Google/
+.vale/styles/write-good/
 *.test
 /docs/site/.hydra_mkdocs_generated
+.prose-quality-report/

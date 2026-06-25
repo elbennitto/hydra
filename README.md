@@ -146,6 +146,9 @@ Build release archives from the repo root with:
 
 - Local container build: [scripts/build-container-image.sh](scripts/build-container-image.sh)
 - Markdown linting: [scripts/lint-markdown-docs.sh](scripts/lint-markdown-docs.sh)
+- Prose linting (Vale): [scripts/lint-prose-docs.sh](scripts/lint-prose-docs.sh)
+- Readability metrics (grade level, structure): [scripts/report-readability-docs.sh](scripts/report-readability-docs.sh)
+- Sonar-style HTML report (hotspots + line detail): [scripts/report-prose-docs.sh](scripts/report-prose-docs.sh)
 - Root README generation: [scripts/generate-readme.sh](scripts/generate-readme.sh)
 
 ## Documentation

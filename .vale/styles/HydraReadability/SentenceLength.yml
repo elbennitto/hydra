@@ -1,0 +1,7 @@
+# Pilot readability rule — align with notes.md and W3C COGA short-sentence guidance.
+extends: occurrence
+message: "Shorter sentences are easier to scan (found %d words; aim for ≤25)."
+scope: sentence
+level: suggestion
+max: 25
+token: \b(\w+)\b

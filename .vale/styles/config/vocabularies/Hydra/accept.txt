@@ -1,0 +1,17 @@
+Argo
+ArgoCD
+boolean
+CEL
+Chart.yaml
+ConfigMap
+GitOps
+Helm
+Hydra
+HYDRA_CONTEXT
+KUBECONFIG
+Kubernetes
+MkDocs
+asciinema
+kubectl
+kubeconfig
+values.yaml

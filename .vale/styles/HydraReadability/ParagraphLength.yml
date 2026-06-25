@@ -1,0 +1,7 @@
+# Flag dense paragraphs before the readability rewrite pass.
+extends: occurrence
+message: "Dense paragraph (found %d words; aim for ≤80 or split into a list)."
+scope: paragraph
+level: suggestion
+max: 80
+token: \b(\w+)\b
