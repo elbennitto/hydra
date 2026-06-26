@@ -109,6 +109,9 @@ func RunPromote(configPath string, mode Mode, actions PromoteActions, targetBran
 	cfg.CI.RootAppsPath = filepath.ToSlash(relChartsPath)
 
 	if targetBranch != "" {
+		if mode == ModeCI {
+			return PromoteResult{}, fmt.Errorf("target branch is not supported in ci mode")
+		}
 		if !repo.BranchExists(targetBranch) {
 			return PromoteResult{}, fmt.Errorf("target branch '%s' does not exist", targetBranch)
 		}
@@ -418,39 +421,9 @@ type localPromoteActions struct {
 func (a *localPromoteActions) setTargetBranch(b string) { a.targetBranch = b }
 
 func (a *localPromoteActions) ExecutePromotion(repo *git.Repo, entry PromotionEntry, _ *Config) error {
-	sourceChart, err := repo.LoadChart(entry.SourcePath)
+	fs, err := buildPromotionFS(repo, entry)
 	if err != nil {
-		return fmt.Errorf("load chart %s: %w", entry.SourcePath, err)
-	}
-
-	sourceChart.Version(entry.NewVersion)
-
-	absSource := filepath.Join(repo.Path(), entry.SourcePath)
-	absTarget := filepath.Join(repo.Path(), entry.TargetPath)
-
-	fs := git.NewFS()
-	if err := fs.AddDir(entry.TargetPath, absSource, sourceChart); err != nil {
-		return fmt.Errorf("add source dir: %w", err)
-	}
-
-	if _, statErr := os.Stat(absTarget); statErr == nil {
-		targetFiles, walkErr := walkRelFiles(absTarget)
-		if walkErr != nil {
-			return fmt.Errorf("walk target dir: %w", walkErr)
-		}
-		sourceFiles, walkErr := walkRelFiles(absSource)
-		if walkErr != nil {
-			return fmt.Errorf("walk source dir: %w", walkErr)
-		}
-		sourceSet := make(map[string]struct{}, len(sourceFiles))
-		for _, f := range sourceFiles {
-			sourceSet[f] = struct{}{}
-		}
-		for _, f := range targetFiles {
-			if _, ok := sourceSet[f]; !ok {
-				fs.Remove(filepath.ToSlash(filepath.Join(entry.TargetPath, f)))
-			}
-		}
+		return err
 	}
 
 	if a.targetBranch != "" {
@@ -471,6 +444,57 @@ func (a *localPromoteActions) ExecutePromotion(repo *git.Repo, entry PromotionEn
 
 type ciPromoteActions struct{}
 
-func (a *ciPromoteActions) ExecutePromotion(_ *git.Repo, _ PromotionEntry, _ *Config) error {
-	return fmt.Errorf("ci promote: not yet implemented")
+func (a *ciPromoteActions) ExecutePromotion(repo *git.Repo, entry PromotionEntry, _ *Config) error {
+	fs, err := buildPromotionFS(repo, entry)
+	if err != nil {
+		return err
+	}
+
+	repo.Checkout("main").
+		Branch(entry.Branch).
+		CommitFS(entry.CommitMessage(), fs)
+	if repo.Err != nil {
+		return repo.Err
+	}
+	repo.Checkout("main")
+	return repo.Err
+}
+
+func buildPromotionFS(repo *git.Repo, entry PromotionEntry) (*git.FS, error) {
+	sourceChart, err := repo.LoadChart(entry.SourcePath)
+	if err != nil {
+		return nil, fmt.Errorf("load chart %s: %w", entry.SourcePath, err)
+	}
+
+	sourceChart.Version(entry.NewVersion)
+
+	absSource := filepath.Join(repo.Path(), entry.SourcePath)
+	absTarget := filepath.Join(repo.Path(), entry.TargetPath)
+
+	fs := git.NewFS()
+	if err := fs.AddDir(entry.TargetPath, absSource, sourceChart); err != nil {
+		return nil, fmt.Errorf("add source dir: %w", err)
+	}
+
+	if _, statErr := os.Stat(absTarget); statErr == nil {
+		targetFiles, walkErr := walkRelFiles(absTarget)
+		if walkErr != nil {
+			return nil, fmt.Errorf("walk target dir: %w", walkErr)
+		}
+		sourceFiles, walkErr := walkRelFiles(absSource)
+		if walkErr != nil {
+			return nil, fmt.Errorf("walk source dir: %w", walkErr)
+		}
+		sourceSet := make(map[string]struct{}, len(sourceFiles))
+		for _, f := range sourceFiles {
+			sourceSet[f] = struct{}{}
+		}
+		for _, f := range targetFiles {
+			if _, ok := sourceSet[f]; !ok {
+				fs.Remove(filepath.ToSlash(filepath.Join(entry.TargetPath, f)))
+			}
+		}
+	}
+
+	return fs, nil
 }

@@ -604,7 +604,46 @@ func TestPromote_Local_MultipleBranches(t *testing.T) {
 	assert.Equal(t, "18.33.28-stage", authChart.GetVersion())
 }
 
-func TestPromote_CI_ReturnsNotImplemented(t *testing.T) {
+func TestPromote_CI_CreatesBranchAndCommit(t *testing.T) {
+	repo := git.Init(t.TempDir()).
+		CommitFS("init", git.NewFS().
+			File(".hydra-ci.yaml", configYAML("dev, stage", "")).
+			Add("apps/demo/service-ui/dev",
+				git.NewChart("service-ui").
+					Version("1.200.9-dev").
+					Dep("service-ui", "1.200.9", "oci://registry/helm").
+					Values("replicaCount: 2\n"),
+			).
+			Add("apps/demo/service-ui/stage",
+				git.NewChart("service-ui").
+					Version("1.198.3-stage").
+					Dep("service-ui", "1.198.3", "oci://registry/helm").
+					Values("replicaCount: 1\n"),
+			),
+		)
+	require.NoError(t, repo.Err)
+
+	actions := &ciPromoteActions{}
+	result, err := RunPromote(configPath(repo), ModeCI, actions, "", "")
+	require.NoError(t, err)
+	require.Len(t, result.Promotions, 1)
+	assert.False(t, result.Promotions[0].Skipped)
+
+	branch := "hydra/promote/to-stage/demo/service-ui"
+	repo.Checkout(branch)
+	require.NoError(t, repo.Err, "promote branch should exist")
+
+	promoted, err := repo.LoadChart("apps/demo/service-ui/stage")
+	require.NoError(t, err)
+	assert.Equal(t, "1.200.9-stage", promoted.GetVersion())
+	assert.Equal(t, "1.200.9", promoted.GetDepVersion("service-ui"))
+
+	val, err := promoted.GetValue("replicaCount")
+	require.NoError(t, err)
+	assert.Equal(t, "2", val, "values should come from source (dev)")
+}
+
+func TestPromote_CI_TargetBranchNotSupported(t *testing.T) {
 	repo := git.Init(t.TempDir()).
 		CommitFS("init", git.NewFS().
 			File(".hydra-ci.yaml", configYAML("dev, stage", "")).
@@ -618,13 +657,14 @@ func TestPromote_CI_ReturnsNotImplemented(t *testing.T) {
 					Version("1.198.3-stage").
 					Dep("service-ui", "1.198.3", "oci://registry/helm"),
 			),
-		)
+		).
+		Branch("custom-target")
 	require.NoError(t, repo.Err)
 
 	actions := &ciPromoteActions{}
-	_, err := RunPromote(configPath(repo), ModeCI, actions, "", "")
+	_, err := RunPromote(configPath(repo), ModeCI, actions, "custom-target", "")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "not yet implemented")
+	assert.Contains(t, err.Error(), "target branch is not supported in ci mode")
 }
 
 // --- Helper Tests ---
