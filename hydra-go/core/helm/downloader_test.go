@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"hydra-gitops.org/hydra/hydra-go/base/log"
 	"github.com/stretchr/testify/require"
 	"helm.sh/helm/v4/pkg/downloader"
+	"hydra-gitops.org/hydra/hydra-go/base/log"
 )
 
 func TestDownloadChartDependencies_ResolvesWildcardVersionForLocalFileDependency(t *testing.T) {
@@ -36,7 +36,7 @@ dependencies:
 `)
 	require.NoError(t, os.WriteFile(filepath.Join(chartDir, "Chart.yaml"), originalChart, 0o644))
 
-	require.NoError(t, DownloadChartDependencies(log.Default(), chartDir, nil))
+	require.NoError(t, DownloadChartDependencies(log.Default(), chartDir, nil, ""))
 	require.FileExists(t, filepath.Join(chartDir, "charts", "infra_library-1.2.3.tgz"))
 
 	restoredChart, err := os.ReadFile(filepath.Join(chartDir, "Chart.yaml"))

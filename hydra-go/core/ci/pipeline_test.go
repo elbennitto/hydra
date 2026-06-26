@@ -7,11 +7,11 @@ import (
 	"log/slog"
 	"testing"
 
-	"hydra-gitops.org/hydra/hydra-go/base/log"
-	"hydra-gitops.org/hydra/hydra-go/core/git"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	v2chart "helm.sh/helm/v4/pkg/chart/v2"
+	"hydra-gitops.org/hydra/hydra-go/base/log"
+	"hydra-gitops.org/hydra/hydra-go/core/git"
 )
 
 func TestRunTest_NoChanges_SkipsHelm(t *testing.T) {
@@ -62,7 +62,7 @@ func TestRunDownload_DryRun_DoesNotInvokeDownloader(t *testing.T) {
 	require.NoError(t, repo.Err)
 
 	old := downloadChartDependencies
-	downloadChartDependencies = func(_ log.Logger, _ string, _ *v2chart.Chart) error {
+	downloadChartDependencies = func(_ log.Logger, _ string, _ *v2chart.Chart, _ string) error {
 		return fmt.Errorf("downloader must not run in dry-run")
 	}
 	t.Cleanup(func() { downloadChartDependencies = old })
@@ -357,7 +357,7 @@ func TestRunDownload_Local_DownloadsChangedChartsEvenWhenDependenciesExist(t *te
 
 	old := downloadChartDependencies
 	var downloadPaths []string
-	downloadChartDependencies = func(_ log.Logger, chartPath string, _ *v2chart.Chart) error {
+	downloadChartDependencies = func(_ log.Logger, chartPath string, _ *v2chart.Chart, _ string) error {
 		downloadPaths = append(downloadPaths, chartPath)
 		return nil
 	}
@@ -366,6 +366,76 @@ func TestRunDownload_Local_DownloadsChangedChartsEvenWhenDependenciesExist(t *te
 	require.NoError(t, RunDownload(configPath(repo), ModeLocal))
 	require.Len(t, downloadPaths, 1)
 	assert.Contains(t, downloadPaths[0], "apps/demo/service-ui/dev")
+}
+
+func TestRunDownload_Local_LogsIntoConfiguredDownloadRegistries(t *testing.T) {
+	repo := git.Init(t.TempDir()).
+		CommitFS("init", git.NewFS().
+			File(".hydra-ci.yaml", configYAML("dev, stage", "")).
+			Add("apps/demo/service-ui/dev",
+				git.NewChart("service-ui").
+					Version("1.0.0-dev").
+					Dep("service-ui", "1.0.0", "oci://registry/helm"),
+			),
+		).
+		Tag("build-001").
+		Commit("change chart", "apps/demo/service-ui/dev/values.yaml", "x: y\n")
+	require.NoError(t, repo.Err)
+
+	oldLogin := prepareRegistryAuthHook
+	oldDownload := downloadChartDependencies
+	var usedConfigPath string
+	prepareRegistryAuthHook = func(gotConfigPath string) (string, func(), error) {
+		assert.Equal(t, configPath(repo), gotConfigPath)
+		return "/tmp/hydra-test-registry-config.json", func() {}, nil
+	}
+	downloadChartDependencies = func(_ log.Logger, chartPath string, _ *v2chart.Chart, registryConfigPath string) error {
+		assert.Contains(t, chartPath, "apps/demo/service-ui/dev")
+		usedConfigPath = registryConfigPath
+		return nil
+	}
+	t.Cleanup(func() {
+		prepareRegistryAuthHook = oldLogin
+		downloadChartDependencies = oldDownload
+	})
+
+	require.NoError(t, RunDownload(configPath(repo), ModeLocal))
+	assert.Equal(t, "/tmp/hydra-test-registry-config.json", usedConfigPath)
+}
+
+func TestRunDownload_Local_ExtendsMissingTokenErrorReport(t *testing.T) {
+	repo := git.Init(t.TempDir()).
+		CommitFS("init", git.NewFS().
+			File(".hydra-ci.yaml", configYAML("dev, stage", "")).
+			Add("apps/demo/service-ui/dev",
+				git.NewChart("service-ui").
+					Version("1.0.0-dev").
+					Dep("service-ui", "1.0.0", "oci://harbor.example.test/team/chart"),
+			),
+		).
+		Tag("build-001").
+		Commit("change chart", "apps/demo/service-ui/dev/values.yaml", "x: y\n")
+	require.NoError(t, repo.Err)
+
+	oldAuth := prepareRegistryAuthHook
+	oldDownload := downloadChartDependencies
+	prepareRegistryAuthHook = func(gotConfigPath string) (string, func(), error) {
+		assert.Equal(t, configPath(repo), gotConfigPath)
+		return "", func() {}, nil
+	}
+	downloadChartDependencies = func(_ log.Logger, chartPath string, _ *v2chart.Chart, registryConfigPath string) error {
+		return fmt.Errorf(`could not download oci://harbor.example.test/team/chart: failed to perform "FetchReference" on source: GET "https://harbor.example.test/v2/team/chart/manifests/1.2.3": basic credential not found`)
+	}
+	t.Cleanup(func() {
+		prepareRegistryAuthHook = oldAuth
+		downloadChartDependencies = oldDownload
+	})
+
+	err := RunDownload(configPath(repo), ModeLocal)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "missing OCI registry credentials for dependency download")
+	assert.Contains(t, err.Error(), "Registry host: harbor.example.test")
+	assert.Contains(t, err.Error(), "Expected secret entry: secrets.registryTokens[]")
 }
 
 func captureCILogs(t *testing.T, fn func()) string {

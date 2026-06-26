@@ -17,6 +17,21 @@ Runs chart-level dependency resolution for changed charts in the configured envi
 This step refreshes dependencies even when artifacts already exist under `charts/`.
 Use it before `hydra ci run test` when the local chart dependency cache needs to be rebuilt.
 
+For private OCI dependencies, Hydra reads registry credentials from
+`.hydra-ci-secrets.sops.yaml` via `secrets.registryTokens`. If a registry
+returns `401` or Helm reports `basic credential not found` and no matching
+token is configured, Hydra extends the error with a concrete secret example.
+
+Example CI secrets snippet:
+
+```yaml
+secrets:
+  registryTokens:
+    - registry: harbor.example.test
+      username: robot$hydra-read
+      token: <read-token>
+```
+
 ## Examples
 
 ```bash

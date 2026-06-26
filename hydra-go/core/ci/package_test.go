@@ -9,13 +9,13 @@ import (
 	"strings"
 	"testing"
 
-	"hydra-gitops.org/hydra/hydra-go/base/buildinfo"
-	"hydra-gitops.org/hydra/hydra-go/base/log"
-	"hydra-gitops.org/hydra/hydra-go/core/git"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"helm.sh/helm/v4/pkg/chart/loader"
 	"helm.sh/helm/v4/pkg/provenance"
+	"hydra-gitops.org/hydra/hydra-go/base/buildinfo"
+	"hydra-gitops.org/hydra/hydra-go/base/log"
+	"hydra-gitops.org/hydra/hydra-go/core/git"
 )
 
 func stubPackageSigningSecrets(t *testing.T) {
@@ -26,7 +26,17 @@ func stubPackageSigningSecrets(t *testing.T) {
 
 	oldSecretLoad := loadSecretsConfigHook
 	loadSecretsConfigHook = func(configPath string) (*SecretsConfig, error) {
-		return DefaultSecretsConfig(generated.Sign, CosignSecrets{}), nil
+		return &SecretsConfig{Secrets: SecretsValues{
+			Sign: generated.Sign,
+			RegistryTokens: []RegistryTokenRef{
+				{
+					Registry: "registry",
+					Username: "robot$hydra",
+					Token:    "write-token",
+					Upload:   true,
+				},
+			},
+		}}, nil
 	}
 	oldPublicLoad := loadPublicSignConfigHook
 	loadPublicSignConfigHook = func(configPath string) (PublicSignConfig, error) {
@@ -35,6 +45,18 @@ func stubPackageSigningSecrets(t *testing.T) {
 	t.Cleanup(func() {
 		loadSecretsConfigHook = oldSecretLoad
 		loadPublicSignConfigHook = oldPublicLoad
+	})
+}
+
+func stubPublishRegistryAuth(t *testing.T) {
+	t.Helper()
+
+	oldAuth := prepareRegistryAuthHook
+	prepareRegistryAuthHook = func(configPath string) (string, func(), error) {
+		return "/tmp/hydra-test-registry-config.json", func() {}, nil
+	}
+	t.Cleanup(func() {
+		prepareRegistryAuthHook = oldAuth
 	})
 }
 
@@ -142,7 +164,7 @@ func TestRunPublish_DryRun_Succeeds(t *testing.T) {
 	packageChartArchiveHook = func(chartDir, stageDir string, signing *packageSigningConfig) (packageArtifact, error) {
 		return packageArtifact{}, fmt.Errorf("publish must not run in dry-run")
 	}
-	pushChartArchiveHook = func(artifact packageArtifact, registryURL, chartName, version string) error {
+	pushChartArchiveHook = func(artifact packageArtifact, registryURL, chartName, version string, registryConfigPath string) error {
 		return fmt.Errorf("push must not run in dry-run")
 	}
 	t.Cleanup(func() {
@@ -180,7 +202,7 @@ func TestRunPublish_Local_PackagesWithMockHelm(t *testing.T) {
 		require.NotNil(t, signing)
 		return packageArtifact{TGZPath: filepath.Join(stageDir, "service-ui-1.0.0-dev.tgz"), ProvPath: filepath.Join(stageDir, "service-ui-1.0.0-dev.tgz.prov")}, nil
 	}
-	pushChartArchiveHook = func(artifact packageArtifact, registryURL, chartName, version string) error {
+	pushChartArchiveHook = func(artifact packageArtifact, registryURL, chartName, version string, registryConfigPath string) error {
 		return fmt.Errorf("push must not run in local mode")
 	}
 	t.Cleanup(func() {
@@ -218,7 +240,7 @@ func TestRunPublish_Local_SkipSigningLogsWarningAndPackagesUnsigned(t *testing.T
 		receivedSigning = signing
 		return packageArtifact{TGZPath: filepath.Join(stageDir, "service-ui-1.0.0-dev.tgz")}, nil
 	}
-	pushChartArchiveHook = func(artifact packageArtifact, registryURL, chartName, version string) error {
+	pushChartArchiveHook = func(artifact packageArtifact, registryURL, chartName, version string, registryConfigPath string) error {
 		return fmt.Errorf("push must not run in local mode")
 	}
 	t.Cleanup(func() {
@@ -237,6 +259,7 @@ func TestRunPublish_Local_SkipSigningLogsWarningAndPackagesUnsigned(t *testing.T
 
 func TestRunPublish_CI_PushWithMockHelm(t *testing.T) {
 	stubPackageSigningSecrets(t)
+	stubPublishRegistryAuth(t)
 	dir := t.TempDir()
 	fs := git.NewFS().
 		File(ConfigFileName, `ci:
@@ -263,11 +286,11 @@ func TestRunPublish_CI_PushWithMockHelm(t *testing.T) {
 		require.NotNil(t, signing)
 		return packageArtifact{TGZPath: filepath.Join(stageDir, "service-ui-1.0.0-dev.tgz"), ProvPath: filepath.Join(stageDir, "service-ui-1.0.0-dev.tgz.prov")}, nil
 	}
-	pushChartArchiveHook = func(artifact packageArtifact, registryURL, chartName, version string) error {
+	pushChartArchiveHook = func(artifact packageArtifact, registryURL, chartName, version string, registryConfigPath string) error {
 		pushCalls = append(pushCalls, fmt.Sprintf("%s|%s|%s|%s|%s", artifact.TGZPath, artifact.ProvPath, registryURL, chartName, version))
 		return nil
 	}
-	remoteChartExistsHook = func(registryURL, chartName, version string) (bool, error) {
+	remoteChartExistsHook = func(registryURL, chartName, version string, registryConfigPath string) (bool, error) {
 		return false, nil
 	}
 	t.Cleanup(func() {
@@ -285,8 +308,104 @@ func TestRunPublish_CI_PushWithMockHelm(t *testing.T) {
 	assert.Contains(t, pushCalls[0], "1.0.0-dev")
 }
 
+func TestRunPublish_CI_UsesPreparedRegistryAuthForRemoteChecksAndPush(t *testing.T) {
+	stubPackageSigningSecrets(t)
+	dir := t.TempDir()
+	fs := git.NewFS().
+		File(ConfigFileName, `ci:
+  rootAppsPath: apps
+  environments: [dev, stage, prod]
+  registry: oci://registry/helm
+  appGroups:
+    - name: demo
+      path: apps/demo
+`).
+		Add("apps/demo/service-ui/dev", git.NewChart("service-ui").Version("1.0.0-dev"))
+	repo := git.Init(dir).CommitFS("init", fs)
+	require.NoError(t, repo.Err)
+	repo.Tag("build-202601011200").Tag("demo-service-ui-1.0.0-dev")
+	require.NoError(t, repo.Err)
+
+	oldAuth := prepareRegistryAuthHook
+	oldPackage := packageChartArchiveHook
+	oldPush := pushChartArchiveHook
+	oldExists := remoteChartExistsHook
+	var seenExistsConfig string
+	var seenPushConfig string
+	prepareRegistryAuthHook = func(configPath string) (string, func(), error) {
+		assert.Equal(t, filepath.Join(dir, ConfigFileName), configPath)
+		return "/tmp/hydra-publish-registry-config.json", func() {}, nil
+	}
+	packageChartArchiveHook = func(chartDir, stageDir string, signing *packageSigningConfig) (packageArtifact, error) {
+		return packageArtifact{TGZPath: filepath.Join(stageDir, "service-ui-1.0.0-dev.tgz"), ProvPath: filepath.Join(stageDir, "service-ui-1.0.0-dev.tgz.prov")}, nil
+	}
+	remoteChartExistsHook = func(registryURL, chartName, version string, registryConfigPath string) (bool, error) {
+		seenExistsConfig = registryConfigPath
+		return false, nil
+	}
+	pushChartArchiveHook = func(artifact packageArtifact, registryURL, chartName, version string, registryConfigPath string) error {
+		seenPushConfig = registryConfigPath
+		return nil
+	}
+	t.Cleanup(func() {
+		prepareRegistryAuthHook = oldAuth
+		packageChartArchiveHook = oldPackage
+		pushChartArchiveHook = oldPush
+		remoteChartExistsHook = oldExists
+	})
+
+	require.NoError(t, RunPublish(filepath.Join(dir, ConfigFileName), ModeCI, nil, false, false, false))
+	assert.Equal(t, "/tmp/hydra-publish-registry-config.json", seenExistsConfig)
+	assert.Equal(t, "/tmp/hydra-publish-registry-config.json", seenPushConfig)
+}
+
+func TestRunPublish_CI_FailsWithoutUploadRegistryToken(t *testing.T) {
+	stubPackageSigningSecrets(t)
+	dir := t.TempDir()
+	fs := git.NewFS().
+		File(ConfigFileName, `ci:
+  rootAppsPath: apps
+  environments: [dev, stage, prod]
+  registry: oci://registry/helm
+  appGroups:
+    - name: demo
+      path: apps/demo
+`).
+		Add("apps/demo/service-ui/dev", git.NewChart("service-ui").Version("1.0.0-dev"))
+	repo := git.Init(dir).CommitFS("init", fs)
+	require.NoError(t, repo.Err)
+	repo.Tag("build-202601011200").Tag("demo-service-ui-1.0.0-dev")
+	require.NoError(t, repo.Err)
+
+	oldSecretsLoad := loadSecretsConfigHook
+	loadSecretsConfigHook = func(configPath string) (*SecretsConfig, error) {
+		return &SecretsConfig{Secrets: SecretsValues{
+			RegistryTokens: []RegistryTokenRef{
+				{
+					Registry: "registry",
+					Username: "robot$hydra",
+					Token:    "read-token",
+					Upload:   false,
+				},
+			},
+			Sign: SignSecrets{SecretKeyring: "c2VjcmV0"},
+		}}, nil
+	}
+	t.Cleanup(func() {
+		loadSecretsConfigHook = oldSecretsLoad
+	})
+
+	err := RunPublish(filepath.Join(dir, ConfigFileName), ModeCI, nil, false, false, false)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "prepare OCI registry auth")
+	assert.Contains(t, err.Error(), "ci publish requires at least one writable OCI registry token")
+	assert.Contains(t, err.Error(), "Expected secret entry: secrets.registryTokens[].upload: true")
+	assert.Contains(t, err.Error(), "upload: true")
+}
+
 func TestRunPublish_CI_SkipsWhenRemoteChartAlreadyExists(t *testing.T) {
 	stubPackageSigningSecrets(t)
+	stubPublishRegistryAuth(t)
 	dir := t.TempDir()
 	fs := git.NewFS().
 		File(ConfigFileName, `ci:
@@ -309,10 +428,10 @@ func TestRunPublish_CI_SkipsWhenRemoteChartAlreadyExists(t *testing.T) {
 	packageChartArchiveHook = func(chartDir, stageDir string, signing *packageSigningConfig) (packageArtifact, error) {
 		return packageArtifact{}, fmt.Errorf("publish must not run when remote chart already exists")
 	}
-	pushChartArchiveHook = func(artifact packageArtifact, registryURL, chartName, version string) error {
+	pushChartArchiveHook = func(artifact packageArtifact, registryURL, chartName, version string, registryConfigPath string) error {
 		return fmt.Errorf("push must not run when remote chart already exists")
 	}
-	remoteChartExistsHook = func(registryURL, chartName, version string) (bool, error) {
+	remoteChartExistsHook = func(registryURL, chartName, version string, registryConfigPath string) (bool, error) {
 		return true, nil
 	}
 	t.Cleanup(func() {
@@ -332,6 +451,7 @@ func TestRunPublish_CI_SkipsWhenRemoteChartAlreadyExists(t *testing.T) {
 }
 
 func TestRunPublish_CI_CosignOnlySignsRemoteArtifact(t *testing.T) {
+	stubPublishRegistryAuth(t)
 	dir := t.TempDir()
 	fs := git.NewFS().
 		File(ConfigFileName, `ci:
@@ -374,10 +494,10 @@ func TestRunPublish_CI_CosignOnlySignsRemoteArtifact(t *testing.T) {
 		assert.Nil(t, signing)
 		return packageArtifact{TGZPath: filepath.Join(stageDir, "service-ui-1.0.0-dev.tgz")}, nil
 	}
-	pushChartArchiveHook = func(artifact packageArtifact, registryURL, chartName, version string) error {
+	pushChartArchiveHook = func(artifact packageArtifact, registryURL, chartName, version string, registryConfigPath string) error {
 		return nil
 	}
-	remoteChartExistsHook = func(registryURL, chartName, version string) (bool, error) {
+	remoteChartExistsHook = func(registryURL, chartName, version string, registryConfigPath string) (bool, error) {
 		return false, nil
 	}
 	signOCIChartHook = func(ref string, keyPath string) error {
@@ -385,7 +505,7 @@ func TestRunPublish_CI_CosignOnlySignsRemoteArtifact(t *testing.T) {
 		assert.NotEmpty(t, keyPath)
 		return nil
 	}
-	resolveOCIChartDigestRefHook = func(registryURL, chartName, version string) (string, error) {
+	resolveOCIChartDigestRefHook = func(registryURL, chartName, version string, registryConfigPath string) (string, error) {
 		return "registry/helm/service-ui@sha256:deadbeef", nil
 	}
 	t.Cleanup(func() {
@@ -404,6 +524,7 @@ func TestRunPublish_CI_CosignOnlySignsRemoteArtifact(t *testing.T) {
 
 func TestRunPublish_CI_RemoteChartExistsCheckError(t *testing.T) {
 	stubPackageSigningSecrets(t)
+	stubPublishRegistryAuth(t)
 	dir := t.TempDir()
 	fs := git.NewFS().
 		File(ConfigFileName, `ci:
@@ -421,7 +542,7 @@ func TestRunPublish_CI_RemoteChartExistsCheckError(t *testing.T) {
 	require.NoError(t, repo.Err)
 
 	oldExists := remoteChartExistsHook
-	remoteChartExistsHook = func(registryURL, chartName, version string) (bool, error) {
+	remoteChartExistsHook = func(registryURL, chartName, version string, registryConfigPath string) (bool, error) {
 		return false, fmt.Errorf("registry unavailable")
 	}
 	t.Cleanup(func() {
@@ -437,6 +558,7 @@ func TestRunPublish_CI_RemoteChartExistsCheckError(t *testing.T) {
 
 func TestRunPublish_CI_ForcePublishUploadWhenRemoteChartAlreadyExists(t *testing.T) {
 	stubPackageSigningSecrets(t)
+	stubPublishRegistryAuth(t)
 	dir := t.TempDir()
 	fs := git.NewFS().
 		File(ConfigFileName, `ci:
@@ -463,11 +585,11 @@ func TestRunPublish_CI_ForcePublishUploadWhenRemoteChartAlreadyExists(t *testing
 		require.NotNil(t, signing)
 		return packageArtifact{TGZPath: filepath.Join(stageDir, "service-ui-1.0.0-dev.tgz"), ProvPath: filepath.Join(stageDir, "service-ui-1.0.0-dev.tgz.prov")}, nil
 	}
-	pushChartArchiveHook = func(artifact packageArtifact, registryURL, chartName, version string) error {
+	pushChartArchiveHook = func(artifact packageArtifact, registryURL, chartName, version string, registryConfigPath string) error {
 		pushCalls = append(pushCalls, fmt.Sprintf("%s|%s|%s|%s|%s", artifact.TGZPath, artifact.ProvPath, registryURL, chartName, version))
 		return nil
 	}
-	remoteChartExistsHook = func(registryURL, chartName, version string) (bool, error) {
+	remoteChartExistsHook = func(registryURL, chartName, version string, registryConfigPath string) (bool, error) {
 		return true, nil
 	}
 	t.Cleanup(func() {
@@ -715,7 +837,7 @@ func TestRunPublish_UsesOnlyHeadReleaseTagsWhenBuildTagOnHead(t *testing.T) {
 		require.NotNil(t, signing)
 		return packageArtifact{TGZPath: filepath.Join(stageDir, filepath.Base(chartDir)+"-fake.tgz"), ProvPath: filepath.Join(stageDir, filepath.Base(chartDir)+"-fake.tgz.prov")}, nil
 	}
-	pushChartArchiveHook = func(artifact packageArtifact, registryURL, chartName, version string) error {
+	pushChartArchiveHook = func(artifact packageArtifact, registryURL, chartName, version string, registryConfigPath string) error {
 		return fmt.Errorf("push must not run in local mode")
 	}
 	t.Cleanup(func() {
@@ -754,7 +876,7 @@ func TestRunPublish_SelectedCharts_SkipHeadTagRequirement(t *testing.T) {
 		require.NotNil(t, signing)
 		return packageArtifact{TGZPath: filepath.Join(stageDir, "service-ui-1.0.0-dev.tgz"), ProvPath: filepath.Join(stageDir, "service-ui-1.0.0-dev.tgz.prov")}, nil
 	}
-	pushChartArchiveHook = func(artifact packageArtifact, registryURL, chartName, version string) error {
+	pushChartArchiveHook = func(artifact packageArtifact, registryURL, chartName, version string, registryConfigPath string) error {
 		return fmt.Errorf("push must not run in local mode")
 	}
 	t.Cleanup(func() {

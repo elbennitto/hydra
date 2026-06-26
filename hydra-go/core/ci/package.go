@@ -14,10 +14,6 @@ import (
 	"strings"
 
 	"github.com/ProtonMail/go-crypto/openpgp/armor"
-	"hydra-gitops.org/hydra/hydra-go/base/buildinfo"
-	"hydra-gitops.org/hydra/hydra-go/base/log"
-	"hydra-gitops.org/hydra/hydra-go/core/git"
-	"hydra-gitops.org/hydra/hydra-go/core/helm"
 	cosignopts "github.com/sigstore/cosign/v2/cmd/cosign/cli/options"
 	cosignsign "github.com/sigstore/cosign/v2/cmd/cosign/cli/sign"
 	helmchart "helm.sh/helm/v4/pkg/chart"
@@ -26,6 +22,10 @@ import (
 	v2chartutil "helm.sh/helm/v4/pkg/chart/v2/util"
 	"helm.sh/helm/v4/pkg/provenance"
 	"helm.sh/helm/v4/pkg/registry"
+	"hydra-gitops.org/hydra/hydra-go/base/buildinfo"
+	"hydra-gitops.org/hydra/hydra-go/base/log"
+	"hydra-gitops.org/hydra/hydra-go/core/git"
+	"hydra-gitops.org/hydra/hydra-go/core/helm"
 	oraserrdef "oras.land/oras-go/v2/errdef"
 	"sigs.k8s.io/yaml"
 )
@@ -34,10 +34,10 @@ const hydraVersionAnnotation = "io.hydracd.hydra.version"
 
 var helmRunHook func(ctx context.Context, dir string, args ...string) ([]byte, error)
 var packageChartArchiveHook func(chartDir, stageDir string, signing *packageSigningConfig) (packageArtifact, error)
-var pushChartArchiveHook func(artifact packageArtifact, registryURL, chartName, version string) error
-var remoteChartExistsHook func(registryURL, chartName, version string) (bool, error)
+var pushChartArchiveHook func(artifact packageArtifact, registryURL, chartName, version string, registryConfigPath string) error
+var remoteChartExistsHook func(registryURL, chartName, version string, registryConfigPath string) (bool, error)
 var signOCIChartHook func(ref string, keyPath string) error
-var resolveOCIChartDigestRefHook func(registryURL, chartName, version string) (string, error)
+var resolveOCIChartDigestRefHook func(registryURL, chartName, version string, registryConfigPath string) (string, error)
 
 type packageArtifact struct {
 	TGZPath  string
@@ -112,6 +112,16 @@ func RunPublish(configPath string, mode Mode, selectedCharts []string, forceRun 
 		defer os.RemoveAll(tmpDir)
 	}
 
+	registryConfigPath := ""
+	registryAuthCleanup := func() {}
+	if mode == ModeCI {
+		registryConfigPath, registryAuthCleanup, err = prepareUploadRegistryAuth(configPath)
+		if err != nil {
+			return fmt.Errorf("prepare OCI registry auth: %w", err)
+		}
+	}
+	defer registryAuthCleanup()
+
 	var signing *packageSigningConfig
 	var cosignSigning *cosignSigningConfig
 	if skipSigning {
@@ -165,7 +175,7 @@ func RunPublish(configPath string, mode Mode, selectedCharts []string, forceRun 
 		}
 		if mode == ModeCI {
 			remoteRef := buildOCIChartRef(registry, name, ver)
-			exists, err := remoteChartExists(registry, name, ver)
+			exists, err := remoteChartExists(registry, name, ver, registryConfigPath)
 			if err != nil {
 				return fmt.Errorf("chart %s: check remote chart: %w", rel, err)
 			}
@@ -184,7 +194,7 @@ func RunPublish(configPath string, mode Mode, selectedCharts []string, forceRun 
 			}
 		}
 
-		if err := helm.DownloadChartDependencies(l, absDir, nil); err != nil {
+		if err := helm.DownloadChartDependencies(l, absDir, nil, ""); err != nil {
 			return fmt.Errorf("chart %s: dependency update: %w", rel, err)
 		}
 
@@ -200,11 +210,11 @@ func RunPublish(configPath string, mode Mode, selectedCharts []string, forceRun 
 		}
 
 		if mode == ModeCI {
-			if err := pushChartArchive(artifact, registry, name, ver); err != nil {
+			if err := pushChartArchive(artifact, registry, name, ver, registryConfigPath); err != nil {
 				return fmt.Errorf("chart %s: helm push: %w", rel, err)
 			}
 			if cosignSigning != nil {
-				if err := signOCIChart(registry, name, ver, cosignSigning); err != nil {
+				if err := signOCIChart(registry, name, ver, cosignSigning, registryConfigPath); err != nil {
 					return fmt.Errorf("chart %s: cosign sign: %w", rel, err)
 				}
 			}
@@ -255,9 +265,9 @@ func packageChartArchive(chartDir, stageDir string, signing *packageSigningConfi
 	return artifact, nil
 }
 
-func pushChartArchive(artifact packageArtifact, registryURL, chartName, version string) error {
+func pushChartArchive(artifact packageArtifact, registryURL, chartName, version string, registryConfigPath string) error {
 	if pushChartArchiveHook != nil {
-		return pushChartArchiveHook(artifact, registryURL, chartName, version)
+		return pushChartArchiveHook(artifact, registryURL, chartName, version, registryConfigPath)
 	}
 
 	chartData, err := os.ReadFile(artifact.TGZPath)
@@ -274,6 +284,7 @@ func pushChartArchive(artifact packageArtifact, registryURL, chartName, version 
 	}
 
 	client, err := registry.NewClient(
+		registry.ClientOptCredentialsFile(registryConfigPath),
 		registry.ClientOptDebug(false),
 		registry.ClientOptEnableCache(true),
 		registry.ClientOptWriter(io.Discard),
@@ -378,8 +389,8 @@ func decodeBase64ToFile(encoded, targetPath string) (string, error) {
 	return targetPath, nil
 }
 
-func signOCIChart(registryURL, chartName, version string, signing *cosignSigningConfig) error {
-	ref, err := resolveOCIChartDigestRef(registryURL, chartName, version)
+func signOCIChart(registryURL, chartName, version string, signing *cosignSigningConfig, registryConfigPath string) error {
+	ref, err := resolveOCIChartDigestRef(registryURL, chartName, version, registryConfigPath)
 	if err != nil {
 		return err
 	}
@@ -407,11 +418,12 @@ func signOCIChart(registryURL, chartName, version string, signing *cosignSigning
 	})
 }
 
-func resolveOCIChartDigestRef(registryURL, chartName, version string) (string, error) {
+func resolveOCIChartDigestRef(registryURL, chartName, version string, registryConfigPath string) (string, error) {
 	if resolveOCIChartDigestRefHook != nil {
-		return resolveOCIChartDigestRefHook(registryURL, chartName, version)
+		return resolveOCIChartDigestRefHook(registryURL, chartName, version, registryConfigPath)
 	}
 	client, err := registry.NewClient(
+		registry.ClientOptCredentialsFile(registryConfigPath),
 		registry.ClientOptDebug(false),
 		registry.ClientOptEnableCache(true),
 		registry.ClientOptWriter(io.Discard),
@@ -496,12 +508,13 @@ func signChartArchive(tgzPath string, signing *packageSigningConfig) (string, er
 	return provPath, nil
 }
 
-func remoteChartExists(registryURL, chartName, version string) (bool, error) {
+func remoteChartExists(registryURL, chartName, version string, registryConfigPath string) (bool, error) {
 	if remoteChartExistsHook != nil {
-		return remoteChartExistsHook(registryURL, chartName, version)
+		return remoteChartExistsHook(registryURL, chartName, version, registryConfigPath)
 	}
 
 	client, err := registry.NewClient(
+		registry.ClientOptCredentialsFile(registryConfigPath),
 		registry.ClientOptDebug(false),
 		registry.ClientOptEnableCache(true),
 		registry.ClientOptWriter(io.Discard),

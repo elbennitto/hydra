@@ -12,11 +12,11 @@ import (
 	"strings"
 	"time"
 
-	"hydra-gitops.org/hydra/hydra-go/base/log"
-	"hydra-gitops.org/hydra/hydra-go/core/git"
 	cosignverify "github.com/sigstore/cosign/v2/cmd/cosign/cli/verify"
 	"helm.sh/helm/v4/pkg/provenance"
 	"helm.sh/helm/v4/pkg/registry"
+	"hydra-gitops.org/hydra/hydra-go/base/log"
+	"hydra-gitops.org/hydra/hydra-go/core/git"
 	oraserrdef "oras.land/oras-go/v2/errdef"
 )
 
@@ -245,7 +245,7 @@ func RunValidate(configPath string, mode Mode, selectedCharts []string, buildTag
 		}
 
 		if verifyCfg.cosign {
-			digestRef, err := resolveOCIChartDigestRef(registryURL, name, version)
+			digestRef, err := resolveOCIChartDigestRef(registryURL, name, version, "")
 			if err != nil {
 				outcome.CosignErr = fmt.Sprintf("cosign resolve failed: %v", err)
 			} else if err := verifyOCIChart(digestRef, cosignVerifierCfg); err != nil {

@@ -7,10 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	"hydra-gitops.org/hydra/hydra-go/core/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
+	"hydra-gitops.org/hydra/hydra-go/core/types"
 )
 
 func writeSecretsTestConfig(t *testing.T, dir string, secretsPath string) string {
@@ -77,6 +77,33 @@ func TestResolveSecretsFilePath_FilePathIsUsedAsIs(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, filepath.Join(dir, "ci", "custom-secrets.sops.yaml"), got)
+}
+
+func TestValidateSecrets_AllowsRegistryTokensWithoutSigningKeys(t *testing.T) {
+	err := validateSecrets(SecretsValues{
+		RegistryTokens: []RegistryTokenRef{
+			{
+				Registry: "harbor.example.test",
+				Username: "robot$hydra",
+				Token:    "token-value",
+				Upload:   true,
+			},
+		},
+	}, filepath.Join(t.TempDir(), SecretsFileName))
+	require.NoError(t, err)
+}
+
+func TestValidateSecrets_RejectsIncompleteRegistryToken(t *testing.T) {
+	err := validateSecrets(SecretsValues{
+		RegistryTokens: []RegistryTokenRef{
+			{
+				Registry: "harbor.example.test",
+				Username: "robot$hydra",
+			},
+		},
+	}, filepath.Join(t.TempDir(), SecretsFileName))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "secrets.registryTokens[0].token must not be empty")
 }
 
 func TestFindNearestSopsConfig_FindsParentConfig(t *testing.T) {

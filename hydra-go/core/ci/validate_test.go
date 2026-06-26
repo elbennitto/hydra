@@ -10,11 +10,11 @@ import (
 	"testing"
 	"time"
 
-	"hydra-gitops.org/hydra/hydra-go/base/log"
-	"hydra-gitops.org/hydra/hydra-go/core/git"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"helm.sh/helm/v4/pkg/provenance"
+	"hydra-gitops.org/hydra/hydra-go/base/log"
+	"hydra-gitops.org/hydra/hydra-go/core/git"
 	oraserrdef "oras.land/oras-go/v2/errdef"
 )
 
@@ -117,7 +117,7 @@ func TestRunValidate_SucceedsWhenCosignSignatureMatches(t *testing.T) {
 		assert.NotEmpty(t, keyPath)
 		return nil
 	}
-	resolveOCIChartDigestRefHook = func(registryURL, chartName, version string) (string, error) {
+	resolveOCIChartDigestRefHook = func(registryURL, chartName, version string, registryConfigPath string) (string, error) {
 		return "registry/helm/service-ui@sha256:deadbeef", nil
 	}
 	t.Cleanup(func() {
@@ -301,7 +301,7 @@ func TestRunValidate_PartiallyOkWhenHelmFailsButCosignSucceeds(t *testing.T) {
 		assert.NotEmpty(t, keyPath)
 		return nil
 	}
-	resolveOCIChartDigestRefHook = func(registryURL, chartName, version string) (string, error) {
+	resolveOCIChartDigestRefHook = func(registryURL, chartName, version string, registryConfigPath string) (string, error) {
 		return "registry/helm/service-ui@sha256:deadbeef", nil
 	}
 	t.Cleanup(func() {

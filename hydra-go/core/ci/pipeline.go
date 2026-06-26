@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	herrors "hydra-gitops.org/hydra/hydra-go/base/errors"
 	"hydra-gitops.org/hydra/hydra-go/base/log"
@@ -79,12 +81,25 @@ func RunTest(configPath string, mode Mode) error {
 
 func RunDownload(configPath string, mode Mode) error {
 	l := log.Default()
+	registryConfigPath := ""
+	cleanup := func() {}
+	if mode != ModeDryRun {
+		var err error
+		registryConfigPath, cleanup, err = prepareRegistryAuth(configPath)
+		if err != nil {
+			return log.CreateError(herrors.ErrCiDownload, "ci download: prepare OCI registry auth: {err}",
+				log.Err(err),
+			)
+		}
+	}
+	defer cleanup()
+
 	return runChangedChartPipeline(configPath, mode, "download", herrors.ErrCiDownload, func(rel string) {
 		l.Info(logIdCI, "ci download dry-run: would fetch dependencies for chart {path}",
 			log.String("path", rel))
 	}, func(_ *git.Repo, rel, absDir string) error {
-		if err := downloadChartDependencies(l, absDir, nil); err != nil {
-			return fmt.Errorf("chart %s: dependency download: %w", rel, err)
+		if err := downloadChartDependencies(l, absDir, nil, registryConfigPath); err != nil {
+			return fmt.Errorf("chart %s: dependency download: %w", rel, extendDownloadAuthError(configPath, err, registryConfigPath))
 		}
 		l.Info(logIdCI, "ci download fetched dependencies for chart {path}", log.String("path", rel))
 		return nil
@@ -216,6 +231,52 @@ func RunUpdate(mode Mode) error {
 	return log.CreateError(herrors.ErrCiUpdate, "ci update [{mode}]: not yet implemented",
 		log.String("mode", string(mode)),
 	)
+}
+
+func extendDownloadAuthError(configPath string, err error, registryConfigPath string) error {
+	if err == nil || strings.TrimSpace(registryConfigPath) != "" || !looksLikeMissingRegistryCredentials(err) {
+		return err
+	}
+	registryHost := registryHostFromError(err)
+	if registryHost == "" {
+		registryHost = "<registry-host>"
+	}
+	return fmt.Errorf("%w\n%s", err, missingDownloadTokenError(configPath, registryHost))
+}
+
+func looksLikeMissingRegistryCredentials(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "basic credential not found") ||
+		strings.Contains(msg, "401") ||
+		strings.Contains(msg, "unauthorized")
+}
+
+func registryHostFromError(err error) string {
+	if err == nil {
+		return ""
+	}
+	msg := err.Error()
+	start := strings.Index(msg, "https://")
+	if start < 0 {
+		start = strings.Index(msg, "http://")
+	}
+	if start < 0 {
+		return ""
+	}
+	rest := msg[start:]
+	end := strings.Index(rest, "\"")
+	if end < 0 {
+		end = len(rest)
+	}
+	rawURL := rest[:end]
+	parsed, parseErr := url.Parse(rawURL)
+	if parseErr == nil && parsed.Host != "" {
+		return normalizeRegistryHost(parsed.Host)
+	}
+	return normalizeRegistryHost(rawURL)
 }
 
 func changedChartPathsForTest(repo *git.Repo, cfg *Config) ([]string, error) {

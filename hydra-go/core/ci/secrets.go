@@ -16,11 +16,11 @@ import (
 	"github.com/ProtonMail/go-crypto/openpgp"
 	"github.com/ProtonMail/go-crypto/openpgp/armor"
 	"github.com/ProtonMail/go-crypto/openpgp/packet"
-	"hydra-gitops.org/hydra/hydra-go/core/sops"
-	"hydra-gitops.org/hydra/hydra-go/core/types"
 	"github.com/sigstore/cosign/v2/pkg/cosign"
 	cosignsigs "github.com/sigstore/cosign/v2/pkg/signature"
 	"gopkg.in/yaml.v3"
+	"hydra-gitops.org/hydra/hydra-go/core/sops"
+	"hydra-gitops.org/hydra/hydra-go/core/types"
 )
 
 const SecretsFileName = ".hydra-ci-secrets.sops.yaml"
@@ -30,8 +30,9 @@ type SecretsConfig struct {
 }
 
 type SecretsValues struct {
-	Sign   SignSecrets   `yaml:"sign,omitempty"`
-	Cosign CosignSecrets `yaml:"cosign,omitempty"`
+	Sign           SignSecrets        `yaml:"sign,omitempty"`
+	Cosign         CosignSecrets      `yaml:"cosign,omitempty"`
+	RegistryTokens []RegistryTokenRef `yaml:"registryTokens,omitempty"`
 }
 
 type SignSecrets struct {
@@ -40,6 +41,13 @@ type SignSecrets struct {
 
 type CosignSecrets struct {
 	PrivateKey string `yaml:"privateKey,omitempty"`
+}
+
+type RegistryTokenRef struct {
+	Registry string `yaml:"registry,omitempty"`
+	Username string `yaml:"username,omitempty"`
+	Token    string `yaml:"token,omitempty"`
+	Upload   bool   `yaml:"upload,omitempty"`
 }
 
 type GeneratedSignSecrets struct {
@@ -391,8 +399,13 @@ func validateSecrets(secrets SecretsValues, targetPath string) error {
 	if err := validateCosignSecrets(secrets.Cosign, targetPath); err != nil {
 		return err
 	}
-	if strings.TrimSpace(secrets.Sign.SecretKeyring) == "" && strings.TrimSpace(secrets.Cosign.PrivateKey) == "" {
-		return fmt.Errorf("decrypted secrets config %s: at least one of secrets.sign or secrets.cosign must be configured", targetPath)
+	if err := validateRegistryTokens(secrets.RegistryTokens, targetPath); err != nil {
+		return err
+	}
+	if strings.TrimSpace(secrets.Sign.SecretKeyring) == "" &&
+		strings.TrimSpace(secrets.Cosign.PrivateKey) == "" &&
+		len(secrets.RegistryTokens) == 0 {
+		return fmt.Errorf("decrypted secrets config %s: at least one of secrets.sign, secrets.cosign, or secrets.registryTokens must be configured", targetPath)
 	}
 	return nil
 }
@@ -511,6 +524,21 @@ func validateCosignSecrets(sign CosignSecrets, targetPath string) error {
 	}
 	if _, err := base64.StdEncoding.DecodeString(strings.TrimSpace(sign.PrivateKey)); err != nil {
 		return fmt.Errorf("decrypted secrets config %s: decode secrets.cosign.privateKey: %w", targetPath, err)
+	}
+	return nil
+}
+
+func validateRegistryTokens(tokens []RegistryTokenRef, targetPath string) error {
+	for i, token := range tokens {
+		if strings.TrimSpace(token.Registry) == "" {
+			return fmt.Errorf("decrypted secrets config %s: secrets.registryTokens[%d].registry must not be empty", targetPath, i)
+		}
+		if strings.TrimSpace(token.Username) == "" {
+			return fmt.Errorf("decrypted secrets config %s: secrets.registryTokens[%d].username must not be empty", targetPath, i)
+		}
+		if strings.TrimSpace(token.Token) == "" {
+			return fmt.Errorf("decrypted secrets config %s: secrets.registryTokens[%d].token must not be empty", targetPath, i)
+		}
 	}
 	return nil
 }

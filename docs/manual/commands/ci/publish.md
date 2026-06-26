@@ -22,6 +22,28 @@ If `ci.sign.helm.name` or `ci.sign.helm.key` is missing, Hydra also fails while 
 
 Use `--skip-signing` to package and publish charts without provenance signatures. Hydra logs this as `WARN` because the published chart will be unsigned.
 
+In CI mode, Hydra also requires at least one writable OCI registry token in
+`.hydra-ci-secrets.sops.yaml`. Writable tokens are declared with
+`secrets.registryTokens[].upload: true`. Tokens without `upload: true` are
+treated as read-only and are ignored for `hydra ci run publish`.
+
+Example CI secrets snippet:
+
+```yaml
+secrets:
+  registryTokens:
+    - registry: harbor.example.test
+      username: robot$hydra-read
+      token: <read-token>
+    - registry: harbor.example.test
+      username: robot$hydra-write
+      token: <write-token>
+      upload: true
+```
+
+If no writable token is configured, Hydra aborts before the first remote OCI
+operation and prints an extended error that shows the expected secret shape.
+
 ## Flags
 
 | Flag | Description |

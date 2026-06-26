@@ -35,6 +35,29 @@ All pipeline stages read configuration from `.hydra-ci.yaml` in the repository. 
 | `config` | Interactive `.hydra-ci.yaml` editor (stdout color follows TTY unless `--no-color`) |
 | `secrets` | Manage encrypted `.hydra-ci-secrets.sops.yaml` files |
 
+### Registry Tokens
+
+Hydra CI reads OCI registry credentials from `secrets.registryTokens` in the
+encrypted CI secrets file. Use plain registry tokens for read-only access and
+mark write-capable tokens explicitly with `upload: true`.
+
+```yaml
+secrets:
+  registryTokens:
+    - registry: harbor.example.test
+      username: robot$hydra-read
+      token: <read-token>
+    - registry: harbor.example.test
+      username: robot$hydra-write
+      token: <write-token>
+      upload: true
+```
+
+- `hydra ci run download` uses any configured `registryTokens` entry.
+- `hydra ci run publish` only uses entries with `upload: true`.
+- Missing read tokens and missing write tokens produce extended error reports
+  with the expected secret field and a minimal example snippet.
+
 ## Persistent Flags
 
 These flags apply to `hydra ci run ...` subcommands, and are also accepted on `hydra ci` so they can flow into `run`. `--dry-run` and `--local` are mutually exclusive:
@@ -180,7 +203,7 @@ Runs after a **local** or CI **release** that created lightweight tags on one co
 
 - **`--dry-run`:** Log which charts would be packaged and the push target; no `helm` calls and no writes under the chart trees beyond what logging implies.
 - **`--local`:** Package charts locally; no `helm push` (same no-OCI-upload rule as other `hydra ci run --local` stages).
-- **Default (CI):** Package and `helm push` each `.tgz` to `ci.registry`. The job must already be logged in (`helm registry login` or runner credentials).
+- **Default (CI):** Package and `helm push` each `.tgz` to `ci.registry`. Hydra logs into OCI registries from `secrets.registryTokens`; at least one matching entry with `upload: true` is required for publish.
 - **`--skip-signing`:** Package and optionally push charts without provenance signatures. Hydra logs this as a warning.
 
 #### Selecting charts explicitly

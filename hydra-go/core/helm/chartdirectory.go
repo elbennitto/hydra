@@ -9,14 +9,14 @@ import (
 
 	"hydra-gitops.org/hydra/hydra-go/base/log"
 
-	"hydra-gitops.org/hydra/hydra-go/base/errors"
-	"hydra-gitops.org/hydra/hydra-go/base/utils"
-	"hydra-gitops.org/hydra/hydra-go/core/types"
 	"helm.sh/helm/v4/pkg/chart"
 	"helm.sh/helm/v4/pkg/chart/loader"
 	v2chart "helm.sh/helm/v4/pkg/chart/v2"
 	"helm.sh/helm/v4/pkg/release"
 	v1release "helm.sh/helm/v4/pkg/release/v1"
+	"hydra-gitops.org/hydra/hydra-go/base/errors"
+	"hydra-gitops.org/hydra/hydra-go/base/utils"
+	"hydra-gitops.org/hydra/hydra-go/core/types"
 )
 
 // ChartDirectory is an interface for different types of chart directories
@@ -158,7 +158,7 @@ func (p PersistentChartDirectory) loadChart(
 
 	if mode == types.HelmNetworkModeOnline && len(missingCharts) > 0 {
 		for path, missingChart := range missingCharts {
-			err := DownloadChartDependencies(p.l, path, missingChart)
+			err := DownloadChartDependencies(p.l, path, missingChart, "")
 			if err != nil {
 				return ChartCacheEntry{
 					Error: log.CreateError(errors.ErrLoadingHelmChartDependenciesFailed, "failed to download missing chart dependencies for chart in path '{path}'",
