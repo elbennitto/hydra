@@ -12,6 +12,17 @@ import (
 //go:embed templates/*.md.gotpl
 var templateFS embed.FS
 
+// HasTemplate reports whether a markdown help template exists for code.
+func HasTemplate(code errors.ErrorId) bool {
+	if code == errors.ErrUnknown || code == "" {
+		return false
+	}
+
+	tplPath := fmt.Sprintf("templates/%s.md.gotpl", code)
+	_, err := templateFS.ReadFile(tplPath)
+	return err == nil
+}
+
 // Render renders a markdown explanation from a gotpl template selected by
 // error code. Logger parameters are available both at top level and under
 // the "params" key.

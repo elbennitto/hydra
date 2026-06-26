@@ -1,6 +1,7 @@
 package main
 
 import (
+	stderrors "errors"
 	"fmt"
 	"os"
 	"strings"
@@ -34,12 +35,7 @@ func main() {
 }
 
 func printExtendedErrorMarkdown(err error) {
-	code := errors.Id(err)
-	if code == errors.ErrUnknown {
-		return
-	}
-
-	params, ok := errors.TemplateParams(err)
+	code, params, ok := findExtendedErrorMarkdownInput(err)
 	if !ok {
 		return
 	}
@@ -61,6 +57,53 @@ func printExtendedErrorMarkdown(err error) {
 
 	_, _ = fmt.Fprintln(os.Stderr)
 	_, _ = fmt.Fprintln(os.Stderr, out)
+}
+
+func findExtendedErrorMarkdownInput(err error) (errors.ErrorId, map[string]any, bool) {
+	for _, candidate := range walkErrors(err) {
+		code := errors.Id(candidate)
+		if code == errors.ErrUnknown || !errormarkdown.HasTemplate(code) {
+			continue
+		}
+		params, ok := candidate.(errors.ErrorTemplateParamsProvider)
+		if !ok {
+			continue
+		}
+		return code, params.ErrorTemplateParams(), true
+	}
+	return errors.ErrUnknown, nil, false
+}
+
+func walkErrors(err error) []error {
+	if err == nil {
+		return nil
+	}
+
+	var out []error
+	stack := []error{err}
+	for len(stack) > 0 {
+		current := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		if current == nil {
+			continue
+		}
+		out = append(out, current)
+
+		switch unwrapped := any(current).(type) {
+		case interface{ Unwrap() []error }:
+			children := unwrapped.Unwrap()
+			for i := len(children) - 1; i >= 0; i-- {
+				stack = append(stack, children[i])
+			}
+		default:
+			next := stderrors.Unwrap(current)
+			if next != nil {
+				stack = append(stack, next)
+			}
+		}
+	}
+
+	return out
 }
 
 func newErrorMarkdownRenderer() (*glamour.TermRenderer, error) {

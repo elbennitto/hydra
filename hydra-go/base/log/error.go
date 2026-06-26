@@ -17,6 +17,7 @@ type lazyError struct {
 	id      errors.ErrorId
 	message string
 	params  map[string]any
+	cause   error
 	Log     func()
 }
 
@@ -29,6 +30,10 @@ func (e lazyError) Error() string {
 
 func (e lazyError) ErrorId() errors.ErrorId {
 	return e.id
+}
+
+func (e lazyError) Unwrap() error {
+	return e.cause
 }
 
 func (e lazyError) ErrorTemplateParams() map[string]any {
@@ -90,6 +95,7 @@ func logWithCaller(level slog.Level, id errors.ErrorId, msg string, args ...any)
 	message := ReplacePlaceholdersWithArgs(msg, args, "", "").Message
 	params := attrsToParamMap(args)
 	logArgs := argsForLogger(args)
+	cause := firstErrorArg(args)
 
 	// Capture the real caller PC and stack trace now (skip: Callers, captureStack, logWithCaller, CreateError/CreateWarn/CreateInfo)
 	callerPC, stack := captureStack(4)
@@ -98,6 +104,7 @@ func logWithCaller(level slog.Level, id errors.ErrorId, msg string, args ...any)
 		id:      id,
 		message: message,
 		params:  params,
+		cause:   cause,
 		Log: func() {
 			// Build a slog.Record manually with the real caller's PC
 			r := slog.NewRecord(time.Now(), level, msg, callerPC)
@@ -111,6 +118,19 @@ func logWithCaller(level slog.Level, id errors.ErrorId, msg string, args ...any)
 			_ = slog.Default().Handler().Handle(context.Background(), r)
 		},
 	}
+}
+
+func firstErrorArg(args []any) error {
+	for i := range args {
+		attr, ok := args[i].(slog.Attr)
+		if !ok {
+			continue
+		}
+		if err, ok := attr.Value.Any().(error); ok {
+			return err
+		}
+	}
+	return nil
 }
 
 func attrsToParamMap(args []any) map[string]any {

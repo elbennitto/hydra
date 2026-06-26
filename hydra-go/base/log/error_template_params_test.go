@@ -1,6 +1,7 @@
 package log
 
 import (
+	stderrors "errors"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -30,4 +31,15 @@ func TestCreateError_ExposesTemplateParams(t *testing.T) {
 		"namespace": "argocd",
 		"apps":      []string{"app-a", "app-b"},
 	}}, params["ambiguous"])
+}
+
+func TestCreateError_UnwrapsWrappedCause(t *testing.T) {
+	cause := stderrors.New("root cause")
+	err := CreateError(
+		errors.ErrInternalError,
+		"wrapper: {err}",
+		Err(cause),
+	)
+
+	require.ErrorIs(t, err, cause)
 }

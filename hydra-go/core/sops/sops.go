@@ -2,11 +2,16 @@ package sops
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
+	"strings"
 
+	baseerrors "hydra-gitops.org/hydra/hydra-go/base/errors"
+	"hydra-gitops.org/hydra/hydra-go/base/log"
 	"hydra-gitops.org/hydra/hydra-go/core/types"
 )
 
@@ -24,7 +29,7 @@ func DecryptSopsFile(path string) (types.YamlString, error) {
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("failed to decrypt file %s: %w\nstderr: %s", absPath, err, stderr.String())
+		return "", formatDecryptError(fmt.Sprintf("file %s", absPath), err, stderr.String())
 	}
 
 	return types.YamlString(stdout.String()), nil
@@ -39,7 +44,7 @@ func DecryptSopsYaml(data types.YamlString) (types.YamlString, error) {
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("failed to decrypt YAML via stdin: %w\nstderr: %s", err, stderr.String())
+		return "", formatDecryptError("YAML via stdin", err, stderr.String())
 	}
 
 	return types.YamlString(stdout.String()), nil
@@ -102,4 +107,89 @@ func EncryptSopsFile(data types.YamlString, path string) error {
 		return fmt.Errorf("failed to get absolute path: %w", err)
 	}
 	return os.WriteFile(absPath, []byte(encrypted), 0o644)
+}
+
+func formatDecryptError(target string, err error, stderr string) error {
+	trimmedStderr := strings.TrimSpace(stderr)
+	reason := decryptReason(err, trimmedStderr)
+	params := []any{
+		log.String("target", target),
+		log.String("reason", reason),
+		log.String("stderr", trimmedStderr),
+	}
+	params = append(params, sopsTemplateParams()...)
+
+	message := fmt.Sprintf("failed to decrypt %s: %v", target, err)
+	if trimmedStderr != "" {
+		message += "\nstderr: " + trimmedStderr
+	}
+
+	switch reason {
+	case "sops-not-found", "age-key-missing":
+		return log.CreateError(
+			baseerrors.ErrSopsDecryptFailed,
+			message,
+			params...,
+		)
+	default:
+		return errors.New(message)
+	}
+}
+
+func sopsTemplateParams() []any {
+	knownNames := map[string]struct{}{
+		"SOPS_AGE_KEY":                  {},
+		"SOPS_AGE_KEY_CMD":              {},
+		"SOPS_AGE_KEY_FILE":             {},
+		"SOPS_AGE_SSH_PRIVATE_KEY_CMD":  {},
+		"SOPS_AGE_SSH_PRIVATE_KEY_FILE": {},
+	}
+
+	for _, entry := range os.Environ() {
+		name, _, found := strings.Cut(entry, "=")
+		if !found || !strings.HasPrefix(name, "SOPS_") {
+			continue
+		}
+		knownNames[name] = struct{}{}
+	}
+
+	names := make([]string, 0, len(knownNames))
+	for name := range knownNames {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	statuses := make(map[string]bool, len(names))
+	anyDefined := false
+	params := make([]any, 0, len(names)+3)
+	for _, name := range names {
+		_, defined := os.LookupEnv(name)
+		if defined {
+			anyDefined = true
+			params = append(params, log.ExtendedHelp(name, true))
+		}
+		statuses[name] = defined
+	}
+
+	params = append(params, log.ExtendedHelp("sopsEnvStatuses", statuses))
+	params = append(params, log.ExtendedHelp("sopsEnvStatusKeys", names))
+	params = append(params, log.ExtendedHelp("sopsEnvAnyDefined", anyDefined))
+	return params
+}
+
+func decryptReason(err error, stderr string) string {
+	if errors.Is(err, exec.ErrNotFound) {
+		return "sops-not-found"
+	}
+
+	lowerStderr := strings.ToLower(stderr)
+	if strings.Contains(lowerStderr, "no identity matched any of the recipients") ||
+		strings.Contains(lowerStderr, "failed to create reader for decrypting sops data key with age") ||
+		strings.Contains(lowerStderr, "0 successful groups required, got 0") ||
+		strings.Contains(lowerStderr, "failed to load age identities") ||
+		strings.Contains(lowerStderr, "did not find keys in") {
+		return "age-key-missing"
+	}
+
+	return ""
 }

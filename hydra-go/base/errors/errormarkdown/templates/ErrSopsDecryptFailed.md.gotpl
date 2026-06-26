@@ -1,0 +1,53 @@
+# Extended Error Help: {{ .errorCode }}
+
+## What happened?
+Hydra could not decrypt this SOPS input:
+
+```text
+{{ .target }}
+```
+
+{{- if eq .reason "sops-not-found" }}
+The `sops` executable could not be started in the current environment.
+{{- else if eq .reason "age-key-missing" }}
+SOPS started, but no matching AGE private key was available for the file recipients.
+{{- end }}
+
+## Why Hydra stops here
+Hydra needs the decrypted CI secret data before it can continue with signing, publishing, or reading registry credentials.
+
+## Resolution
+{{- if eq .reason "sops-not-found" }}
+1. Install `sops` in the Hydra CI environment.
+2. Make sure the binary is available on `PATH`.
+3. Retry the CI step after the tool is present.
+{{- else if eq .reason "age-key-missing" }}
+{{- if .sopsEnvAnyDefined }}
+1. Check the configured `SOPS_` key sources. At least one key source is defined, but the key could not be used to decrypt this file.
+2. Verify that the configured private key matches one of the AGE recipients in the `.sops.yaml` file.
+3. Check the detected `SOPS_` environment variables:
+{{- range .sopsEnvStatusKeys }}
+   - `{{ . }}`: {{ if index $.sopsEnvStatuses . }}defined{{ else }}missing{{ end }}
+{{- end }}
+4. Retry the CI step after updating the secret.
+{{- else }}
+1. No `SOPS_` key source is defined, so the AGE private key was not provided to the process.
+2. Provide one of the AGE private key sources supported by `sops`, for example:
+   - `SOPS_AGE_KEY`
+   - `SOPS_AGE_KEY_FILE`
+   - `SOPS_AGE_KEY_CMD`
+   - `SOPS_AGE_SSH_PRIVATE_KEY_FILE`
+   - `SOPS_AGE_SSH_PRIVATE_KEY_CMD`
+3. Retry the CI step after updating the secret.
+{{- end }}
+{{- else }}
+1. Inspect the stderr output below.
+2. Fix the reported SOPS problem and retry.
+{{- end }}
+
+{{- if .stderr }}
+## SOPS stderr
+```text
+{{ .stderr }}
+```
+{{- end }}

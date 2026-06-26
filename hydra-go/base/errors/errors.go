@@ -81,6 +81,7 @@ const (
 	ErrInternalError                              ErrorId = "ErrInternalError"
 	ErrInvalidCrdMode                             ErrorId = "ErrInvalidCrdMode"
 	ErrInvalidHydraStructure                      ErrorId = "ErrInvalidHydraStructure"
+	ErrSopsDecryptFailed                          ErrorId = "ErrSopsDecryptFailed"
 	ErrInvalidResourceScope                       ErrorId = "ErrInvalidResourceScope"
 	ErrKeyNotFound                                ErrorId = "ErrKeyNotFound"
 	ErrKeyTypeMismatch                            ErrorId = "ErrKeyTypeMismatch"
