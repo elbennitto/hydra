@@ -6,7 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/go-logr/logr"
+	"github.com/muesli/termenv"
 	"hydra-gitops.org/hydra/hydra-go/base/buildinfo"
 	"hydra-gitops.org/hydra/hydra-go/base/log"
 
@@ -80,7 +82,10 @@ func executeWithArgv(argv []string) error {
 		argv = []string{"hydra"}
 	}
 
-	args := normalizeInvocationArgs(argv[0], argv[1:])
+	args, err := normalizeInvocationArgs(argv[0], argv[1:])
+	if err != nil {
+		return err
+	}
 
 	if shouldRunLess(args) {
 		return runLessPipe(args)
@@ -98,7 +103,7 @@ func executeWithArgv(argv []string) error {
 	rootCmd.SetArgs(args)
 
 	// Execute the root command
-	err := rootCmd.Execute()
+	err = rootCmd.Execute()
 
 	logged := log.LogLazy(err)
 	if err != nil && !logged && !exitcode.Is(err) {
@@ -123,17 +128,17 @@ func executeWithArgv(argv []string) error {
 	return err
 }
 
-func normalizeInvocationArgs(argv0 string, args []string) []string {
+func normalizeInvocationArgs(argv0 string, args []string) ([]string, error) {
 	invoked := normalizeExecutableName(argv0)
 	if !isHydraTopLevelCommand(invoked) || invoked == "hydra" {
-		return args
+		return args, nil
 	}
 
 	if len(args) > 0 && args[0] == invoked {
-		return args
+		return args, nil
 	}
 
-	return append([]string{invoked}, args...)
+	return append([]string{invoked}, args...), nil
 }
 
 func normalizeExecutableName(argv0 string) string {
@@ -266,18 +271,24 @@ func configureLogging(flags *GlobalFlags, cmd *cobra.Command) {
 	stdoutTTYAtInit := stdoutIsTerminalForHydra()
 
 	var useColor bool
+	var colorForced bool
 	switch {
 	case flags.ColorLog:
 		useColor = true
+		colorForced = true
 	case flags.NoColorLog:
 		useColor = false
+		colorForced = true
 	default:
 		if forced, ok := colorForcedByEnv(); ok {
 			useColor = forced
+			colorForced = true
 		} else {
 			useColor = stderrIsTerminalForHydra()
 		}
 	}
+
+	applyLipglossColorOverride(useColor, colorForced)
 
 	var colors *log.ColorHandlerColors
 	if useColor {
@@ -330,6 +341,17 @@ func configureLogging(flags *GlobalFlags, cmd *cobra.Command) {
 	if flags.Verbose {
 		l.Info(logIdCmd, "Verbose logging enabled")
 	}
+}
+
+func applyLipglossColorOverride(useColor bool, forced bool) {
+	if !forced {
+		return
+	}
+	if useColor {
+		lipgloss.SetColorProfile(termenv.ANSI256)
+		return
+	}
+	lipgloss.SetColorProfile(termenv.Ascii)
 }
 
 func commandUsesClusterProgressFooter(cmd *cobra.Command) bool {

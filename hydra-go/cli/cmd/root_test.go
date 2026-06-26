@@ -269,24 +269,29 @@ func TestExecuteArgsDelegatesHelmAfterHydraFlags(t *testing.T) {
 
 func TestNormalizeInvocationArgs(t *testing.T) {
 	t.Run("prepends top-level command from executable name", func(t *testing.T) {
-		got := normalizeInvocationArgs("/usr/local/bin/yq", []string{"--version"})
+		got, err := normalizeInvocationArgs("/usr/local/bin/yq", []string{"--version"})
+		require.NoError(t, err)
 		assert.Equal(t, []string{"yq", "--version"}, got)
 	})
 
 	t.Run("does not duplicate when command already present", func(t *testing.T) {
-		got := normalizeInvocationArgs("helm", []string{"helm", "version"})
+		got, err := normalizeInvocationArgs("helm", []string{"helm", "version"})
+		require.NoError(t, err)
 		assert.Equal(t, []string{"helm", "version"}, got)
 	})
 
 	t.Run("does not prepend for hydra executable", func(t *testing.T) {
-		got := normalizeInvocationArgs("hydra", []string{"version"})
+		got, err := normalizeInvocationArgs("hydra", []string{"version"})
+		require.NoError(t, err)
 		assert.Equal(t, []string{"version"}, got)
 	})
 
 	t.Run("does not prepend for unknown executable", func(t *testing.T) {
-		got := normalizeInvocationArgs("mytool", []string{"version"})
+		got, err := normalizeInvocationArgs("mytool", []string{"version"})
+		require.NoError(t, err)
 		assert.Equal(t, []string{"version"}, got)
 	})
+
 }
 
 func TestExecuteWithArgvUsesInvocationNameForYq(t *testing.T) {
