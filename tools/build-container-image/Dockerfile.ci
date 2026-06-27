@@ -6,14 +6,7 @@ ARG SOPS_VERSION=3.13.1
 
 FROM ghcr.io/getsops/sops:v${SOPS_VERSION} AS sops
 
-FROM alpine:3.24 AS links
-
-RUN mkdir -p /links/bin && \
-    ln -s /bin/hydra /links/bin/cosign && \
-    ln -s /bin/hydra /links/bin/helm && \
-    ln -s /bin/hydra /links/bin/yq
-
-FROM scratch AS runtime
+FROM alpine:3.24
 
 # BuildKit predefined platform args must be declared inside the stage scope.
 ARG TARGETOS=linux
@@ -21,10 +14,12 @@ ARG TARGETARCH=amd64
 
 LABEL org.opencontainers.image.version=$VERSION
 
+RUN apk add --no-cache ca-certificates curl git
+
 COPY ${TARGETOS}/${TARGETARCH}/hydra /bin/hydra
 COPY --from=sops /usr/local/bin/sops /bin/sops
-COPY --from=sops /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
-COPY --from=links /links/ /
 
-ENTRYPOINT ["/bin/hydra"]
-CMD ["--help"]
+RUN \
+    ln -s /bin/hydra /bin/cosign && \
+    ln -s /bin/hydra /bin/helm && \
+    ln -s /bin/hydra /bin/yq

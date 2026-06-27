@@ -20,6 +20,7 @@ fork_owner=""
 fork_repo=""
 fork_url=""
 package_url=""
+package_ci_url=""
 upstream_path=""
 upstream_url=""
 
@@ -149,27 +150,30 @@ repo_exists() {
 
 package_api_path() {
   local owner_type="$1"
+  local package_name="$2"
 
   if [[ "${owner_type}" == "Organization" ]]; then
-    printf 'orgs/%s/packages/container/%s\n' "${fork_owner}" "${fork_repo}"
+    printf 'orgs/%s/packages/container/%s\n' "${fork_owner}" "${package_name}"
     return
   fi
 
-  printf 'users/%s/packages/container/%s\n' "${fork_owner}" "${fork_repo}"
+  printf 'users/%s/packages/container/%s\n' "${fork_owner}" "${package_name}"
 }
 
 delete_container_package_if_present() {
   local owner_type="$1"
+  local package_name="$2"
+  local package_url="$3"
   local api_path=""
 
-  api_path="$(package_api_path "${owner_type}")"
+  api_path="$(package_api_path "${owner_type}" "${package_name}")"
 
   if ! gh api "${api_path}" >/dev/null 2>&1; then
     echo "Container package not found, skipping deletion: ${package_url}"
     return
   fi
 
-  echo "Deleting container package ${fork_repo}"
+  echo "Deleting container package ${package_name}"
   gh api \
     --method DELETE \
     -H "Accept: application/vnd.github+json" \
@@ -207,6 +211,7 @@ fork_owner="${fork_path%%/*}"
 fork_repo="${fork_path##*/}"
 fork_url="https://github.com/${fork_path}"
 package_url="https://github.com/${fork_path}/pkgs/container/${fork_repo}"
+package_ci_url="https://github.com/${fork_path}/pkgs/container/${fork_repo}-ci"
 
 if [[ ! -d "${repo_root}/.github/secrets/repos/${fork_path}" ]]; then
   echo "Missing secrets directory: .github/secrets/repos/${fork_path}" >&2
@@ -221,6 +226,7 @@ echo "The following resources will be reset:"
 echo "* Fork URL: ${fork_url} (will be deleted)"
 echo "* Upstream URL: ${upstream_url} (this repository will be forked again)"
 echo "* Container package: ${package_url} (will be deleted)"
+echo "* Container package: ${package_ci_url} (will be deleted)"
 echo
 
 read -r -p "Type '${fork_path}' to confirm: " confirmation
@@ -232,7 +238,8 @@ fi
 owner_type="$(gh api "users/${fork_owner}" --jq '.type')"
 current_login="$(gh api user --jq '.login')"
 
-delete_container_package_if_present "${owner_type}"
+delete_container_package_if_present "${owner_type}" "${fork_repo}" "${package_url}"
+delete_container_package_if_present "${owner_type}" "${fork_repo}-ci" "${package_ci_url}"
 
 if repo_exists "${fork_path}"; then
   echo "Deleting fork repository ${fork_path}"

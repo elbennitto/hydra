@@ -11,11 +11,13 @@ import (
 type readmeData struct {
 	ChecksumsURL          string
 	ContainerBadgeURL     string
+	ImageCIRef            string
 	ImageRef              string
 	LatestReleaseBadgeURL string
 	ReleaseTag            string
 	ReleaseURL            string
 	Repo                  string
+	RepoOwner             string
 	TapPackageRepo        string
 	TapRepo               string
 	Version               string
@@ -48,11 +50,13 @@ func main() {
 	data := readmeData{
 		ChecksumsURL:          checksumsURL,
 		ContainerBadgeURL:     "https://img.shields.io/badge/container-ghcr.io-blue",
+		ImageCIRef:            "ghcr.io/" + strings.ToLower(*repoSlug) + "-ci",
 		ImageRef:              "ghcr.io/" + strings.ToLower(*repoSlug),
 		LatestReleaseBadgeURL: fmt.Sprintf("https://img.shields.io/github/v/release/%s?sort=semver", *repoSlug),
 		ReleaseTag:            releaseTag,
 		ReleaseURL:            releaseURL,
 		Repo:                  *repoSlug,
+		RepoOwner:             repoOwner(*repoSlug),
 		TapPackageRepo:        tapPackageRepo(*tapRepoSlug),
 		TapRepo:               *tapRepoSlug,
 		Version:               normalizedVersion,
@@ -83,4 +87,12 @@ func tapPackageRepo(tapRepoSlug string) string {
 		return tapRepoSlug
 	}
 	return owner + "/tap"
+}
+
+func repoOwner(repoSlug string) string {
+	owner, _, ok := strings.Cut(strings.ToLower(repoSlug), "/")
+	if !ok || strings.TrimSpace(owner) == "" {
+		return strings.ToLower(repoSlug)
+	}
+	return owner
 }

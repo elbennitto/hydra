@@ -45,8 +45,11 @@ Public keys are published in [.github/secrets/repos/hydra-gitops/hydra/public-ke
 ## Build locally
 
 ```bash
-./scripts/build-container-image.sh hydra:test v0.0.0-local
+./scripts/build-container-image.sh hydra-ci ghcr.io/hydra-gitops/hydra-ci:v0.0.0-local
+./scripts/build-container-image.sh hydra ghcr.io/hydra-gitops/hydra:v0.0.0-local
 ```
+
+The script builds the image locally only and does not push it.
 
 ## Developer scripts
 

@@ -563,39 +563,25 @@ prepare_container_context() {
   cp "${arm64_binary}" "${container_context}/linux/arm64/hydra"
 }
 
-run_container() {
-  resolve_tag
-  load_publish_secrets
-
-  if [[ -z "${GITHUB_TOKEN:-}" || -z "${GITHUB_ACTOR:-}" || -z "${GITHUB_REPOSITORY:-}" ]]; then
-    echo "GITHUB_TOKEN, GITHUB_ACTOR and GITHUB_REPOSITORY must be set" >&2
-    exit 1
-  fi
-
-  prepare_container_context
-
-  local image digest container_tags=() build_tags=()
-  image="ghcr.io/${GITHUB_REPOSITORY,,}"
+publish_container_image() {
+  local image="$1"
+  local dockerfile_path="$2"
+  local digest inspect_output
+  local container_tags=()
+  local build_tags=()
   mapfile -t container_tags < <(container_tags_for_release)
-
-  echo "${GITHUB_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
-
-  docker buildx create --name hydra-release-builder --driver docker-container --use >/dev/null 2>&1 || docker buildx use hydra-release-builder
-  docker buildx inspect --bootstrap >/dev/null
-
   for container_tag in "${container_tags[@]}"; do
     build_tags+=(--tag "${image}:${container_tag}")
   done
 
   docker buildx build \
     --platform linux/amd64,linux/arm64 \
-    --file "${repo_root}/tools/build-container-image/Dockerfile" \
+    --file "${dockerfile_path}" \
     --build-arg "VERSION=${tag}" \
     "${build_tags[@]}" \
     --push \
     "${container_context}"
 
-  local inspect_output
   echo "Resolving digest for ${image}:${tag}"
   inspect_output="$(docker buildx imagetools inspect "${image}:${tag}" 2>&1)"
 
@@ -611,6 +597,33 @@ run_container() {
   echo "Signing image ${image}@${digest}"
 
   cosign sign --yes --key "${cosign_key}" "${image}@${digest}"
+}
+
+run_container() {
+  local repo_owner repo_name runtime_image ci_image
+
+  resolve_tag
+  load_publish_secrets
+
+  if [[ -z "${GITHUB_TOKEN:-}" || -z "${GITHUB_ACTOR:-}" || -z "${GITHUB_REPOSITORY:-}" ]]; then
+    echo "GITHUB_TOKEN, GITHUB_ACTOR and GITHUB_REPOSITORY must be set" >&2
+    exit 1
+  fi
+
+  prepare_container_context
+
+  repo_owner="${GITHUB_REPOSITORY%%/*}"
+  repo_name="${GITHUB_REPOSITORY##*/}"
+  runtime_image="ghcr.io/${GITHUB_REPOSITORY,,}"
+  ci_image="ghcr.io/${repo_owner,,}/${repo_name,,}-ci"
+
+  echo "${GITHUB_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
+
+  docker buildx create --name hydra-release-builder --driver docker-container --use >/dev/null 2>&1 || docker buildx use hydra-release-builder
+  docker buildx inspect --bootstrap >/dev/null
+
+  publish_container_image "${runtime_image}" "${repo_root}/tools/build-container-image/Dockerfile"
+  publish_container_image "${ci_image}" "${repo_root}/tools/build-container-image/Dockerfile.ci"
 }
 
 run_manual() {

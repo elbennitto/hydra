@@ -40,11 +40,13 @@ The lightweight-then-sign flow is intentional: current `semantic-release` releas
 - A `checksums.txt` file is published for downloaded binaries
 - Signed in release pipeline
 
-### Container image
+### Container images
 
 - Built from [tools/build-container-image/Dockerfile](tools/build-container-image/Dockerfile)
-- Runtime stage is scratch and contains only the hydra binary
-- Multi-platform image is published and signed by digest
+- Built from [tools/build-container-image/Dockerfile.ci](tools/build-container-image/Dockerfile.ci) for the CI variant
+- `ghcr.io/<owner>/hydra` is scratch-based and contains `hydra`, `sops`, and the `cosign`/`helm`/`yq` entrypoint aliases
+- `ghcr.io/<owner>/<repo>-ci` contains `hydra` plus `sh` and `git`
+- Both multi-platform images are published and signed by digest
 
 ### Homebrew
 

@@ -1,3 +1,4 @@
+<!-- AI note: README.md is generated from README.md.gotpl. Update README.md.gotpl and run ./scripts/generate-readme.sh to regenerate this file. -->
 # Hydra
 
 [![Latest release]({{ .LatestReleaseBadgeURL }})]({{ .ReleaseURL }})
@@ -128,7 +129,8 @@ If the organization requires approval for fine-grained tokens, the token stays p
 ## Build locally
 
 ```bash
-./scripts/build-container-image.sh hydra:test v0.0.0-local
+./scripts/build-container-image.sh hydra-ci {{ .ImageCIRef }}:test
+./scripts/build-container-image.sh hydra {{ .ImageRef }}:test
 ```
 
 Build release archives from the repo root with:
