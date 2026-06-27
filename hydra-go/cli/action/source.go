@@ -117,6 +117,14 @@ func Source(f SourceFlags) (hydra.Hydra, string, error) {
 		if err != nil {
 			return nil, "", err
 		}
+		ops, err := hydra.ChartFileOperationsForHydraApp(app, f.HelmNetworkMode)
+		if err != nil {
+			return nil, "", err
+		}
+		charter, err = helm.ApplyChartFileOperations(charter, ops)
+		if err != nil {
+			return nil, "", err
+		}
 		srcBlock, err = helm.ChartSourceTemplatesMultidoc(charter, prefixes)
 		if err != nil {
 			return nil, "", err

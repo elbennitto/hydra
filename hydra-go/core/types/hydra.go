@@ -2,11 +2,12 @@ package types
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
+	"gopkg.in/yaml.v3"
 	"hydra-gitops.org/hydra/hydra-go/base/errors"
 	"hydra-gitops.org/hydra/hydra-go/base/log"
-	"gopkg.in/yaml.v3"
 )
 
 type HydraGlobal struct {
@@ -32,10 +33,23 @@ type HydraValues struct {
 	Ready                 map[string]HydraReadyGroup        `yaml:"ready,omitempty"`
 	Diff                  *HydraDiffSection                 `yaml:"diff,omitempty"`
 	TemplatePatches       map[string]HydraTemplatePatchRule `yaml:"templatePatches,omitempty"`
+	TemplateFiles         *HydraTemplateFiles               `yaml:"templateFiles,omitempty"`
 	// Presets configures built-in CEL groups for cluster infrastructure matching.
 	Presets *HydraPresetsSection `yaml:"presets,omitempty"`
 	// Scope matches Hydra ConfigMap data.hydra only (hydra-gitops.org/hydra-config). Helm chart values must not set scope — see Validate().
 	Scope any `yaml:"scope,omitempty"`
+}
+
+// HydraTemplateFiles configures pre-render chart template file mutations under global.hydra.templateFiles.
+// Paths use loaded-chart names such as templates/deployment.yaml or charts/subchart/templates/job.yaml.
+type HydraTemplateFiles struct {
+	Move   []HydraTemplateFileMove `yaml:"move,omitempty"`
+	Delete []string                `yaml:"delete,omitempty"`
+}
+
+type HydraTemplateFileMove struct {
+	From string `yaml:"from"`
+	To   string `yaml:"to"`
 }
 
 // HydraPresetsSection holds optional overrides keyed by built-in cluster-defaults preset id.
@@ -417,6 +431,11 @@ func (h *HydraValues) Validate() error {
 			return err
 		}
 	}
+	if h.TemplateFiles != nil {
+		if err := ValidateHydraTemplateFiles(h.TemplateFiles); err != nil {
+			return err
+		}
+	}
 
 	if h.Presets != nil {
 		if err := validateHydraPresetsSection(h.Presets); err != nil {
@@ -661,6 +680,50 @@ func ValidateHydraTemplatePatchRules(rules map[string]HydraTemplatePatchRule) er
 					"hydra configuration validation failed: templatePatches[{name}].patches[{index}].yq must not be empty",
 					log.String("name", name), log.Int("index", i))
 			}
+		}
+	}
+	return nil
+}
+
+func ValidateHydraTemplateFiles(files *HydraTemplateFiles) error {
+	if files == nil {
+		return nil
+	}
+	for i, move := range files.Move {
+		from := strings.TrimSpace(move.From)
+		to := strings.TrimSpace(move.To)
+		if from == "" {
+			return log.CreateError(
+				errors.ErrHydraConfigError,
+				"hydra configuration validation failed: templateFiles.move[{index}].from is required",
+				log.Int("index", i))
+		}
+		if to == "" {
+			return log.CreateError(
+				errors.ErrHydraConfigError,
+				"hydra configuration validation failed: templateFiles.move[{index}].to is required",
+				log.Int("index", i))
+		}
+		if from == to {
+			return log.CreateError(
+				errors.ErrHydraConfigError,
+				"hydra configuration validation failed: templateFiles.move[{index}] source and destination must differ",
+				log.Int("index", i))
+		}
+	}
+	for i, path := range files.Delete {
+		path = strings.TrimSpace(path)
+		if path == "" {
+			return log.CreateError(
+				errors.ErrHydraConfigError,
+				"hydra configuration validation failed: templateFiles.delete[{index}] must not be empty",
+				log.Int("index", i))
+		}
+		if _, err := regexp.Compile(path); err != nil {
+			return log.CreateError(
+				errors.ErrHydraConfigError,
+				"hydra configuration validation failed: templateFiles.delete[{index}] must be a valid regex: {err}",
+				log.Int("index", i), log.Err(err))
 		}
 	}
 	return nil

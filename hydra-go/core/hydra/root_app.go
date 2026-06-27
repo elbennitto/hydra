@@ -305,6 +305,14 @@ func (a *RootApp) template(
 	if err != nil {
 		return "", err
 	}
+	ops, err := ChartFileOperationsForHydraApp(a.AsApp(), networkMode)
+	if err != nil {
+		return "", err
+	}
+	c, err = helm.ApplyChartFileOperations(c, ops)
+	if err != nil {
+		return "", err
+	}
 
 	params := helm.RenderChartParams{
 		KubernetesVersionOrFallback: kubernetesVersionOrFallback,

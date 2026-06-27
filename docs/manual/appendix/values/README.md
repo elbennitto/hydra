@@ -9,6 +9,7 @@ All configurable options in Hydra's value system. Covers the `global.hydra` bloc
 - [refs](refs-in-values.md) — Defining dependency edges in values
 - [presets](presets-in-values.md) — Overriding preset configuration
 - [clones](clones-in-values.md) — Runtime resource copying configuration
+- [templateFiles](template-files.md) — Pre-render template file moves and deletions
 - [templatePatches](template-patches.md) — YQ-based post-render mutations
 - [scale](scale.md) — Workload scaling configuration
 - [diff](diff.md) — Diff ignore rules

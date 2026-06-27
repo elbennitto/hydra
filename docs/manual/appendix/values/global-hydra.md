@@ -11,6 +11,7 @@ global:
     refs: {}                    # Ref group definitions
     presets: {}                 # Preset overrides
     clones: {}                  # Resource cloning rules
+    templateFiles: {}           # Pre-render template file moves/deletes
     templatePatches: {}         # Post-render YQ mutations
 
     # Operational configuration
@@ -40,6 +41,7 @@ global:
 | `refs` | `map[string]RefGroup` | Define dependency edges | [refs](refs-in-values.md) |
 | `presets` | `map[string]PresetOverride` | Override builtin presets | [presets](presets-in-values.md) |
 | `clones` | `map[string]CloneSpec` | Copy resources across namespaces | [clones](clones-in-values.md) |
+| `templateFiles` | `TemplateFiles` | Move or delete chart template files before render | [templateFiles](template-files.md) |
 | `templatePatches` | `map[string]PatchSpec` | Mutate rendered manifests | [templatePatches](template-patches.md) |
 
 ### Operational Configuration

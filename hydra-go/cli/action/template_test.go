@@ -5,10 +5,10 @@ import (
 	"strings"
 	"testing"
 
-	"hydra-gitops.org/hydra/hydra-go/cli/flags"
-	"hydra-gitops.org/hydra/hydra-go/core/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"hydra-gitops.org/hydra/hydra-go/cli/flags"
+	"hydra-gitops.org/hydra/hydra-go/core/types"
 )
 
 func TestTemplateIncludeFiltersToMatchingKinds(t *testing.T) {

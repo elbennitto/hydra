@@ -78,3 +78,36 @@ func TestHydraValues_Validate_Presets_RejectsConflictingActivatesInMergedSection
 	}
 	require.Error(t, h.Validate())
 }
+
+func TestHydraValues_Validate_TemplateFiles_AllowsMoveAndDelete(t *testing.T) {
+	h := &HydraValues{
+		Path: "/apps/example",
+		TemplateFiles: &HydraTemplateFiles{
+			Move: []HydraTemplateFileMove{{From: "templates/local.yaml", To: "charts/sub/templates/dep.yaml"}},
+			Delete: []string{
+				"templates/obsolete.yaml",
+			},
+		},
+	}
+	require.NoError(t, h.Validate())
+}
+
+func TestHydraValues_Validate_TemplateFiles_RejectsMissingMoveFrom(t *testing.T) {
+	h := &HydraValues{
+		Path: "/apps/example",
+		TemplateFiles: &HydraTemplateFiles{
+			Move: []HydraTemplateFileMove{{To: "charts/sub/templates/dep.yaml"}},
+		},
+	}
+	require.Error(t, h.Validate())
+}
+
+func TestHydraValues_Validate_TemplateFiles_RejectsInvalidDeleteRegex(t *testing.T) {
+	h := &HydraValues{
+		Path: "/apps/example",
+		TemplateFiles: &HydraTemplateFiles{
+			Delete: []string{"["},
+		},
+	}
+	require.Error(t, h.Validate())
+}

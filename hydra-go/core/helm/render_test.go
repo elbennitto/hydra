@@ -5,9 +5,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+	"helm.sh/helm/v4/pkg/chart/common"
+	"helm.sh/helm/v4/pkg/chart/loader"
+	v2chart "helm.sh/helm/v4/pkg/chart/v2"
 	"hydra-gitops.org/hydra/hydra-go/base/log"
 	"hydra-gitops.org/hydra/hydra-go/core/types"
-	"helm.sh/helm/v4/pkg/chart/loader"
 )
 
 func TestSplitCRDDocuments(t *testing.T) {
@@ -128,4 +131,34 @@ func TestTemplateV2Chart_SkipCrdsOmitsPackagedCrds(t *testing.T) {
 	if !strings.Contains(string(outAll), "CustomResourceDefinition") {
 		t.Fatalf("expected CRD when SkipCrds=false, got:\n%s", outAll)
 	}
+}
+
+func TestApplyChartFileOperations_DeleteRegex(t *testing.T) {
+	root := &v2chart.Chart{
+		Metadata: &v2chart.Metadata{Name: "root"},
+		Templates: []*common.File{
+			{Name: "templates/keep.yaml", Data: []byte("keep: true\n")},
+			{Name: "templates/delete-secret.yaml", Data: []byte("secret: true\n")},
+		},
+	}
+	dep := &v2chart.Chart{
+		Metadata: &v2chart.Metadata{Name: "sub"},
+		Templates: []*common.File{
+			{Name: "charts/sub/templates/delete-configmap.yaml", Data: []byte("config: true\n")},
+			{Name: "charts/sub/templates/keep-job.yaml", Data: []byte("job: true\n")},
+		},
+	}
+	root.AddDependency(dep)
+
+	mutated, err := ApplyChartFileOperations(root, ChartFileOperations{
+		Deletes: []string{`(^templates/delete-.*\.yaml$)|(^charts/sub/templates/delete-.*\.yaml$)`},
+	})
+	require.NoError(t, err)
+
+	out, err := ChartSourceTemplatesMultidoc(mutated, nil)
+	require.NoError(t, err)
+	require.Contains(t, out, "templates/keep.yaml")
+	require.Contains(t, out, "charts/sub/templates/keep-job.yaml")
+	require.NotContains(t, out, "templates/delete-secret.yaml")
+	require.NotContains(t, out, "charts/sub/templates/delete-configmap.yaml")
 }
