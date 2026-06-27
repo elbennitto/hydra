@@ -173,6 +173,21 @@ func TestBranch_CreateAndCheckout(t *testing.T) {
 	require.Equal(t, "feature/test", branch)
 }
 
+func TestBranch_WithUnstagedChanges_ReportsGitDiff(t *testing.T) {
+	repo := Init(t.TempDir()).
+		Commit("init", "a.txt", "hello\n")
+	require.NoError(t, repo.Err)
+
+	file := filepath.Join(repo.Path(), "a.txt")
+	require.NoError(t, os.WriteFile(file, []byte("hello\nchanged\n"), 0o644))
+
+	repo.Branch("feature/test")
+	require.Error(t, repo.Err)
+	assert.ErrorContains(t, repo.Err, "worktree contains unstaged changes")
+	assert.ErrorContains(t, repo.Err, "git diff:")
+	assert.ErrorContains(t, repo.Err, "+changed")
+}
+
 func TestCheckout_ExistingBranch(t *testing.T) {
 	repo := Init(t.TempDir()).
 		Commit("init", "a.txt", "hello").

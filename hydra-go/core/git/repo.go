@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -239,6 +240,10 @@ func (r *Repo) Branch(name string) *Repo {
 		Branch: plumbing.NewBranchReferenceName(name),
 		Create: true,
 	}); err != nil {
+		if diff, ok := r.unstagedDiffOnCheckoutError(err); ok {
+			r.Err = fmt.Errorf("git checkout -b %s: %w\n\ngit diff:\n%s", name, err, diff)
+			return r
+		}
 		r.Err = fmt.Errorf("git checkout -b %s: %w", name, err)
 	}
 	return r
@@ -274,6 +279,24 @@ func (r *Repo) BranchExists(name string) bool {
 	ref := plumbing.NewBranchReferenceName(name)
 	_, err := r.repo.Reference(ref, false)
 	return err == nil
+}
+
+func (r *Repo) unstagedDiffOnCheckoutError(err error) (string, bool) {
+	if err == nil || !strings.Contains(err.Error(), "worktree contains unstaged changes") {
+		return "", false
+	}
+	out, diffErr := exec.Command("git", "-C", r.path, "diff").CombinedOutput()
+	diff := strings.TrimSpace(string(out))
+	if diffErr != nil {
+		if diff == "" {
+			return fmt.Sprintf("failed to run git diff: %v", diffErr), true
+		}
+		return fmt.Sprintf("%s\n\nfailed to run git diff cleanly: %v", diff, diffErr), true
+	}
+	if diff == "" {
+		return "(no unstaged diff output)", true
+	}
+	return diff, true
 }
 
 // LoadChart reads a Helm chart from a directory relative to the repo root.
