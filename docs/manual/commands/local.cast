@@ -17,6 +17,7 @@
 [0.01,"o","  \u001b[93;1mfind\u001b[0;22m      Find rendered resources and project values as a YAML array\r\n"]
 [0.01,"o","  \u001b[93;1minspect\u001b[0;22m   Interactive TUI to browse reference edges for a resource (local templates)\r\n"]
 [0.01,"o","  \u001b[93;1mlist\u001b[0;22m      Print Hydra ids of rendered template resources for one or more apps\r\n"]
+[0.01,"o","  \u001b[93;1mpackage\u001b[0;22m   Package one app's Helm chart into a .tgz archive\r\n"]
 [0.01,"o","  \u001b[93;1mrefs\u001b[0;22m      List transitive references for a resource id\r\n"]
 [0.01,"o","  \u001b[93;1mreview\u001b[0;22m    Review rendered references and ref ownership\r\n"]
 [0.01,"o","  \u001b[93;1msource\u001b[0;22m    Print unrendered Helm chart template files from disk\r\n"]

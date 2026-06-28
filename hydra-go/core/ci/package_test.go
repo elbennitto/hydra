@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"helm.sh/helm/v4/pkg/chart/loader"
+	v2chart "helm.sh/helm/v4/pkg/chart/v2"
 	"helm.sh/helm/v4/pkg/provenance"
 	"hydra-gitops.org/hydra/hydra-go/base/buildinfo"
 	"hydra-gitops.org/hydra/hydra-go/base/log"
@@ -944,6 +945,202 @@ func TestRunPublish_SelectedCharts_ForcePublishOverridesHeadMismatch(t *testing.
 	assert.Contains(t, logs, "publish commit mismatch")
 	assert.NotContains(t, logs, "use --force-run")
 	assert.Contains(t, logs, "level=WARN")
+}
+
+func TestRunPublish_PackagesTemplateFilesMovesAndDeletes(t *testing.T) {
+	stubPackageSigningSecrets(t)
+	dir := t.TempDir()
+	fs := git.NewFS().
+		File(ConfigFileName, `ci:
+  rootAppsPath: apps
+  environments: [dev]
+  registry: oci://registry/helm
+  appGroups:
+    - name: demo
+      path: apps/demo
+`).
+		File("apps/demo/service-ui/dev/Chart.yaml", `apiVersion: v2
+name: service-ui
+version: 1.0.0-dev
+type: application
+`).
+		File("apps/demo/service-ui/dev/values.yaml", `global:
+  hydra:
+    templateFiles:
+      move:
+        - from: templates/extra.yaml
+          to: templates/configmap.yaml
+      delete:
+        - templates/delete-me\.yaml
+`).
+		File("apps/demo/service-ui/dev/templates/extra.yaml", `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: moved-template
+`).
+		File("apps/demo/service-ui/dev/templates/delete-me.yaml", `apiVersion: v1
+kind: Secret
+metadata:
+  name: deleted-template
+`).
+		File("apps/demo/service-ui/dev/templates/configmap.yaml", `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: original-template
+`).
+		File("apps/demo/service-ui/dev/templates/keep.yaml", `apiVersion: v1
+kind: Service
+metadata:
+  name: keep-template
+`)
+	repo := git.Init(dir).CommitFS("init", fs)
+	require.NoError(t, repo.Err)
+	repo.Tag("build-202601011200").Tag("demo-service-ui-1.0.0-dev")
+	require.NoError(t, repo.Err)
+
+	oldPackage := packageChartArchiveHook
+	var packagedChart *v2chart.Chart
+	packageChartArchiveHook = func(chartDir, stageDir string, signing *packageSigningConfig) (packageArtifact, error) {
+		packageChartArchiveHook = nil
+		defer func() { packageChartArchiveHook = oldPackage }()
+		packaged, err := packagePreparedChart(chartDir, stageDir, signing)
+		if err != nil {
+			return packageArtifact{}, err
+		}
+		loaded, err := loader.LoadFile(packaged.TGZPath)
+		if err != nil {
+			return packageArtifact{}, err
+		}
+		packagedChart, err = convertToV2Chart(loaded)
+		if err != nil {
+			return packageArtifact{}, err
+		}
+		return packageArtifact{TGZPath: packaged.TGZPath, ProvPath: packaged.ProvPath}, nil
+	}
+	t.Cleanup(func() {
+		packageChartArchiveHook = oldPackage
+	})
+
+	err := RunPublish(filepath.Join(dir, ConfigFileName), ModeLocal, nil, false, false, true)
+	require.NoError(t, err)
+	require.NotNil(t, packagedChart)
+
+	assert.False(t, chartFileExists(packagedChart, "templates/extra.yaml"))
+	assert.False(t, chartFileExists(packagedChart, "templates/delete-me.yaml"))
+	assert.Equal(t, "moved-template", chartFileConfigMapName(t, packagedChart, "templates/configmap.yaml"))
+	assert.Equal(t, "keep-template", chartFileServiceName(t, packagedChart, "templates/keep.yaml"))
+}
+
+func TestRunLocalPackage_UsesSameTemplateFilesPackagingPath(t *testing.T) {
+	dir := t.TempDir()
+	chartDir := filepath.Join(dir, "chart")
+	require.NoError(t, os.MkdirAll(filepath.Join(chartDir, "templates"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(chartDir, "Chart.yaml"), []byte(`apiVersion: v2
+name: service-ui
+version: 1.0.0-dev
+type: application
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(chartDir, "values.yaml"), []byte(`global:
+  hydra:
+    templateFiles:
+      move:
+        - from: templates/extra.yaml
+          to: templates/configmap.yaml
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(chartDir, "templates", "extra.yaml"), []byte(`apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: moved-local
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(chartDir, "templates", "configmap.yaml"), []byte(`apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: original-local
+`), 0o644))
+
+	packaged, err := RunLocalPackage(chartDir, filepath.Join(dir, "dist"))
+	require.NoError(t, err)
+	require.FileExists(t, packaged.TGZPath)
+
+	loaded, err := loader.LoadFile(packaged.TGZPath)
+	require.NoError(t, err)
+	v2chrt, err := convertToV2Chart(loaded)
+	require.NoError(t, err)
+	assert.False(t, chartFileExists(v2chrt, "templates/extra.yaml"))
+	assert.Equal(t, "moved-local", chartFileConfigMapName(t, v2chrt, "templates/configmap.yaml"))
+}
+
+func chartFileExists(ch *v2chart.Chart, path string) bool {
+	return chartFileData(ch, path) != nil
+}
+
+func chartFileData(ch *v2chart.Chart, path string) []byte {
+	var result []byte
+	var walk func(*v2chart.Chart)
+	walk = func(current *v2chart.Chart) {
+		if current == nil || result != nil {
+			return
+		}
+		for _, file := range current.Raw {
+			if file != nil && file.Name == path {
+				result = file.Data
+				return
+			}
+		}
+		for _, file := range current.Templates {
+			if file != nil && file.Name == path {
+				result = file.Data
+				return
+			}
+		}
+		for _, dep := range current.Dependencies() {
+			walk(dep)
+		}
+	}
+	walk(ch)
+	return result
+}
+
+func chartFileConfigMapName(t *testing.T, ch *v2chart.Chart, path string) string {
+	t.Helper()
+	data := chartFileData(ch, path)
+	require.NotNil(t, data, "missing chart file %s", path)
+	assert.Contains(t, string(data), "kind: ConfigMap")
+	name := extractMetadataName(string(data))
+	require.NotEmpty(t, name)
+	return name
+}
+
+func chartFileServiceName(t *testing.T, ch *v2chart.Chart, path string) string {
+	t.Helper()
+	data := chartFileData(ch, path)
+	require.NotNil(t, data, "missing chart file %s", path)
+	assert.Contains(t, string(data), "kind: Service")
+	name := extractMetadataName(string(data))
+	require.NotEmpty(t, name)
+	return name
+}
+
+func extractMetadataName(yamlText string) string {
+	lines := strings.Split(yamlText, "\n")
+	inMetadata := false
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "metadata:" {
+			inMetadata = true
+			continue
+		}
+		if !inMetadata {
+			continue
+		}
+		if strings.HasPrefix(line, "  name:") {
+			return strings.TrimSpace(strings.TrimPrefix(line, "  name:"))
+		}
+		if trimmed != "" && !strings.HasPrefix(line, "  ") {
+			inMetadata = false
+		}
+	}
+	return ""
 }
 
 func capturePackageLogs(t *testing.T, fn func()) string {

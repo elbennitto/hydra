@@ -29,6 +29,7 @@ type mockRootCommand struct {
 	ClusterDumpFlags   *action.ClusterDumpFlags
 	ConfigFlags        *action.ConfigFlags
 	TemplateFlags      *action.TemplateFlags
+	LocalPackageFlags  *action.LocalPackageFlags
 	SourceFlags        *action.SourceFlags
 	ValuesFlags        *action.ValuesFlags
 	ReviewRefsFlags    *action.ReviewRefsFlags
@@ -54,6 +55,10 @@ func (m *mockRootCommand) rootCommandParams() *RootCommandParams {
 		Template: func(flags action.TemplateFlags) (hydra.Hydra, string, error) {
 			m.TemplateFlags = &flags
 			return nil, "mock template", nil
+		},
+		Package: func(flags action.LocalPackageFlags) (string, error) {
+			m.LocalPackageFlags = &flags
+			return "mock-package.tgz", nil
 		},
 		Source: func(flags action.SourceFlags) (hydra.Hydra, string, error) {
 			m.SourceFlags = &flags
@@ -82,6 +87,7 @@ func TestMockRootCommand(t *testing.T) {
 
 		assert.Nil(t, mock.ConfigFlags)
 		assert.Nil(t, mock.TemplateFlags)
+		assert.Nil(t, mock.LocalPackageFlags)
 		assert.Nil(t, mock.SourceFlags)
 		assert.Nil(t, mock.ValuesFlags)
 		assert.Nil(t, mock.ReviewRefsFlags)
@@ -139,6 +145,24 @@ func TestMockRootCommand(t *testing.T) {
 		assert.Equal(t, templateFlags.AppId, mock.TemplateFlags.AppId)
 	})
 
+	t.Run("mock captures local package flags when called", func(t *testing.T) {
+		mock := newMockRootCommand()
+		params := mock.rootCommandParams()
+
+		packageFlags := action.LocalPackageFlags{
+			ContextFlag:         flags.ContextFlag{HydraContext: "test"},
+			HelmNetworkModeFlag: flags.HelmNetworkModeFlag{HelmNetworkMode: types.HelmNetworkModeOnline},
+			AppId:               "test.app",
+			Destination:         "dist",
+		}
+		_, err := params.Package(packageFlags)
+
+		require.NoError(t, err)
+		require.NotNil(t, mock.LocalPackageFlags)
+		assert.Equal(t, packageFlags.AppId, mock.LocalPackageFlags.AppId)
+		assert.Equal(t, packageFlags.Destination, mock.LocalPackageFlags.Destination)
+	})
+
 	t.Run("mock captures values flags when called", func(t *testing.T) {
 		mock := newMockRootCommand()
 		params := mock.rootCommandParams()
@@ -169,6 +193,7 @@ func TestMockRootCommand(t *testing.T) {
 		assert.Nil(t, mock.ClusterDumpFlags)
 		assert.Nil(t, mock.ConfigFlags)
 		assert.Nil(t, mock.TemplateFlags)
+		assert.Nil(t, mock.LocalPackageFlags)
 		assert.Nil(t, mock.SourceFlags)
 		assert.Nil(t, mock.ValuesFlags)
 		assert.Nil(t, mock.ReviewRefsFlags)

@@ -50,6 +50,7 @@ A command-line tool written in Go. Key commands:
 | --- | --- |
 | See what an app's config looks like | `hydra local values prod.infra.cert-manager` |
 | Preview what would be deployed | `hydra local template prod.infra.cert-manager` |
+| Build the packaged chart artifact locally | `hydra local package prod.infra.cert-manager --destination dist` |
 | See what's different on the live cluster | `hydra gitops diff prod.infra.*` |
 | Deploy everything | `hydra gitops apply prod.**` |
 | Set up a brand-new cluster from scratch | `hydra gitops apply prod.** --bootstrap` |

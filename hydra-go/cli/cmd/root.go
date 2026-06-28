@@ -43,6 +43,7 @@ type RootCommandParams struct {
 	Find          func(flags action.FindFlags) (hydra.Hydra, string, error)
 	Config        func(flags action.ConfigFlags) (hydra.Hydra, string, error)
 	Template      func(flags action.TemplateFlags) (hydra.Hydra, string, error)
+	Package       func(flags action.LocalPackageFlags) (string, error)
 	Source        func(flags action.SourceFlags) (hydra.Hydra, string, error)
 	Values        func(flags action.ValuesFlags) (hydra.Hydra, string, error)
 	Review        ReviewCommandParams
@@ -58,6 +59,7 @@ func NewRootCommandParams() *RootCommandParams {
 		Find:          action.Find,
 		Config:        action.Config,
 		Template:      action.Template,
+		Package:       action.LocalPackage,
 		Source:        action.Source,
 		Values:        action.Values,
 		Review:        NewReviewCommandParams(),
@@ -229,6 +231,7 @@ HYDRA_CONTEXT environment variable.`,
 		Find:          params.Find,
 		Config:        params.Config,
 		Template:      params.Template,
+		Package:       params.Package,
 		List:          action.TemplateSortedRenderedEntities,
 		Source:        params.Source,
 		Values:        params.Values,

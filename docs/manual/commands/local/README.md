@@ -7,6 +7,7 @@ Commands that render and inspect templates without connecting to a Kubernetes cl
 | Command | Description |
 |---------|-------------|
 | [template](template.md) | Render Helm templates |
+| [package](package.md) | Package one app chart into a Helm `.tgz` |
 | [apps](apps.md) | Resolve app-id patterns to matching apps |
 | [find](find.md) | Query rendered resources with CEL filters |
 | [source](source.md) | Print unrendered template files from disk |
@@ -24,6 +25,9 @@ Commands that render and inspect templates without connecting to a Kubernetes cl
 ```bash
 # Render a single app
 hydra local template prod.cluster-infra.ingress-nginx
+
+# Package the same app chart locally
+hydra local package prod.cluster-infra.ingress-nginx --destination dist
 
 # List all apps of cluster prod
 hydra local apps 'prod.**'

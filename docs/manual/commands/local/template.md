@@ -20,6 +20,8 @@ Output is always normalized to sorted multi-document YAML from Hydra’s entity 
 
 Optional **`global.hydra.templateFiles`** mutates loaded chart files before Helm renders anything. Use it to move a local `templates/...` file onto a dependency path such as `charts/upstream/templates/...`, or to delete matching template files by regex before render. See [`templateFiles in Values`](../../appendix/values/template-files.md).
 
+The same `templateFiles` preprocessing also applies when you package the chart with [`hydra local package`](package.md) or when CI runs `hydra ci run publish`.
+
 Optional **`global.hydra.templatePatches`** in the app’s values (or Hydra ConfigMap `data.hydra`) runs before scope validation and again as a final step on the printed manifest set (per-app render and, when present, the clone appendix after `---`). Rules can also live **only** in another app’s chart (for example a cluster-wide `ConfigMap` under the Argo CD app): `hydra local template` still merges those fragments by combining the **full-cluster scope-catalog** render (from the Git checkout) with the selected app’s partition when collecting patch rules (see [`templatePatches in Values`](../../appendix/values/template-patches.md)). The early pass can fix invalid raw chart output such as `metadata.namespace` on a cluster-scoped resource; the final pass must not change resource identity (`apiVersion`, `kind`, `metadata.name`, `metadata.namespace`) and must not mutate Hydra configuration ConfigMaps (`hydra-gitops.org/hydra-config: "true"` with `data.hydra`).
 
 When `--include` or `--exclude` is set, template patches run **first**, then only resources matching the combined CEL predicates are printed (same CEL model as [`hydra local find`](find.md) for the filter step).
@@ -105,6 +107,7 @@ global:
 ## See Also
 
 - [`hydra local source`](source.md) — print unrendered chart template files from disk only (no render; use `--include-path` for path prefixes)
+- [`hydra local package`](package.md) — build the app chart as a Helm `.tgz` archive using the same packaging path as CI publish
 - [`hydra local values`](values.md) — inspect the computed values that feed into template rendering
 - [`hydra local config`](config.md) — inspect Helm `global.hydra` and Hydra ConfigMaps
 - [`hydra gitops template`](../cluster/template.md) — same style of sorted YAML with live API discovery, preferred `apiVersion` normalization, merged Helm `global.hydra` (as in [`hydra gitops values`](../cluster/values.md)), synthetic `kubernetes-defaults-*` for exclusive namespaces, and `templatePatches` including namespace-owner attribution for synthetic objects

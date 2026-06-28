@@ -26,6 +26,7 @@ import (
 	"hydra-gitops.org/hydra/hydra-go/base/log"
 	"hydra-gitops.org/hydra/hydra-go/core/git"
 	"hydra-gitops.org/hydra/hydra-go/core/helm"
+	coretypes "hydra-gitops.org/hydra/hydra-go/core/types"
 	oraserrdef "oras.land/oras-go/v2/errdef"
 	"sigs.k8s.io/yaml"
 )
@@ -40,6 +41,13 @@ var signOCIChartHook func(ref string, keyPath string) error
 var resolveOCIChartDigestRefHook func(registryURL, chartName, version string, registryConfigPath string) (string, error)
 
 type packageArtifact struct {
+	TGZPath  string
+	ProvPath string
+}
+
+type PackagedChart struct {
+	Name     string
+	Version  string
 	TGZPath  string
 	ProvPath string
 }
@@ -204,12 +212,13 @@ func RunPublish(configPath string, mode Mode, selectedCharts []string, forceRun 
 			return fmt.Errorf("mkdir stage: %w", err)
 		}
 
-		artifact, err := packageChartArchive(absDir, stageDir, signing)
+		packaged, err := packagePreparedChart(absDir, stageDir, signing)
 		if err != nil {
 			return fmt.Errorf("chart %s: helm package: %w", rel, err)
 		}
 
 		if mode == ModeCI {
+			artifact := packageArtifact{TGZPath: packaged.TGZPath, ProvPath: packaged.ProvPath}
 			if err := pushChartArchive(artifact, registry, name, ver, registryConfigPath); err != nil {
 				return fmt.Errorf("chart %s: helm push: %w", rel, err)
 			}
@@ -220,10 +229,29 @@ func RunPublish(configPath string, mode Mode, selectedCharts []string, forceRun 
 			}
 			l.Info(logIdCI, "published {chart} version {version}", log.String("chart", name), log.String("version", ver))
 		} else {
-			l.Info(logIdCI, "publish local: packaged {chart} to {path}", log.String("chart", name), log.String("path", artifact.TGZPath))
+			l.Info(logIdCI, "publish local: packaged {chart} to {path}", log.String("chart", name), log.String("path", packaged.TGZPath))
 		}
 	}
 	return nil
+}
+
+func RunLocalPackage(chartDir string, destinationDir string) (PackagedChart, error) {
+	l := log.Default()
+	absChartDir, err := filepath.Abs(chartDir)
+	if err != nil {
+		return PackagedChart{}, fmt.Errorf("resolve chart dir: %w", err)
+	}
+	absDestinationDir, err := filepath.Abs(destinationDir)
+	if err != nil {
+		return PackagedChart{}, fmt.Errorf("resolve destination dir: %w", err)
+	}
+	if err := os.MkdirAll(absDestinationDir, 0o755); err != nil {
+		return PackagedChart{}, fmt.Errorf("create destination dir: %w", err)
+	}
+	if err := helm.DownloadChartDependencies(l, absChartDir, nil, ""); err != nil {
+		return PackagedChart{}, fmt.Errorf("dependency update: %w", err)
+	}
+	return packagePreparedChart(absChartDir, absDestinationDir, nil)
 }
 
 type cosignSigningConfig struct {
@@ -231,38 +259,107 @@ type cosignSigningConfig struct {
 }
 
 func packageChartArchive(chartDir, stageDir string, signing *packageSigningConfig) (packageArtifact, error) {
+	packaged, err := packagePreparedChart(chartDir, stageDir, signing)
+	if err != nil {
+		return packageArtifact{}, err
+	}
+	return packageArtifact{TGZPath: packaged.TGZPath, ProvPath: packaged.ProvPath}, nil
+}
+
+func packagePreparedChart(chartDir, stageDir string, signing *packageSigningConfig) (PackagedChart, error) {
 	if packageChartArchiveHook != nil {
-		return packageChartArchiveHook(chartDir, stageDir, signing)
+		artifact, err := packageChartArchiveHook(chartDir, stageDir, signing)
+		if err != nil {
+			return PackagedChart{}, err
+		}
+		return PackagedChart{
+			TGZPath:  artifact.TGZPath,
+			ProvPath: artifact.ProvPath,
+		}, nil
 	}
 
 	chrt, err := log.WithoutDebug2(func() (helmchart.Charter, error) {
 		return loader.Load(chartDir)
 	})
 	if err != nil {
-		return packageArtifact{}, fmt.Errorf("load chart: %w", err)
+		return PackagedChart{}, fmt.Errorf("load chart: %w", err)
+	}
+
+	ops, err := chartFileOperationsForPackaging(chartDir)
+	if err != nil {
+		return PackagedChart{}, err
+	}
+	if !ops.Empty() {
+		chrt, err = helm.ApplyChartFileOperations(chrt, ops)
+		if err != nil {
+			return PackagedChart{}, fmt.Errorf("apply global.hydra.templateFiles: %w", err)
+		}
 	}
 
 	v2chrt, err := convertToV2Chart(chrt)
 	if err != nil {
-		return packageArtifact{}, err
+		return PackagedChart{}, err
 	}
 
 	ensureHydraVersionAnnotation(v2chrt)
 
 	tgzPath, err := v2chartutil.Save(v2chrt, stageDir)
 	if err != nil {
-		return packageArtifact{}, err
+		return PackagedChart{}, err
 	}
 
-	artifact := packageArtifact{TGZPath: tgzPath}
+	packaged := PackagedChart{
+		Name:    v2chrt.Name(),
+		Version: v2chrt.Metadata.Version,
+		TGZPath: tgzPath,
+	}
 	if signing != nil {
 		provPath, err := signChartArchive(tgzPath, signing)
 		if err != nil {
-			return packageArtifact{}, err
+			return PackagedChart{}, err
 		}
-		artifact.ProvPath = provPath
+		packaged.ProvPath = provPath
 	}
-	return artifact, nil
+	return packaged, nil
+}
+
+func chartFileOperationsForPackaging(chartDir string) (helm.ChartFileOperations, error) {
+	valuesPath := filepath.Join(chartDir, "values.yaml")
+	data, err := os.ReadFile(valuesPath)
+	switch {
+	case err == nil:
+	case errors.Is(err, os.ErrNotExist):
+		return helm.ChartFileOperations{}, nil
+	default:
+		return helm.ChartFileOperations{}, fmt.Errorf("read values.yaml: %w", err)
+	}
+
+	var hydraGlobal coretypes.HydraGlobal
+	if err := yaml.Unmarshal(data, &hydraGlobal); err != nil {
+		return helm.ChartFileOperations{}, fmt.Errorf("parse values.yaml for global.hydra.templateFiles: %w", err)
+	}
+	if hydraGlobal.Global == nil || hydraGlobal.Global.Hydra == nil || hydraGlobal.Global.Hydra.TemplateFiles == nil {
+		return helm.ChartFileOperations{}, nil
+	}
+	if err := coretypes.ValidateHydraTemplateFiles(hydraGlobal.Global.Hydra.TemplateFiles); err != nil {
+		return helm.ChartFileOperations{}, err
+	}
+
+	templateFiles := hydraGlobal.Global.Hydra.TemplateFiles
+	ops := helm.ChartFileOperations{
+		Moves:   make([]helm.ChartFileMove, 0, len(templateFiles.Move)),
+		Deletes: make([]string, 0, len(templateFiles.Delete)),
+	}
+	for _, move := range templateFiles.Move {
+		ops.Moves = append(ops.Moves, helm.ChartFileMove{
+			From: helm.NormalizeChartFileReplacementPath(move.From),
+			To:   helm.NormalizeChartFileReplacementPath(move.To),
+		})
+	}
+	for _, path := range templateFiles.Delete {
+		ops.Deletes = append(ops.Deletes, helm.NormalizeChartFileReplacementPath(path))
+	}
+	return ops, nil
 }
 
 func pushChartArchive(artifact packageArtifact, registryURL, chartName, version string, registryConfigPath string) error {

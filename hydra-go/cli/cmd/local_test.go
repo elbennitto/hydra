@@ -25,7 +25,7 @@ func TestLocalCommandContainsExpectedSubcommands(t *testing.T) {
 
 	localCmd := childCommandWithUsePrefix(rootCmd, "local")
 	require.NotNil(t, localCmd, "expected hydra local to exist")
-	assert.ElementsMatch(t, []string{"find", "apps", "config", "template", "list", "source", "values", "refs", "inspect", "review", "test", "export"}, commandUseNames(localCmd.Commands()))
+	assert.ElementsMatch(t, []string{"find", "apps", "config", "template", "package", "list", "source", "values", "refs", "inspect", "review", "test", "export"}, commandUseNames(localCmd.Commands()))
 }
 
 func TestLocalReviewCommandShape(t *testing.T) {
@@ -41,6 +41,19 @@ func TestLocalReviewCommandShape(t *testing.T) {
 	require.NotNil(t, reviewCmd, "expected hydra local review to exist")
 	assert.Equal(t, "review <appId...>", reviewCmd.Use)
 	require.Empty(t, reviewCmd.Commands())
+}
+
+func TestLocalPackageCommandCapturesFlagsAndWritesPath(t *testing.T) {
+	mock := newMockRootCommand()
+	rootCmd, _ := newRootCommand(mock.rootCommandParams())
+	require.NotNil(t, rootCmd)
+
+	rootCmd.SetArgs([]string{"local", "package", "prod.cluster-infra.cert-manager", "--hydra-context", "/tmp/mock-hydra-context", "--destination", "dist"})
+
+	require.NoError(t, rootCmd.Execute())
+	require.NotNil(t, mock.LocalPackageFlags)
+	assert.Equal(t, "prod.cluster-infra.cert-manager", string(mock.LocalPackageFlags.AppId))
+	assert.Equal(t, "dist", mock.LocalPackageFlags.Destination)
 }
 
 func commandUseNames(commands []*cobra.Command) []string {
