@@ -1,15 +1,19 @@
 package git
 
 import (
+	"bytes"
 	"errors"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"hydra-gitops.org/hydra/hydra-go/base/log"
 )
 
 func TestInit_CreatesGitRepo(t *testing.T) {
@@ -216,6 +220,82 @@ func TestCheckout_SameBranchIsNoop(t *testing.T) {
 
 	branch, _ = repo.CurrentBranch()
 	require.Equal(t, "main", branch)
+}
+
+func TestCheckout_MissingLocalBranch_CreatesFromOriginHead(t *testing.T) {
+	repo := Init(t.TempDir()).
+		Commit("init", "a.txt", "hello")
+	require.NoError(t, repo.Err)
+
+	head, err := repo.repo.Head()
+	require.NoError(t, err)
+	require.NoError(t, repo.repo.Storer.SetReference(plumbing.NewHashReference(
+		plumbing.ReferenceName("refs/remotes/origin/main"), head.Hash(),
+	)))
+	require.NoError(t, repo.repo.Storer.SetReference(plumbing.NewSymbolicReference(
+		plumbing.ReferenceName("refs/remotes/origin/HEAD"),
+		plumbing.ReferenceName("refs/remotes/origin/main"),
+	)))
+
+	out, err := exec.Command("git", "-C", repo.Path(), "checkout", "--detach", "HEAD").CombinedOutput()
+	require.NoError(t, err, string(out))
+	out, err = exec.Command("git", "-C", repo.Path(), "branch", "-D", "main").CombinedOutput()
+	require.NoError(t, err, string(out))
+
+	repo = Open(repo.Path())
+	require.NoError(t, repo.Err)
+
+	var buf bytes.Buffer
+	oldLogger := log.Default()
+	log.SetDefault(log.NewLoggerWithHandler(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo})))
+	defer log.SetDefault(oldLogger)
+
+	repo.Checkout("main")
+	require.NoError(t, repo.Err)
+
+	branch, err := repo.CurrentBranch()
+	require.NoError(t, err)
+	require.Equal(t, "main", branch)
+	require.True(t, repo.BranchExists("main"))
+	assert.Contains(t, buf.String(), "resolved origin/HEAD before checkout")
+	assert.Contains(t, buf.String(), "branch=main")
+	assert.Contains(t, buf.String(), "local branch missing; creating it from origin/HEAD")
+}
+
+func TestCheckoutUpstreamBranch_UsesConfiguredRemoteBranch(t *testing.T) {
+	repo := Init(t.TempDir()).
+		Commit("init", "a.txt", "hello")
+	require.NoError(t, repo.Err)
+
+	head, err := repo.repo.Head()
+	require.NoError(t, err)
+	require.NoError(t, repo.repo.Storer.SetReference(plumbing.NewHashReference(
+		plumbing.ReferenceName("refs/remotes/origin/stable"), head.Hash(),
+	)))
+
+	out, err := exec.Command("git", "-C", repo.Path(), "checkout", "--detach", "HEAD").CombinedOutput()
+	require.NoError(t, err, string(out))
+	out, err = exec.Command("git", "-C", repo.Path(), "branch", "-D", "main").CombinedOutput()
+	require.NoError(t, err, string(out))
+
+	repo = Open(repo.Path())
+	require.NoError(t, repo.Err)
+
+	var buf bytes.Buffer
+	oldLogger := log.Default()
+	log.SetDefault(log.NewLoggerWithHandler(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo})))
+	defer log.SetDefault(oldLogger)
+
+	repo.CheckoutUpstreamBranch("origin/stable")
+	require.NoError(t, repo.Err)
+
+	branch, err := repo.CurrentBranch()
+	require.NoError(t, err)
+	require.Equal(t, "stable", branch)
+	require.True(t, repo.BranchExists("stable"))
+	assert.Contains(t, buf.String(), "resolved upstream branch before checkout")
+	assert.Contains(t, buf.String(), "upstream=origin/stable")
+	assert.Contains(t, buf.String(), "branch=stable")
 }
 
 func TestCheckout_PreservesUntrackedFiles(t *testing.T) {

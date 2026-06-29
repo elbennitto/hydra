@@ -13,6 +13,7 @@ import (
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
+	"hydra-gitops.org/hydra/hydra-go/base/log"
 )
 
 // ErrLinkedWorkTreeNotSupported is returned by Open when the directory is a Git
@@ -258,6 +259,86 @@ func (r *Repo) Checkout(name string) *Repo {
 	if err == nil && current == name {
 		return r
 	}
+
+	originHead, originHeadErr := r.resolveOriginHead()
+	if originHeadErr != nil {
+		log.Default().Info(logIdGitRepo, "origin/HEAD could not be resolved before checkout",
+			log.String("branch", name),
+			log.String("reason", originHeadErr.Error()))
+	} else {
+		log.Default().Info(logIdGitRepo, "resolved origin/HEAD before checkout",
+			log.String("branch", originHead.localBranch),
+			log.String("remoteRef", originHead.remoteRef.String()))
+	}
+
+	if r.BranchExists(name) {
+		log.Default().Info(logIdGitRepo, "checking out existing local branch",
+			log.String("branch", name))
+		return r.checkoutBranch(name)
+	}
+
+	if originHeadErr == nil {
+		log.Default().Info(logIdGitRepo, "local branch missing; creating it from origin/HEAD",
+			log.String("branch", name),
+			log.String("originHead", originHead.localBranch),
+			log.String("remoteRef", originHead.remoteRef.String()))
+		return r.checkoutNewBranchFromOriginHead(name, originHead)
+	}
+
+	log.Default().Info(logIdGitRepo, "local branch missing and origin/HEAD unavailable; attempting regular checkout",
+		log.String("branch", name))
+
+	return r.checkoutBranch(name)
+}
+
+type originHeadRef struct {
+	localBranch string
+	remoteRef   plumbing.ReferenceName
+	hash        plumbing.Hash
+}
+
+type resolvedUpstreamBranch struct {
+	originHeadRef
+	requestedUpstream string
+}
+
+func (r *Repo) CheckoutUpstreamBranch(upstream string) *Repo {
+	if r.Err != nil {
+		return r
+	}
+	resolved, err := r.resolveUpstreamBranch(upstream)
+	if err != nil {
+		fallbackBranch := fallbackLocalBranchForUpstream(upstream)
+		if fallbackBranch != "" && r.BranchExists(fallbackBranch) {
+			log.Default().Info(logIdGitRepo, "configured upstream unavailable; falling back to existing local branch",
+				log.String("upstream", upstream),
+				log.String("branch", fallbackBranch),
+				log.String("reason", err.Error()))
+			return r.checkoutBranch(fallbackBranch)
+		}
+		r.Err = fmt.Errorf("resolve upstream branch %q: %w", upstream, err)
+		return r
+	}
+
+	log.Default().Info(logIdGitRepo, "resolved upstream branch before checkout",
+		log.String("upstream", resolved.requestedUpstream),
+		log.String("branch", resolved.localBranch),
+		log.String("remoteRef", resolved.remoteRef.String()))
+
+	if r.BranchExists(resolved.localBranch) {
+		log.Default().Info(logIdGitRepo, "checking out existing local branch",
+			log.String("branch", resolved.localBranch))
+		return r.checkoutBranch(resolved.localBranch)
+	}
+
+	log.Default().Info(logIdGitRepo, "local branch missing; creating it from configured upstream",
+		log.String("branch", resolved.localBranch),
+		log.String("upstream", resolved.requestedUpstream),
+		log.String("remoteRef", resolved.remoteRef.String()))
+	return r.checkoutNewBranchFromOriginHead(resolved.localBranch, resolved.originHeadRef)
+}
+
+func (r *Repo) checkoutBranch(name string) *Repo {
 	wt, err := r.repo.Worktree()
 	if err != nil {
 		r.Err = fmt.Errorf("worktree: %w", err)
@@ -267,6 +348,22 @@ func (r *Repo) Checkout(name string) *Repo {
 		Branch: plumbing.NewBranchReferenceName(name),
 	}); err != nil {
 		r.Err = fmt.Errorf("git checkout %s: %w", name, err)
+	}
+	return r
+}
+
+func (r *Repo) checkoutNewBranchFromOriginHead(name string, originHead originHeadRef) *Repo {
+	wt, err := r.repo.Worktree()
+	if err != nil {
+		r.Err = fmt.Errorf("worktree: %w", err)
+		return r
+	}
+	if err := wt.Checkout(&gogit.CheckoutOptions{
+		Branch: plumbing.NewBranchReferenceName(name),
+		Create: true,
+		Hash:   originHead.hash,
+	}); err != nil {
+		r.Err = fmt.Errorf("git checkout -b %s %s: %w", name, originHead.remoteRef.Short(), err)
 	}
 	return r
 }
@@ -329,6 +426,74 @@ func (r *Repo) CurrentBranch() (string, error) {
 		return head.Name().Short(), nil
 	}
 	return "HEAD", nil
+}
+
+func (r *Repo) resolveOriginHead() (originHeadRef, error) {
+	resolved, err := r.resolveUpstreamBranch("origin/HEAD")
+	if err != nil {
+		return originHeadRef{}, err
+	}
+	return resolved.originHeadRef, nil
+}
+
+func (r *Repo) resolveUpstreamBranch(upstream string) (resolvedUpstreamBranch, error) {
+	if upstream == "" {
+		upstream = "origin/HEAD"
+	}
+	refName := normalizeRemoteRefName(upstream)
+	ref, err := r.repo.Reference(refName, false)
+	if err != nil {
+		return resolvedUpstreamBranch{}, fmt.Errorf("read %s: %w", refName, err)
+	}
+
+	target := refName
+	if ref.Type() == plumbing.SymbolicReference {
+		target = ref.Target()
+	}
+	if !target.IsRemote() {
+		return resolvedUpstreamBranch{}, fmt.Errorf("%s points to non-remote ref %s", refName, target)
+	}
+
+	resolved, err := r.repo.Reference(target, true)
+	if err != nil {
+		return resolvedUpstreamBranch{}, fmt.Errorf("resolve %s: %w", target, err)
+	}
+
+	return resolvedUpstreamBranch{
+		originHeadRef: originHeadRef{
+			localBranch: localBranchFromRemoteRef(target),
+			remoteRef:   target,
+			hash:        resolved.Hash(),
+		},
+		requestedUpstream: upstream,
+	}, nil
+}
+
+func normalizeRemoteRefName(upstream string) plumbing.ReferenceName {
+	switch {
+	case strings.HasPrefix(upstream, "refs/"):
+		return plumbing.ReferenceName(upstream)
+	case strings.Contains(upstream, "/"):
+		return plumbing.ReferenceName("refs/remotes/" + upstream)
+	default:
+		return plumbing.ReferenceName("refs/remotes/origin/" + upstream)
+	}
+}
+
+func localBranchFromRemoteRef(ref plumbing.ReferenceName) string {
+	short := ref.Short()
+	parts := strings.SplitN(short, "/", 2)
+	if len(parts) == 2 {
+		return parts[1]
+	}
+	return short
+}
+
+func fallbackLocalBranchForUpstream(upstream string) string {
+	if upstream == "" || upstream == "origin/HEAD" || upstream == "refs/remotes/origin/HEAD" {
+		return "main"
+	}
+	return localBranchFromRemoteRef(normalizeRemoteRefName(upstream))
 }
 
 func (r *Repo) resolveCommit(ref string) (*object.Commit, error) {

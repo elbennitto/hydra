@@ -19,6 +19,8 @@ hydra ci secrets <subcommand> <config-path> [flags]
 
 All pipeline stages read configuration from `.hydra-ci.yaml` in the repository. Use `hydra ci config` to create or edit that file interactively, with defaults and filesystem-based detection of app groups and root apps.
 
+For commit-producing stages without `--target-branch`, Hydra uses `ci.upstreamBranch` from `.hydra-ci.yaml` as the default checkout base. When omitted, the default is `origin/HEAD`.
+
 | Subcommand | What it does |
 | ---------- | -------------- |
 | `run download` | Build-tag change detection, then `helm dependency update` per changed chart even when dependencies already exist locally |
@@ -95,6 +97,8 @@ Typical flow in the **charts repository** (where `.hydra-ci.yaml` lives):
    on the target (no-op / content-only promote).
    Simple cases remain `1.2.3-dev` → `1.2.3-stage` → `1.2.3`. Merge requests
    then carry the change into the target environment directory.
+
+Without `--target-branch`, `release` and `promote` derive their checkout base from `ci.upstreamBranch`. The default `origin/HEAD` is recommended for CI because it follows the remote default branch automatically. Use an explicit value such as `origin/main` if you want to pin the base branch name.
 
 ### Version examples (child wrapper)
 

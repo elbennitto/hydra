@@ -68,8 +68,9 @@ func (a localReleaseExecutor) run(repo *git.Repo, cfg *Config, plan []ReleaseChi
 		l.Info(logIdCI, "release local: checkout target branch {branch}", log.String("branch", a.targetBranch))
 		repo.Checkout(a.targetBranch)
 	} else {
-		l.Info(logIdCI, "release local: checkout default branch main")
-		repo.Checkout("main")
+		l.Info(logIdCI, "release local: checkout default branch from upstream {upstream}",
+			log.String("upstream", cfg.CI.UpstreamBranch))
+		repo.CheckoutUpstreamBranch(cfg.CI.UpstreamBranch)
 	}
 	if repo.Err != nil {
 		return ReleaseResult{}, repo.Err

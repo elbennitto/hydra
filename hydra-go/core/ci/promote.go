@@ -420,7 +420,7 @@ type localPromoteActions struct {
 
 func (a *localPromoteActions) setTargetBranch(b string) { a.targetBranch = b }
 
-func (a *localPromoteActions) ExecutePromotion(repo *git.Repo, entry PromotionEntry, _ *Config) error {
+func (a *localPromoteActions) ExecutePromotion(repo *git.Repo, entry PromotionEntry, cfg *Config) error {
 	fs, err := buildPromotionFS(repo, entry)
 	if err != nil {
 		return err
@@ -429,13 +429,13 @@ func (a *localPromoteActions) ExecutePromotion(repo *git.Repo, entry PromotionEn
 	if a.targetBranch != "" {
 		repo.CommitFS(entry.CommitMessage(), fs)
 	} else {
-		repo.Checkout("main").
+		repo.CheckoutUpstreamBranch(cfg.CI.UpstreamBranch).
 			Branch(entry.Branch).
 			CommitFS(entry.CommitMessage(), fs)
 		if repo.Err != nil {
 			return repo.Err
 		}
-		repo.Checkout("main")
+		repo.CheckoutUpstreamBranch(cfg.CI.UpstreamBranch)
 	}
 	return repo.Err
 }
@@ -444,19 +444,19 @@ func (a *localPromoteActions) ExecutePromotion(repo *git.Repo, entry PromotionEn
 
 type ciPromoteActions struct{}
 
-func (a *ciPromoteActions) ExecutePromotion(repo *git.Repo, entry PromotionEntry, _ *Config) error {
+func (a *ciPromoteActions) ExecutePromotion(repo *git.Repo, entry PromotionEntry, cfg *Config) error {
 	fs, err := buildPromotionFS(repo, entry)
 	if err != nil {
 		return err
 	}
 
-	repo.Checkout("main").
+	repo.CheckoutUpstreamBranch(cfg.CI.UpstreamBranch).
 		Branch(entry.Branch).
 		CommitFS(entry.CommitMessage(), fs)
 	if repo.Err != nil {
 		return repo.Err
 	}
-	repo.Checkout("main")
+	repo.CheckoutUpstreamBranch(cfg.CI.UpstreamBranch)
 	return repo.Err
 }
 

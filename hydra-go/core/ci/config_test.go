@@ -29,6 +29,7 @@ func TestParseConfig_Valid(t *testing.T) {
 	assert.Equal(t, "demo", cfg.CI.AppGroups[0].Name)
 	assert.Equal(t, "apps/demo", cfg.CI.AppGroups[0].Path)
 	assert.Equal(t, "oci://ghcr.io/example-org/helm-charts", cfg.CI.Registry)
+	assert.Equal(t, "origin/HEAD", cfg.CI.UpstreamBranch)
 	assert.Equal(t, "Hydra CI <ci@example.com>", cfg.CI.Sign.Helm.Name)
 	assert.Equal(t, "0123456789ABCDEF0123456789ABCDEF01234567", cfg.CI.Sign.Helm.Key)
 	assert.Contains(t, cfg.CI.Sign.Helm.PublicKey, "BEGIN PGP PUBLIC KEY BLOCK")
@@ -66,6 +67,18 @@ func TestParseConfig_PromotableRootApps(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, []string{"demo", "cluster-infra"}, cfg.CI.Promote.PromotableRootApps)
+}
+
+func TestParseConfig_UpstreamBranchOverride(t *testing.T) {
+	cfg, err := ParseConfig([]byte(`
+ci:
+  rootAppsPath: apps
+  environments: [dev, stage, prod]
+  upstreamBranch: origin/stable
+`))
+
+	require.NoError(t, err)
+	assert.Equal(t, "origin/stable", cfg.CI.UpstreamBranch)
 }
 
 func TestIsRootAppPromotable_EmptyList(t *testing.T) {

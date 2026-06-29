@@ -15,14 +15,15 @@ type Config struct {
 }
 
 type CIConfig struct {
-	RootAppsPath string             `yaml:"rootAppsPath"`
-	Environments []string           `yaml:"environments"`
-	AppGroups    []AppGroup         `yaml:"appGroups"`
-	Registry     string             `yaml:"registry"`
-	SecretsPath  string             `yaml:"secretsPath,omitempty"`
-	Sign         SignConfig         `yaml:"sign,omitempty"`
-	Promote      Promote            `yaml:"promote"`
-	Teams        Teams              `yaml:"teams"`
+	RootAppsPath   string     `yaml:"rootAppsPath"`
+	Environments   []string   `yaml:"environments"`
+	AppGroups      []AppGroup `yaml:"appGroups"`
+	Registry       string     `yaml:"registry"`
+	UpstreamBranch string     `yaml:"upstreamBranch,omitempty"`
+	SecretsPath    string     `yaml:"secretsPath,omitempty"`
+	Sign           SignConfig `yaml:"sign,omitempty"`
+	Promote        Promote    `yaml:"promote"`
+	Teams          Teams      `yaml:"teams"`
 	// AutoSteps overrides the default stage order for `hydra ci run auto`.
 	// Omitted means the default pipeline. If present, it must be non-empty
 	// and every entry must be a known pipeline step name.
@@ -91,6 +92,9 @@ func validateConfig(cfg *Config) error {
 	}
 	if len(cfg.CI.Environments) == 0 {
 		return fmt.Errorf("%s: ci.environments must not be empty", ConfigFileName)
+	}
+	if cfg.CI.UpstreamBranch == "" {
+		cfg.CI.UpstreamBranch = "origin/HEAD"
 	}
 	for i, entry := range cfg.CI.Sign.Helm.ValidKeys {
 		if entry.Key == "" {
