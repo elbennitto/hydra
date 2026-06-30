@@ -212,6 +212,11 @@ func TestCheckout_SameBranchIsNoop(t *testing.T) {
 		Commit("init", "a.txt", "hello")
 	require.NoError(t, repo.Err)
 
+	var buf bytes.Buffer
+	oldLogger := log.Default()
+	log.SetDefault(log.NewLoggerWithHandler(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	defer log.SetDefault(oldLogger)
+
 	branch, _ := repo.CurrentBranch()
 	require.Equal(t, "main", branch)
 
@@ -220,6 +225,7 @@ func TestCheckout_SameBranchIsNoop(t *testing.T) {
 
 	branch, _ = repo.CurrentBranch()
 	require.Equal(t, "main", branch)
+	assert.Contains(t, buf.String(), "skipping checkout; already on target branch")
 }
 
 func TestCheckout_MissingLocalBranch_CreatesFromOriginHead(t *testing.T) {
@@ -247,7 +253,7 @@ func TestCheckout_MissingLocalBranch_CreatesFromOriginHead(t *testing.T) {
 
 	var buf bytes.Buffer
 	oldLogger := log.Default()
-	log.SetDefault(log.NewLoggerWithHandler(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo})))
+	log.SetDefault(log.NewLoggerWithHandler(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
 	defer log.SetDefault(oldLogger)
 
 	repo.Checkout("main")
@@ -296,6 +302,34 @@ func TestCheckoutUpstreamBranch_UsesConfiguredRemoteBranch(t *testing.T) {
 	assert.Contains(t, buf.String(), "resolved upstream branch before checkout")
 	assert.Contains(t, buf.String(), "upstream=origin/stable")
 	assert.Contains(t, buf.String(), "branch=stable")
+}
+
+func TestCheckoutUpstreamBranch_ReusesResolvedUpstreamFromCache(t *testing.T) {
+	repo := Init(t.TempDir()).
+		Commit("init", "a.txt", "hello")
+	require.NoError(t, repo.Err)
+
+	head, err := repo.repo.Head()
+	require.NoError(t, err)
+	require.NoError(t, repo.repo.Storer.SetReference(plumbing.NewHashReference(
+		plumbing.ReferenceName("refs/remotes/origin/stable"), head.Hash(),
+	)))
+
+	var buf bytes.Buffer
+	oldLogger := log.Default()
+	log.SetDefault(log.NewLoggerWithHandler(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo})))
+	defer log.SetDefault(oldLogger)
+
+	repo.CheckoutUpstreamBranch("origin/stable")
+	require.NoError(t, repo.Err)
+
+	repo.CheckoutUpstreamBranch("origin/stable")
+	require.NoError(t, repo.Err)
+
+	logOutput := buf.String()
+	assert.Equal(t, 1, strings.Count(logOutput, "resolved upstream branch before checkout"))
+	assert.Equal(t, 1, strings.Count(logOutput, "using cached upstream branch before checkout"))
+	assert.Equal(t, 1, strings.Count(logOutput, "checking out existing local branch"))
 }
 
 func TestCheckout_PreservesUntrackedFiles(t *testing.T) {

@@ -24,9 +24,10 @@ var ErrLinkedWorkTreeNotSupported = errors.New("linked git worktree is not suppo
 // Repo represents a Git repository and provides chainable operations.
 // Errors accumulate in Err; once set, subsequent chainable calls are no-ops.
 type Repo struct {
-	Err  error
-	path string
-	repo *gogit.Repository
+	Err                     error
+	path                    string
+	repo                    *gogit.Repository
+	upstreamResolutionCache map[string]resolvedUpstreamBranch
 }
 
 var commitSignature = object.Signature{
@@ -36,7 +37,7 @@ var commitSignature = object.Signature{
 
 // Init creates a new Git repository at the given path and returns a Repo.
 func Init(path string) *Repo {
-	r := &Repo{path: path}
+	r := &Repo{path: path, upstreamResolutionCache: map[string]resolvedUpstreamBranch{}}
 	repo, err := gogit.PlainInit(path, false)
 	if err != nil {
 		r.Err = fmt.Errorf("git init: %w", err)
@@ -61,7 +62,7 @@ func Open(path string) *Repo {
 	if st, lerr := os.Lstat(filepath.Join(root, ".git")); lerr == nil && !st.IsDir() {
 		return &Repo{path: root, Err: ErrLinkedWorkTreeNotSupported}
 	}
-	r := &Repo{path: root}
+	r := &Repo{path: root, upstreamResolutionCache: map[string]resolvedUpstreamBranch{}}
 	repo, err := gogit.PlainOpen(root)
 	if err != nil {
 		r.Err = fmt.Errorf("open git repository: %w", err)
@@ -257,6 +258,8 @@ func (r *Repo) Checkout(name string) *Repo {
 	}
 	current, err := r.CurrentBranch()
 	if err == nil && current == name {
+		log.Default().DebugLog(logIdGitRepo, "skipping checkout; already on target branch",
+			log.String("branch", name))
 		return r
 	}
 
@@ -306,6 +309,8 @@ func (r *Repo) CheckoutUpstreamBranch(upstream string) *Repo {
 	if r.Err != nil {
 		return r
 	}
+	cacheKey := upstreamCacheKey(upstream)
+	_, cacheHit := r.upstreamResolutionCache[cacheKey]
 	resolved, err := r.resolveUpstreamBranch(upstream)
 	if err != nil {
 		fallbackBranch := fallbackLocalBranchForUpstream(upstream)
@@ -320,10 +325,17 @@ func (r *Repo) CheckoutUpstreamBranch(upstream string) *Repo {
 		return r
 	}
 
-	log.Default().Info(logIdGitRepo, "resolved upstream branch before checkout",
-		log.String("upstream", resolved.requestedUpstream),
-		log.String("branch", resolved.localBranch),
-		log.String("remoteRef", resolved.remoteRef.String()))
+	if cacheHit {
+		log.Default().Info(logIdGitRepo, "using cached upstream branch before checkout",
+			log.String("upstream", resolved.requestedUpstream),
+			log.String("branch", resolved.localBranch),
+			log.String("remoteRef", resolved.remoteRef.String()))
+	} else {
+		log.Default().Info(logIdGitRepo, "resolved upstream branch before checkout",
+			log.String("upstream", resolved.requestedUpstream),
+			log.String("branch", resolved.localBranch),
+			log.String("remoteRef", resolved.remoteRef.String()))
+	}
 
 	if r.BranchExists(resolved.localBranch) {
 		log.Default().Info(logIdGitRepo, "checking out existing local branch",
@@ -339,6 +351,13 @@ func (r *Repo) CheckoutUpstreamBranch(upstream string) *Repo {
 }
 
 func (r *Repo) checkoutBranch(name string) *Repo {
+	current, err := r.CurrentBranch()
+	if err == nil && current == name {
+		log.Default().DebugLog(logIdGitRepo, "skipping checkout; already on target branch",
+			log.String("branch", name))
+		return r
+	}
+
 	wt, err := r.repo.Worktree()
 	if err != nil {
 		r.Err = fmt.Errorf("worktree: %w", err)
@@ -437,8 +456,12 @@ func (r *Repo) resolveOriginHead() (originHeadRef, error) {
 }
 
 func (r *Repo) resolveUpstreamBranch(upstream string) (resolvedUpstreamBranch, error) {
-	if upstream == "" {
-		upstream = "origin/HEAD"
+	upstream = upstreamCacheKey(upstream)
+	if r.upstreamResolutionCache == nil {
+		r.upstreamResolutionCache = map[string]resolvedUpstreamBranch{}
+	}
+	if cached, ok := r.upstreamResolutionCache[upstream]; ok {
+		return cached, nil
 	}
 	refName := normalizeRemoteRefName(upstream)
 	ref, err := r.repo.Reference(refName, false)
@@ -459,14 +482,23 @@ func (r *Repo) resolveUpstreamBranch(upstream string) (resolvedUpstreamBranch, e
 		return resolvedUpstreamBranch{}, fmt.Errorf("resolve %s: %w", target, err)
 	}
 
-	return resolvedUpstreamBranch{
+	resolvedUpstream := resolvedUpstreamBranch{
 		originHeadRef: originHeadRef{
 			localBranch: localBranchFromRemoteRef(target),
 			remoteRef:   target,
 			hash:        resolved.Hash(),
 		},
 		requestedUpstream: upstream,
-	}, nil
+	}
+	r.upstreamResolutionCache[upstream] = resolvedUpstream
+	return resolvedUpstream, nil
+}
+
+func upstreamCacheKey(upstream string) string {
+	if upstream == "" {
+		return "origin/HEAD"
+	}
+	return upstream
 }
 
 func normalizeRemoteRefName(upstream string) plumbing.ReferenceName {
