@@ -27,8 +27,7 @@ hydra local test refs <appId> [appId...] [flags]
 | `--update` | Regenerate expected files from current output (use after intentional changes) |
 | `--hydra-context` | Path to the [Hydra context directory](../README.md#hydra-context) (or set `HYDRA_CONTEXT` env var) |
 | `--exclude-app` | Glob pattern to exclude applications (repeatable) |
-| `--include` / `-i` | [CEL expression](../README.md#cel-resource-filters) to filter resources |
-| `--exclude` / `-e` | [CEL expression](../README.md#cel-resource-filters) to exclude resources |
+| `--helm-network-mode` | [Helm network mode](../README.md#helm-network-mode): `online`, `local`, `offline`, or `error` |
 | `--no-cache` | Disable persistent Helm template cache and in-process Helm-related caches for this run |
 
 ## Examples

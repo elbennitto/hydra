@@ -74,6 +74,7 @@ For a controlled uninstall:
 | Flag | Short | Description |
 | --- | --- | --- |
 | `--hydra-context` | | Path to the [Hydra context directory](../README.md#hydra-context) (or set `HYDRA_CONTEXT` env var) |
+| `--helm-network-mode` | | [Helm network mode](../README.md#helm-network-mode): `online`, `local`, `offline`, or `error` |
 | `--no-cache` | | Disable persistent Helm template cache and in-process Helm-related caches for this run |
 | `--color` | `-c` | Force colored output |
 | `--dry-run` | `-d` | Show what would be removed without deleting anything |
@@ -84,9 +85,9 @@ For a controlled uninstall:
 | `--force-scale-down` | | Delete pods that do not terminate within the timeout |
 | `--scale-timeout` | | Timeout for scale-down operations before pod deletion (e.g. `10m`) |
 | `--skip-backup` | | Skip the automatic cert-manager backup before uninstall |
+| `--bootstrap` | | Include `global.hydra.clones` rules tagged `bootstrap` when rendering the apps to remove |
 | `--exclude-app` | | Glob pattern to exclude applications (repeatable) |
-| `--include` | `-i` | [CEL expression](../README.md#cel-resource-filters) to filter resources |
-| `--exclude` | `-e` | [CEL expression](../README.md#cel-resource-filters) to exclude resources |
+| `--parallel` | | Parallel workers for cluster listing and the filter/merge phases (`0` = [GOMAXPROCS](https://pkg.go.dev/runtime#GOMAXPROCS), capped at 64) |
 
 ## Examples
 

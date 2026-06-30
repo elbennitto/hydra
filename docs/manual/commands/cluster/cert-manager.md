@@ -37,9 +37,8 @@ hydra gitops cert-manager restore <cluster> [flags]
 | `--hydra-context` | | Path to the [Hydra context directory](../README.md#hydra-context) (or set `HYDRA_CONTEXT` env var) |
 | `--dry-run` | `-d` | Show what would be restored without applying |
 | `--no-cluster` | | Skip cluster connection (use with `--dry-run`) |
-| `--helm-network-mode` | | [Helm network mode](../README.md#helm-network-mode): `online`, `local`, `offline`, or `error` |
+| `--force-backup-restore` | | Overwrite differing cluster secrets from the backup during restore |
 | `--no-cache` | | Disable persistent Helm template cache and in-process Helm-related caches for this run |
-| `--crd-mode` | | CRD handling: `error` or `ignore` |
 
 ## Examples
 

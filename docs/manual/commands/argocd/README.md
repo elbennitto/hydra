@@ -7,13 +7,13 @@ Commands for managing the ArgoCD integration.
 | Command | Description |
 |---------|-------------|
 | [status](status.md) | Show ArgoCD-reported sync/health status |
-| [sync](sync.md) | Trigger ArgoCD sync for apps |
+| [sync](sync.md) | Manage ArgoCD `AppProject` sync mode (`auto`, `manual`, `prevent`) |
 
 ## Usage
 
 ```bash
 hydra argocd status 'prod.**'
-hydra argocd sync prod.cluster-infra.ingress-nginx
+hydra argocd sync prevent prod.cluster-infra.ingress-nginx
 ```
 
 ## Prerequisites

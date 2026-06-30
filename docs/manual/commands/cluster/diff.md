@@ -59,8 +59,6 @@ In `server` mode, if server-side apply dry-run fails for any resource, the comma
 | --- | --- | --- |
 | `--hydra-context` | | Path to the [Hydra context directory](../README.md#hydra-context) (or set `HYDRA_CONTEXT` env var) |
 | `--color` | `-c` | Force colored output |
-| `--dry-run` | `-d` | Simulate without cluster connection |
-| `--no-cluster` | | Skip cluster connection (use with `--dry-run`) |
 | `--diff-mode` | | `server` (default) — compares against server-side apply result, showing the effective diff including defaulted fields. `raw` — direct YAML comparison, faster but may show false positives from server-side defaults. |
 | `--helm-network-mode` | | [Helm network mode](../README.md#helm-network-mode): `online`, `local`, `offline`, or `error` |
 | `--no-cache` | | Disable persistent Helm template cache and in-process Helm-related caches for this run |
@@ -70,7 +68,7 @@ In `server` mode, if server-side apply dry-run fails for any resource, the comma
 | `--exclude` | `-e` | [CEL expression](../README.md#cel-resource-filters) to exclude resources |
 | `--after-context` | `-A` | Unchanged lines to show **after** each change in unified diff hunks (default when unset: 3; same idea as grep) |
 | `--before-context` | `-B` | Unchanged lines to show **before** each change in unified diff hunks (default when unset: 3) |
-| `--hydra-context` | `-C` | Unchanged lines to show **before and after** each change (default when unset: 3; same idea as `grep -C`) |
+| `--context` | `-C` | Unchanged lines to show **before and after** each change (default when unset: 3; same idea as `grep -C`) |
 
 ## Examples
 

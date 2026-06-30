@@ -53,6 +53,7 @@ hydra gitops backup create <appId> [appId...] [flags]
 | `--exclude-app` | | Glob pattern to exclude applications (repeatable) |
 | `--include` | `-i` | [CEL expression](../README.md#cel-resource-filters) to include only matching Secrets (repeatable) |
 | `--exclude` | `-e` | [CEL expression](../README.md#cel-resource-filters) to exclude matching Secrets (repeatable) |
+| `--helm-network-mode` | | [Helm network mode](../README.md#helm-network-mode): `online`, `local`, `offline`, or `error` |
 | `--no-cache` | | Disable persistent Helm template cache and in-process Helm-related caches for this run |
 
 ### hydra gitops backup restore
@@ -75,6 +76,7 @@ hydra gitops backup restore <appId> [appId...] [flags]
 | `--exclude-app` | | Glob pattern to exclude applications (repeatable) |
 | `--include` | `-i` | [CEL expression](../README.md#cel-resource-filters) to include only matching Secrets (repeatable) |
 | `--exclude` | `-e` | [CEL expression](../README.md#cel-resource-filters) to exclude matching Secrets (repeatable) |
+| `--helm-network-mode` | | [Helm network mode](../README.md#helm-network-mode): `online`, `local`, `offline`, or `error` |
 | `--no-cache` | | Disable persistent Helm template cache and in-process Helm-related caches for this run |
 
 ### hydra gitops backup list
@@ -89,6 +91,7 @@ hydra gitops backup list <appId> [appId...] [flags]
 | --- | --- |
 | `--hydra-context` | Path to the [Hydra context directory](../README.md#hydra-context) |
 | `--exclude-app` | Glob pattern to exclude applications (repeatable) |
+| `--helm-network-mode` | [Helm network mode](../README.md#helm-network-mode): `online`, `local`, `offline`, or `error` |
 | `--no-cache` | Disable persistent Helm template cache and in-process Helm-related caches for this run |
 
 ### hydra gitops backup diff
@@ -104,6 +107,7 @@ hydra gitops backup diff <appId> [appId...] [flags]
 | `--hydra-context` | | Path to the [Hydra context directory](../README.md#hydra-context) |
 | `--color` | `-c` | Force colored output |
 | `--exclude-app` | | Glob pattern to exclude applications (repeatable) |
+| `--helm-network-mode` | | [Helm network mode](../README.md#helm-network-mode): `online`, `local`, `offline`, or `error` |
 | `--no-cache` | | Disable persistent Helm template cache and in-process Helm-related caches for this run |
 
 ## Examples

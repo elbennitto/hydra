@@ -159,16 +159,16 @@ Do not use `scale` when the goal is permanent removal. Use [`hydra gitops uninst
 | Flag | Description |
 | --- | --- |
 | `--hydra-context` | Path to the [Hydra context directory](../README.md#hydra-context) (or set `HYDRA_CONTEXT` env var) |
+| `--helm-network-mode` | [Helm network mode](../README.md#helm-network-mode): `online`, `local`, `offline`, or `error` |
 | `--no-cache` | Disable persistent Helm template cache and in-process Helm-related caches for this run |
-| `--dry-run` / `-d` | Preview only: no scale patches or pod API writes; `[dry-run]` logs (not with `--no-cluster`). |
-| `--no-cluster` | Render and resolve apps only; skip cluster connection and all scale API calls (not for `status`). |
-| `--scale-timeout` | Timeout waiting for pods to reach the desired state (e.g. `10m`) |
-| `--crd-timeout` | Timeout for CRD establishment (e.g. `60s`) |
-| `--force-scale-down` | Scale down: stuck Pods on timeout; force-deletes app-associated Pods; skips cluster-only pod wait. |
-| `--cluster-workload-timeout` | After cluster-only scale (default `1m`), wait for pods. Not with `--force-scale-down` if both set. |
+| `--dry-run` / `-d` | **`scale up` / `scale down` only:** preview, no scale patches or pod API writes; `[dry-run]` logs (not with `--no-cluster`). |
+| `--no-cluster` | **`scale up` / `scale down` only:** render and resolve apps only; skip cluster connection and all scale API calls (not for `status`). |
+| `--scale-timeout` | **`scale up` / `scale down` only:** timeout waiting for pods to reach the desired state (e.g. `10m`) |
+| `--force-scale-down` | **`scale up` / `scale down` only:** stuck Pods on timeout; force-deletes app-associated Pods; skips cluster-only pod wait. |
+| `--cluster-workload-timeout` | **`scale down` only:** after cluster-only scale (default `1m`), wait for pods. Not with `--force-scale-down` if both set. |
+| `--bootstrap` | Include `global.hydra.clones` rules tagged `bootstrap` when rendering the selected apps |
 | `--exclude-app` | Glob pattern to exclude applications (repeatable) |
-| `--include` / `-i` | [CEL expression](../README.md#cel-resource-filters) to filter resources |
-| `--exclude` / `-e` | [CEL expression](../README.md#cel-resource-filters) to exclude resources |
+| `--all` / `-A` | **`scale status` only:** show every scale-target row, including rows omitted as fully healthy by default |
 | `--yaml` | **`scale status` only:** emit YAML instead of the default colored text report |
 
 ### Dry-run
@@ -200,14 +200,14 @@ hydra gitops scale up prod.apps.*
 # Scale up with extended timeout for slow-starting services
 hydra gitops scale up prod.apps.* --scale-timeout 15m
 
-# Scale only Deployments (skip StatefulSets)
-hydra gitops scale down prod.apps.* --include 'kind == "Deployment"'
-
 # Preview scale-down without mutating the cluster
 hydra gitops scale down prod.apps.my-service --dry-run
 
 # Read-only: default colored text (workload state + workload dependencies)
 hydra gitops scale status prod.apps.my-service
+
+# Show every scale-target row, including fully healthy ones
+hydra gitops scale status prod.apps.my-service --all
 
 # Machine-readable YAML; add --color for highlighted YAML on a TTY
 hydra gitops scale status prod.apps.my-service --yaml
