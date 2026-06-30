@@ -11,7 +11,9 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-24.04
-    environment: publish
+    environment:
+      name: publish
+      deployment: false
     env:
       HYDRA_SECRETS_REPO: ${{ github.repository }}
     steps:

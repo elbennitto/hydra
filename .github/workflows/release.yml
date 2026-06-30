@@ -14,7 +14,9 @@ permissions:
 jobs:
   manual:
     name: Deploy manual
-    environment: release
+    environment:
+      name: release
+      deployment: false
     runs-on: ubuntu-24.04
     env:
       HYDRA_SECRETS_REPO: ${{ github.repository }}
@@ -69,7 +71,9 @@ jobs:
 
   release:
     name: Release
-    environment: release
+    environment:
+      name: release
+      deployment: false
     runs-on: ubuntu-24.04
     env:
       HYDRA_SECRETS_REPO: ${{ github.repository }}
