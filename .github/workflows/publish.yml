@@ -9,7 +9,8 @@ permissions:
   packages: write
 
 jobs:
-  publish:
+  verify:
+    name: Verify release tag
     runs-on: ubuntu-24.04
     environment:
       name: publish
@@ -32,29 +33,149 @@ jobs:
       - name: Install sops
         uses: ./.github/actions/install-sops
 
-      - name: Install goreleaser
-        uses: ./.github/actions/install-goreleaser
-
       - name: Verify release
         env:
           RELEASE_TAG: ${{ github.ref_name }}
           SOPS_AGE_KEY_PUBLISH: ${{ secrets.SOPS_AGE_KEY_PUBLISH }}
         run: ./scripts/publish.sh verify
 
-      - name: Build and publish CLI
+  build-cli:
+    name: Build CLI (${{ matrix.target_label }})
+    needs: verify
+    runs-on: ubuntu-24.04
+    environment:
+      name: publish
+      deployment: false
+    env:
+      HYDRA_SECRETS_REPO: ${{ github.repository }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            goamd64: v2
+            target_label: linux/amd64
+            target_artifact: linux-amd64
+          - goos: linux
+            goarch: arm64
+            goamd64: ""
+            target_label: linux/arm64
+            target_artifact: linux-arm64
+          - goos: darwin
+            goarch: amd64
+            goamd64: v2
+            target_label: darwin/amd64
+            target_artifact: darwin-amd64
+          - goos: darwin
+            goarch: arm64
+            goamd64: ""
+            target_label: darwin/arm64
+            target_artifact: darwin-arm64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: refs/tags/${{ github.ref_name }}
+
+      - name: Install cosign
+        uses: ./.github/actions/install-cosign
+
+      - name: Install sops
+        uses: ./.github/actions/install-sops
+
+      - name: Build and publish CLI target (${{ matrix.target_label }})
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ github.ref_name }}
           SOPS_AGE_KEY_PUBLISH: ${{ secrets.SOPS_AGE_KEY_PUBLISH }}
-        run: ./scripts/publish.sh cli
+          TARGET_GOOS: ${{ matrix.goos }}
+          TARGET_GOARCH: ${{ matrix.goarch }}
+          TARGET_GOAMD64: ${{ matrix.goamd64 }}
+        run: ./scripts/publish.sh cli-target-publish
 
-      - name: Update Homebrew source formula
+      - name: Pack CLI target artifact (${{ matrix.target_label }})
+        run: tar -cf hydra-build-${{ matrix.target_artifact }}.tar dist
+
+      - name: Upload CLI target artifact (${{ matrix.target_label }})
+        uses: actions/upload-artifact@v5
+        with:
+          name: hydra-build-${{ matrix.target_artifact }}
+          path: hydra-build-${{ matrix.target_artifact }}.tar
+
+  publish-cli-checksums:
+    name: Publish CLI checksums
+    needs: [build-cli, verify]
+    runs-on: ubuntu-24.04
+    environment:
+      name: publish
+      deployment: false
+    env:
+      HYDRA_SECRETS_REPO: ${{ github.repository }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: refs/tags/${{ github.ref_name }}
+
+      - name: Install sops
+        uses: ./.github/actions/install-sops
+
+      - name: Install cosign
+        uses: ./.github/actions/install-cosign
+
+      - name: Download CLI target artifacts
+        uses: actions/download-artifact@v6
+        with:
+          pattern: hydra-build-*
+          merge-multiple: true
+          path: artifacts
+
+      - name: Extract CLI target artifacts
+        run: find artifacts -name 'hydra-build-*.tar' -exec tar -xf {} \;
+
+      - name: Publish CLI checksums
         env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ github.ref_name }}
           SOPS_AGE_KEY_PUBLISH: ${{ secrets.SOPS_AGE_KEY_PUBLISH }}
-        run: ./scripts/publish.sh formula
+        run: ./scripts/publish.sh cli-checksums
 
-      - name: Build and publish container
+  publish-container-manifests:
+    name: Publish containers
+    needs: [build-cli, verify]
+    runs-on: ubuntu-24.04
+    environment:
+      name: publish
+      deployment: false
+    env:
+      HYDRA_SECRETS_REPO: ${{ github.repository }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: refs/tags/${{ github.ref_name }}
+
+      - name: Install cosign
+        uses: ./.github/actions/install-cosign
+
+      - name: Install sops
+        uses: ./.github/actions/install-sops
+
+      - name: Download CLI target artifacts
+        uses: actions/download-artifact@v6
+        with:
+          pattern: hydra-build-*
+          merge-multiple: true
+          path: artifacts
+
+      - name: Extract CLI target artifacts
+        run: find artifacts -name 'hydra-build-*.tar' -exec tar -xf {} \;
+
+      - name: Publish canonical multi-arch container tags
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_ACTOR: ${{ github.actor }}
@@ -62,3 +183,38 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
           SOPS_AGE_KEY_PUBLISH: ${{ secrets.SOPS_AGE_KEY_PUBLISH }}
         run: ./scripts/publish.sh container
+
+  update-homebrew-formula:
+    name: Update Homebrew formula
+    needs: [publish-cli-checksums, publish-container-manifests, verify]
+    runs-on: ubuntu-24.04
+    environment:
+      name: publish
+      deployment: false
+    env:
+      HYDRA_SECRETS_REPO: ${{ github.repository }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: refs/tags/${{ github.ref_name }}
+
+      - name: Install sops
+        uses: ./.github/actions/install-sops
+
+      - name: Download CLI target artifacts
+        uses: actions/download-artifact@v6
+        with:
+          pattern: hydra-build-*
+          merge-multiple: true
+          path: artifacts
+
+      - name: Extract CLI target artifacts
+        run: find artifacts -name 'hydra-build-*.tar' -exec tar -xf {} \;
+
+      - name: Update Homebrew formulas
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          SOPS_AGE_KEY_PUBLISH: ${{ secrets.SOPS_AGE_KEY_PUBLISH }}
+        run: ./scripts/publish.sh homebrew

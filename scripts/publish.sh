@@ -460,6 +460,150 @@ run_cli() {
   )
 }
 
+run_cli_target() {
+  resolve_tag
+
+  local target_goos target_goarch target_goamd64 release_commit output_suffix output_dir
+  target_goos="${TARGET_GOOS:-}"
+  target_goarch="${TARGET_GOARCH:-}"
+  target_goamd64="${TARGET_GOAMD64:-}"
+
+  if [[ -z "${target_goos}" || -z "${target_goarch}" ]]; then
+    echo "TARGET_GOOS and TARGET_GOARCH must be set" >&2
+    exit 1
+  fi
+
+  output_suffix=""
+  if [[ -n "${target_goamd64}" ]]; then
+    output_suffix="_${target_goamd64}"
+  fi
+
+  output_dir="${repo_root}/dist/hydra_${target_goos}_${target_goarch}${output_suffix}"
+  release_commit="$(git -C "${repo_root}" rev-list -n1 "${tag}")"
+
+  mkdir -p "${output_dir}"
+
+  (
+    cd "${repo_root}/hydra-go"
+    GOOS="${target_goos}" \
+    GOARCH="${target_goarch}" \
+    GOAMD64="${target_goamd64}" \
+    CGO_ENABLED=0 \
+      go build \
+        -trimpath \
+        -ldflags "-s -w -X hydra-gitops.org/hydra/hydra-go/base/buildinfo.Version=${version_core} -X hydra-gitops.org/hydra/hydra-go/base/buildinfo.TagSHA=${release_commit}" \
+        -o "${output_dir}/hydra" \
+        ./cli
+  )
+}
+
+target_output_suffix() {
+  local target_goamd64="$1"
+
+  if [[ -n "${target_goamd64}" ]]; then
+    printf '_%s' "${target_goamd64}"
+  fi
+}
+
+target_archive_name() {
+  local target_goos="$1"
+  local target_goarch="$2"
+
+  printf 'hydra_%s_%s_%s.tar.gz' "${version_core}" "${target_goos}" "${target_goarch}"
+}
+
+package_cli_target() {
+  resolve_tag
+
+  local target_goos target_goarch target_goamd64 output_suffix binary_path archive_name assets_dir archive_path checksum_path
+  target_goos="${TARGET_GOOS:-}"
+  target_goarch="${TARGET_GOARCH:-}"
+  target_goamd64="${TARGET_GOAMD64:-}"
+
+  if [[ -z "${target_goos}" || -z "${target_goarch}" ]]; then
+    echo "TARGET_GOOS and TARGET_GOARCH must be set" >&2
+    exit 1
+  fi
+
+  output_suffix="$(target_output_suffix "${target_goamd64}")"
+  binary_path="${repo_root}/dist/hydra_${target_goos}_${target_goarch}${output_suffix}/hydra"
+  if [[ ! -f "${binary_path}" ]]; then
+    echo "Expected target binary not found: ${binary_path}" >&2
+    exit 1
+  fi
+
+  archive_name="$(target_archive_name "${target_goos}" "${target_goarch}")"
+  assets_dir="${repo_root}/dist/release_assets"
+  archive_path="${assets_dir}/${archive_name}"
+  checksum_path="${assets_dir}/checksums/${archive_name}.sha256"
+
+  mkdir -p "${assets_dir}/checksums"
+  tar -C "$(dirname "${binary_path}")" -czf "${archive_path}" hydra
+  printf '%s  %s\n' "$(sha256_file "${archive_path}")" "${archive_name}" > "${checksum_path}"
+
+  printf '%s\n' "${archive_path}"
+}
+
+ensure_github_release() {
+  resolve_tag
+
+  if [[ -z "${GITHUB_TOKEN:-}" ]]; then
+    echo "GITHUB_TOKEN must be set" >&2
+    exit 1
+  fi
+
+  if gh release view "${tag}" >/dev/null 2>&1; then
+    return
+  fi
+
+  if gh release create "${tag}" --verify-tag --title "${tag}" --generate-notes; then
+    return
+  fi
+
+  gh release view "${tag}" >/dev/null
+}
+
+run_cli_target_publish() {
+  local archive_path
+
+  resolve_tag
+  load_publish_secrets
+  run_cli_target
+  archive_path="$(package_cli_target)"
+
+  cosign sign-blob --yes --key "${cosign_key}" --bundle="${archive_path}.sigstore.json" "${archive_path}"
+  ensure_github_release
+  gh release upload "${tag}" "${archive_path}" "${archive_path}.sigstore.json" --clobber
+}
+
+run_cli_checksums() {
+  resolve_tag
+  load_publish_secrets
+
+  local assets_dir checksums_file checksum_bundle checksum_fragments=()
+  assets_dir="${repo_root}/dist/release_assets"
+  checksums_file="${assets_dir}/checksums.txt"
+  checksum_bundle="${checksums_file}.sigstore.json"
+
+  if [[ -d "${assets_dir}/checksums" ]]; then
+    while IFS= read -r checksum_fragment; do
+      checksum_fragments+=("${checksum_fragment}")
+    done < <(find "${assets_dir}/checksums" -type f -name '*.sha256' | sort)
+  fi
+
+  if [[ ${#checksum_fragments[@]} -eq 0 ]]; then
+    echo "No CLI checksum fragments found under ${assets_dir}/checksums" >&2
+    exit 1
+  fi
+
+  mkdir -p "${assets_dir}"
+  cat "${checksum_fragments[@]}" > "${checksums_file}"
+  cosign sign-blob --yes --key "${cosign_key}" --bundle="${checksum_bundle}" "${checksums_file}"
+
+  ensure_github_release
+  gh release upload "${tag}" "${checksums_file}" "${checksum_bundle}" --clobber
+}
+
 render_homebrew_formula() {
   local formula_file="$1"
   local source_url="$2"
@@ -495,12 +639,86 @@ end
 EOF
 }
 
+release_archive_path() {
+  local target_goos="$1"
+  local target_goarch="$2"
+  local archive_name
+
+  archive_name="$(target_archive_name "${target_goos}" "${target_goarch}")"
+  printf '%s/%s' "${repo_root}/dist/release_assets" "${archive_name}"
+}
+
+release_archive_sha256() {
+  local release_repo="$1"
+  local target_goos="$2"
+  local target_goarch="$3"
+  local archive_name archive_path archive_url archive_file
+
+  archive_name="$(target_archive_name "${target_goos}" "${target_goarch}")"
+  archive_path="$(release_archive_path "${target_goos}" "${target_goarch}")"
+  if [[ -f "${archive_path}" ]]; then
+    sha256_file "${archive_path}"
+    return
+  fi
+
+  archive_url="https://github.com/${release_repo}/releases/download/${tag}/${archive_name}"
+  archive_file="${tmp_dir}/${archive_name}"
+  curl -fsSL "${archive_url}" -o "${archive_file}"
+  sha256_file "${archive_file}"
+}
+
+render_homebrew_cask() {
+  local cask_file="$1"
+  local release_repo="$2"
+  local linux_amd64_sha256="$3"
+  local linux_arm64_sha256="$4"
+  local darwin_amd64_sha256="$5"
+  local darwin_arm64_sha256="$6"
+  local release_base="https://github.com/${release_repo}/releases/download/${tag}"
+
+  cat >"${cask_file}" <<EOF
+# typed: false
+# frozen_string_literal: true
+
+# This file is generated by the Hydra publish workflow. DO NOT EDIT.
+cask "hydra-bin" do
+  version "${version_core}"
+  name "Hydra"
+  desc "Hydra GitOps CLI binary for Kubernetes cluster management"
+  homepage "https://hydra-gitops.org/"
+  license "Apache-2.0"
+
+  on_macos do
+    if Hardware::CPU.arm?
+      url "${release_base}/hydra_#{version}_darwin_arm64.tar.gz"
+      sha256 "${darwin_arm64_sha256}"
+    else
+      url "${release_base}/hydra_#{version}_darwin_amd64.tar.gz"
+      sha256 "${darwin_amd64_sha256}"
+    end
+  end
+
+  on_linux do
+    if Hardware::CPU.arm?
+      url "${release_base}/hydra_#{version}_linux_arm64.tar.gz"
+      sha256 "${linux_arm64_sha256}"
+    else
+      url "${release_base}/hydra_#{version}_linux_amd64.tar.gz"
+      sha256 "${linux_amd64_sha256}"
+    end
+  end
+
+  binary "hydra"
+end
+EOF
+}
+
 run_homebrew_formula() {
   resolve_tag
   load_publish_secrets
   configure_git_release_identity_env
 
-  local release_repo source_archive_url source_archive_file source_sha256
+  local release_repo source_archive_url source_archive_file source_sha256 linux_amd64_sha256 linux_arm64_sha256 darwin_amd64_sha256 darwin_arm64_sha256
   release_repo="${GITHUB_REPOSITORY:-${HYDRA_SECRETS_REPO:-}}"
   if [[ -z "${release_repo}" ]]; then
     echo "GITHUB_REPOSITORY or HYDRA_SECRETS_REPO must be set" >&2
@@ -512,6 +730,11 @@ run_homebrew_formula() {
   curl -fsSL "${source_archive_url}" -o "${source_archive_file}"
   source_sha256="$(sha256_file "${source_archive_file}")"
 
+  linux_amd64_sha256="$(release_archive_sha256 "${release_repo}" linux amd64)"
+  linux_arm64_sha256="$(release_archive_sha256 "${release_repo}" linux arm64)"
+  darwin_amd64_sha256="$(release_archive_sha256 "${release_repo}" darwin amd64)"
+  darwin_arm64_sha256="$(release_archive_sha256 "${release_repo}" darwin arm64)"
+
   homebrew_formula_context="$(mktemp -d "${tmp_dir}/hydra-homebrew-formula.XXXXXX")"
 
   local tap_repo_url ssh_command
@@ -522,6 +745,8 @@ run_homebrew_formula() {
 
   mkdir -p "${homebrew_formula_context}/Formula"
   render_homebrew_formula "${homebrew_formula_context}/Formula/hydra.rb" "${source_archive_url}" "${source_sha256}" "$(git -C "${repo_root}" rev-list -n1 "${tag}")"
+  mkdir -p "${homebrew_formula_context}/Casks"
+  render_homebrew_cask "${homebrew_formula_context}/Casks/hydra-bin.rb" "${release_repo}" "${linux_amd64_sha256}" "${linux_arm64_sha256}" "${darwin_amd64_sha256}" "${darwin_arm64_sha256}"
 
   git -C "${homebrew_formula_context}" config user.name "${git_user_name}"
   git -C "${homebrew_formula_context}" config user.email "${git_user_email}"
@@ -530,13 +755,13 @@ run_homebrew_formula() {
   git -C "${homebrew_formula_context}" config commit.gpgsign true
   git -C "${homebrew_formula_context}" config gpg.ssh.allowedSignersFile "${git_signing_allowed_signers}"
 
-  git -C "${homebrew_formula_context}" add Formula/hydra.rb
+  git -C "${homebrew_formula_context}" add Formula/hydra.rb Casks/hydra-bin.rb
   if git -C "${homebrew_formula_context}" diff --cached --quiet; then
-    echo "Homebrew formula already up to date for ${tag}" >&2
+    echo "Homebrew formulas already up to date for ${tag}" >&2
     return
   fi
 
-  git -C "${homebrew_formula_context}" commit -S -m "chore: update hydra formula for ${tag}"
+  git -C "${homebrew_formula_context}" commit -S -m "chore: update hydra homebrew packages for ${tag}"
   GIT_SSH_COMMAND="${ssh_command}" git -C "${homebrew_formula_context}" push origin HEAD:main
 }
 
@@ -624,6 +849,159 @@ run_container() {
 
   publish_container_image "${runtime_image}" "${repo_root}/tools/build-container-image/Dockerfile"
   publish_container_image "${ci_image}" "${repo_root}/tools/build-container-image/Dockerfile.ci"
+}
+
+container_tags_for_target_release() {
+  resolve_tag
+
+  local target_arch="$1"
+  local tags=("${tag}-linux-${target_arch}")
+  if [[ "${tag}" == "v${version_core}" ]]; then
+    tags+=("v${version_major}.${version_minor}-linux-${target_arch}" "v${version_major}-linux-${target_arch}" "latest-linux-${target_arch}")
+  fi
+
+  printf '%s\n' "${tags[@]}"
+}
+
+publish_container_image_for_target() {
+  local image="$1"
+  local dockerfile_path="$2"
+  local target_arch="$3"
+  local digest inspect_output
+  local container_tags=()
+  local build_tags=()
+
+  mapfile -t container_tags < <(container_tags_for_target_release "${target_arch}")
+  for container_tag in "${container_tags[@]}"; do
+    build_tags+=(--tag "${image}:${container_tag}")
+  done
+
+  docker buildx build \
+    --platform "linux/${target_arch}" \
+    --file "${dockerfile_path}" \
+    --build-arg "VERSION=${tag}" \
+    "${build_tags[@]}" \
+    --push \
+    "${container_context}"
+
+  for container_tag in "${container_tags[@]}"; do
+    echo "Resolving digest for ${image}:${container_tag}"
+    inspect_output="$(docker buildx imagetools inspect "${image}:${container_tag}" 2>&1)"
+
+    digest="$(awk '/^Digest:/{print $2; exit}' <<<"${inspect_output}" | tr -d '[:space:]')"
+    if [[ -z "${digest}" ]]; then
+      echo "Could not resolve digest for ${image}:${container_tag}" >&2
+      echo "imagetools inspect output:" >&2
+      echo "${inspect_output}" >&2
+      exit 1
+    fi
+
+    echo "Resolved digest: ${digest}"
+    echo "Signing image ${image}@${digest}"
+    cosign sign --yes --key "${cosign_key}" "${image}@${digest}"
+  done
+}
+
+publish_container_manifests() {
+  local image="$1"
+  local digest inspect_output
+  local container_tags=()
+
+  mapfile -t container_tags < <(container_tags_for_release)
+  for container_tag in "${container_tags[@]}"; do
+    echo "Creating multi-arch manifest for ${image}:${container_tag}"
+    docker buildx imagetools create \
+      --tag "${image}:${container_tag}" \
+      "${image}:${container_tag}-linux-amd64" \
+      "${image}:${container_tag}-linux-arm64"
+
+    echo "Resolving digest for ${image}:${container_tag}"
+    inspect_output="$(docker buildx imagetools inspect "${image}:${container_tag}" 2>&1)"
+
+    digest="$(awk '/^Digest:/{print $2; exit}' <<<"${inspect_output}" | tr -d '[:space:]')"
+    if [[ -z "${digest}" ]]; then
+      echo "Could not resolve digest for ${image}:${container_tag}" >&2
+      echo "imagetools inspect output:" >&2
+      echo "${inspect_output}" >&2
+      exit 1
+    fi
+
+    echo "Resolved digest: ${digest}"
+    echo "Signing image ${image}@${digest}"
+    cosign sign --yes --key "${cosign_key}" "${image}@${digest}"
+  done
+}
+
+run_container_target() {
+  local repo_owner repo_name runtime_image ci_image target_goarch target_goamd64 binary_suffix binary_path
+
+  resolve_tag
+  load_publish_secrets
+
+  if [[ -z "${GITHUB_TOKEN:-}" || -z "${GITHUB_ACTOR:-}" || -z "${GITHUB_REPOSITORY:-}" ]]; then
+    echo "GITHUB_TOKEN, GITHUB_ACTOR and GITHUB_REPOSITORY must be set" >&2
+    exit 1
+  fi
+
+  target_goarch="${TARGET_GOARCH:-}"
+  target_goamd64="${TARGET_GOAMD64:-}"
+  if [[ -z "${target_goarch}" ]]; then
+    echo "TARGET_GOARCH must be set" >&2
+    exit 1
+  fi
+
+  binary_suffix=""
+  if [[ -n "${target_goamd64}" ]]; then
+    binary_suffix="_${target_goamd64}"
+  fi
+
+  binary_path="${repo_root}/dist/hydra_linux_${target_goarch}${binary_suffix}/hydra"
+  if [[ ! -f "${binary_path}" ]]; then
+    echo "Expected target binary not found: ${binary_path}" >&2
+    exit 1
+  fi
+
+  container_context="$(mktemp -d "${tmp_dir}/hydra-container-target.XXXXXX")"
+  mkdir -p "${container_context}/linux/${target_goarch}"
+  cp "${binary_path}" "${container_context}/linux/${target_goarch}/hydra"
+
+  repo_owner="${GITHUB_REPOSITORY%%/*}"
+  repo_name="${GITHUB_REPOSITORY##*/}"
+  runtime_image="ghcr.io/${GITHUB_REPOSITORY,,}"
+  ci_image="ghcr.io/${repo_owner,,}/${repo_name,,}-ci"
+
+  echo "${GITHUB_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
+
+  docker buildx create --name hydra-release-builder --driver docker-container --use >/dev/null 2>&1 || docker buildx use hydra-release-builder
+  docker buildx inspect --bootstrap >/dev/null
+
+  publish_container_image_for_target "${runtime_image}" "${repo_root}/tools/build-container-image/Dockerfile" "${target_goarch}"
+  publish_container_image_for_target "${ci_image}" "${repo_root}/tools/build-container-image/Dockerfile.ci" "${target_goarch}"
+}
+
+run_container_merge() {
+  local repo_owner repo_name runtime_image ci_image
+
+  resolve_tag
+  load_publish_secrets
+
+  if [[ -z "${GITHUB_TOKEN:-}" || -z "${GITHUB_ACTOR:-}" || -z "${GITHUB_REPOSITORY:-}" ]]; then
+    echo "GITHUB_TOKEN, GITHUB_ACTOR and GITHUB_REPOSITORY must be set" >&2
+    exit 1
+  fi
+
+  repo_owner="${GITHUB_REPOSITORY%%/*}"
+  repo_name="${GITHUB_REPOSITORY##*/}"
+  runtime_image="ghcr.io/${GITHUB_REPOSITORY,,}"
+  ci_image="ghcr.io/${repo_owner,,}/${repo_name,,}-ci"
+
+  echo "${GITHUB_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
+
+  docker buildx create --name hydra-release-builder --driver docker-container --use >/dev/null 2>&1 || docker buildx use hydra-release-builder
+  docker buildx inspect --bootstrap >/dev/null
+
+  publish_container_manifests "${runtime_image}"
+  publish_container_manifests "${ci_image}"
 }
 
 run_manual() {
@@ -768,7 +1146,7 @@ run_manual() {
 
 usage() {
   cat <<'EOF'
-Usage: scripts/publish.sh [verify|cli|formula|container|manual|all]
+Usage: scripts/publish.sh [verify|cli|cli-target|cli-target-publish|cli-checksums|formula|homebrew|container|container-target|container-merge|manual|all]
 EOF
 }
 
@@ -778,13 +1156,35 @@ case "${subcommand}" in
     verify
     ;;
   cli)
-    run_cli
+    if [[ -n "${TARGET_GOOS:-}" || -n "${TARGET_GOARCH:-}" ]]; then
+      run_cli_target
+    else
+      run_cli
+    fi
+    ;;
+  cli-target)
+    run_cli_target
+    ;;
+  cli-target-publish)
+    run_cli_target_publish
+    ;;
+  cli-checksums)
+    run_cli_checksums
     ;;
   formula)
     run_homebrew_formula
     ;;
+  homebrew)
+    run_homebrew_formula
+    ;;
   container)
     run_container
+    ;;
+  container-target)
+    run_container_target
+    ;;
+  container-merge)
+    run_container_merge
     ;;
   manual)
     run_manual
