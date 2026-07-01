@@ -206,6 +206,17 @@ recreate_fork() {
   gh repo fork "${upstream_path}" --org "${fork_owner}" --fork-name "${fork_repo}" >/dev/null
 }
 
+assert_upstream_forking_enabled() {
+  local allow_forking=""
+
+  allow_forking="$(gh api "repos/${upstream_path}" --jq '.allow_forking')"
+  if [[ "${allow_forking}" == "false" ]]; then
+    echo "Forking is disabled for ${upstream_path}." >&2
+    echo "Ask an admin of ${upstream_path} to enable forking, or create a standalone mirror instead of a GitHub fork." >&2
+    exit 1
+  fi
+}
+
 require_command gh
 require_command git
 
@@ -233,6 +244,7 @@ fi
 
 resolve_upstream_path
 upstream_url="https://github.com/${upstream_path}"
+assert_upstream_forking_enabled
 
 echo
 echo "The following resources will be reset:"
