@@ -4,10 +4,14 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Usage: scripts/reset-fork.sh
+Usage: scripts/reset-fork.sh [--force]
+
+Options:
+  --force  Skip the GitHub fork marker check and use the upstream remote.
 
 Example:
   scripts/reset-fork.sh
+  scripts/reset-fork.sh --force
 EOF
 }
 
@@ -23,17 +27,26 @@ package_url=""
 package_ci_url=""
 upstream_path=""
 upstream_url=""
+force="false"
 
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
   usage
   exit 0
 fi
 
-if [[ $# -ne 0 ]]; then
-  echo "This script does not accept positional parameters." >&2
-  usage >&2
-  exit 1
-fi
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --force)
+      force="true"
+      shift
+      ;;
+    *)
+      echo "Unknown argument: $1" >&2
+      usage >&2
+      exit 1
+      ;;
+  esac
+done
 
 require_command() {
   local cmd="$1"
@@ -122,7 +135,7 @@ resolve_upstream_path() {
   local is_fork=""
   local remote_upstream_url=""
 
-  if is_fork="$(gh repo view "${fork_path}" --json isFork --jq '.isFork' 2>/dev/null)"; then
+  if [[ "${force}" != "true" ]] && is_fork="$(gh repo view "${fork_path}" --json isFork --jq '.isFork' 2>/dev/null)"; then
     if [[ "${is_fork}" != "true" ]]; then
       echo "Repository ${fork_path} is not marked as a fork on GitHub." >&2
       exit 1
