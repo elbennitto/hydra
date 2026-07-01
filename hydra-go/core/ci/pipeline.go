@@ -215,12 +215,6 @@ func RunSprint(mode Mode) error {
 	)
 }
 
-func RunUpgrade(mode Mode) error {
-	return log.CreateError(herrors.ErrCiUpgrade, "ci upgrade [{mode}]: not yet implemented",
-		log.String("mode", string(mode)),
-	)
-}
-
 func RunSync(mode Mode) error {
 	return log.CreateError(herrors.ErrCiSync, "ci sync [{mode}]: not yet implemented",
 		log.String("mode", string(mode)),

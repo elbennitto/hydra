@@ -19,6 +19,8 @@ type CiFlags struct {
 	PromoteTo          string
 	Charts             []string
 	BuildTag           string
+	VersionsFile       string
+	SkipMissing        bool
 	ForceRun           bool
 	ForcePublishUpload bool
 	SkipSigning        bool
@@ -128,7 +130,7 @@ func CiSprint(f CiFlags) error {
 func CiUpgrade(f CiFlags) error {
 	l := log.Default()
 	l.Info(logIdAction, "Running CI upgrade pipeline in '{mode}' mode", log.String("mode", string(f.Mode())))
-	return ci.RunUpgrade(f.Mode())
+	return ci.RunUpgrade(f.ConfigPath, f.Mode(), f.VersionsFile, f.SkipMissing)
 }
 
 func CiSync(f CiFlags) error {

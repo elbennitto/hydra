@@ -6,10 +6,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"hydra-gitops.org/hydra/hydra-go/cli/action"
-	"hydra-gitops.org/hydra/hydra-go/core/ci"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"hydra-gitops.org/hydra/hydra-go/cli/action"
+	"hydra-gitops.org/hydra/hydra-go/core/ci"
 )
 
 func newCapturingCiParams() (CiCommandParams, *action.CiFlags) {
@@ -204,6 +204,50 @@ func TestCiVerifyCommand_ParsesBuildTagAndCharts(t *testing.T) {
 	assert.Equal(t, "build-202601011200", captured.BuildTag)
 	assert.True(t, captured.ForceRun)
 	assert.Equal(t, []string{"demo/service-ui/dev", "apps/demo/service-auth/dev"}, captured.Charts)
+}
+
+func TestCiUpgradeCommand_ParsesVersionsFile(t *testing.T) {
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, ci.ConfigFileName)
+	versionsFile := filepath.Join(dir, "versions.yaml")
+	require.NoError(t, os.WriteFile(filePath, []byte("ci: {}"), 0644))
+	require.NoError(t, os.WriteFile(versionsFile, []byte("versions: []\n"), 0644))
+
+	params, captured := newCapturingCiParams()
+	cmd := NewCiCommand(params)
+	cmd.SetArgs([]string{"run", "upgrade", "--versions-file", versionsFile, filePath})
+	require.NoError(t, cmd.Execute())
+
+	assert.Equal(t, filePath, captured.ConfigPath)
+	assert.Equal(t, versionsFile, captured.VersionsFile)
+}
+
+func TestCiUpgradeCommand_ParsesSkipMissing(t *testing.T) {
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, ci.ConfigFileName)
+	require.NoError(t, os.WriteFile(filePath, []byte("ci: {}"), 0644))
+
+	params, captured := newCapturingCiParams()
+	cmd := NewCiCommand(params)
+	cmd.SetArgs([]string{"run", "upgrade", "--skip-missing", filePath})
+	require.NoError(t, cmd.Execute())
+
+	assert.Equal(t, filePath, captured.ConfigPath)
+	assert.True(t, captured.SkipMissing)
+}
+
+func TestCiUpgradeCommand_AllowsMissingVersionsFile(t *testing.T) {
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, ci.ConfigFileName)
+	require.NoError(t, os.WriteFile(filePath, []byte("ci: {}"), 0644))
+
+	params, captured := newCapturingCiParams()
+	cmd := NewCiCommand(params)
+	cmd.SetArgs([]string{"run", "upgrade", filePath})
+	require.NoError(t, cmd.Execute())
+
+	assert.Equal(t, filePath, captured.ConfigPath)
+	assert.Equal(t, "", captured.VersionsFile)
 }
 
 func TestCiCommand_ConfigSucceedsWithTargetBranchFlag(t *testing.T) {

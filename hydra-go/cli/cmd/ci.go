@@ -5,10 +5,10 @@ import (
 	"os"
 	"path/filepath"
 
-	"hydra-gitops.org/hydra/hydra-go/cli/action"
-	"hydra-gitops.org/hydra/hydra-go/core/ci"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
+	"hydra-gitops.org/hydra/hydra-go/cli/action"
+	"hydra-gitops.org/hydra/hydra-go/core/ci"
 )
 
 // CiCommandParams holds the action functions for all CI pipeline subcommands.
@@ -182,10 +182,15 @@ without making any changes.`,
 		"Check if a sprint boundary has been crossed. If so, bump the major\nversion of all root apps for dev, stage, and prod environments.",
 		params.CiSprint, ciFlags))
 
-	runCmd.AddCommand(newCiSubcommand("upgrade",
-		"Update service version in dev/ from a service deployment pipeline",
-		"Receive a service name and version from an external service deployment pipeline,\nupdate the Chart.yaml dependency, run validation, and either push\ndirectly or create an MR if unit test data also changed.",
-		params.CiUpgrade, ciFlags))
+	upgradeCmd := newCiSubcommand("upgrade",
+		"Update service dependency versions from a versions file",
+		"Read desired service versions from a YAML file and update the matching\nChart.yaml dependency in each apps/<rootApp>/<app>/<env> chart.\nUse --dry-run to validate and log planned dependency changes without writing files.",
+		params.CiUpgrade, ciFlags)
+	upgradeCmd.Flags().StringVar(&ciFlags.VersionsFile, "versions-file", "",
+		"YAML file containing versions entries to apply during upgrade; reads stdin when omitted")
+	upgradeCmd.Flags().BoolVar(&ciFlags.SkipMissing, "skip-missing", false,
+		"Warn and continue when an upgrade entry has no matching chart dependency")
+	runCmd.AddCommand(upgradeCmd)
 
 	runCmd.AddCommand(newCiSubcommand("sync",
 		"Copy cluster configurations into the repository",

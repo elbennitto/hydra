@@ -11,9 +11,9 @@ import (
 )
 
 const (
-	ptyQueryCPR     = "\x1b[6n"
-	ptyQueryOSC11   = "\x1b]11;?\x1b\\"
-	ptyOSC11Dummy   = "\x1b]11;rgb:0000/0000/0000\x1b\\"
+	ptyQueryCPR      = "\x1b[6n"
+	ptyQueryOSC11    = "\x1b]11;?\x1b\\"
+	ptyOSC11Dummy    = "\x1b]11;rgb:0000/0000/0000\x1b\\"
 	ptyQueryCarryMax = 16
 )
 

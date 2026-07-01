@@ -31,7 +31,7 @@ For commit-producing stages without `--target-branch`, Hydra uses `ci.upstreamBr
 | `run publish` | Resolve charts from release tags at `HEAD`, then `helm package` (and `helm push` in CI mode) to `ci.registry` |
 | [`run verify`](verify.md) | Resolve charts like `publish`, then download OCI chart artifacts and verify Helm and Cosign signatures |
 | `run sprint` | At a sprint boundary, bump major versions of all root apps across dev/stage/prod |
-| `run upgrade` | From an external service deployment pipeline, update a service version in dev (optional MR if unit test data changes) |
+| `run upgrade` | Read `--versions-file` and update matching child chart dependency versions |
 | `run sync` | Copy cluster config from external cluster repos and trigger the update path |
 | `run update` | Render all clusters, refresh unit test data, one-auto-commit rule |
 | `config` | Interactive `.hydra-ci.yaml` editor (stdout color follows TTY unless `--no-color`) |
@@ -99,6 +99,20 @@ Typical flow in the **charts repository** (where `.hydra-ci.yaml` lives):
    then carry the change into the target environment directory.
 
 Without `--target-branch`, `release` and `promote` derive their checkout base from `ci.upstreamBranch`. The default `origin/HEAD` is recommended for CI because it follows the remote default branch automatically. Use an explicit value such as `origin/main` if you want to pin the base branch name.
+
+### Service version upgrades
+
+External service deployment pipelines can hand desired versions to Hydra with a file like this:
+
+```yaml
+versions:
+  - rootApp: demo
+    app: service-ui
+    env: dev
+    version: 1.2.3
+```
+
+Run `hydra ci run upgrade --versions-file versions.yaml .hydra-ci.yaml`, or pipe the same YAML to `hydra ci run upgrade .hydra-ci.yaml`, to update `apps/demo/service-ui/dev/Chart.yaml`, specifically the dependency named `service-ui`. `upgrade` changes only the upstream dependency pin. Run `hydra ci run release` afterwards to derive the child wrapper version and root-app version pins from that dependency change.
 
 ### Version examples (child wrapper)
 

@@ -75,7 +75,7 @@ func runAutoStep(step, configPath string, mode Mode, targetBranch, promoteTo str
 	case "sprint":
 		return RunSprint(mode)
 	case "upgrade":
-		return RunUpgrade(mode)
+		return RunUpgrade(configPath, mode, "", false)
 	default:
 		return fmt.Errorf("internal: unknown step %q", step)
 	}

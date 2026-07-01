@@ -10,7 +10,7 @@ Hydra's CI commands run in GitLab CI pipelines and automate:
 - Release creation (`hydra ci run release`)
 - Promotion across stages (`hydra ci run promote`)
 - Chart publishing (`hydra ci run publish`)
-- Automated upgrades (`hydra ci run upgrade`)
+- Automated dependency upgrades from a versions file (`hydra ci run upgrade --versions-file versions.yaml`)
 
 ## Pipeline Stages
 
@@ -36,6 +36,7 @@ flowchart LR
 
 - `hydra ci run download`: Refresh dependencies for changed charts locally, even when `charts/` already contains artifacts.
 - `hydra ci run test`: Validate changed charts offline against already-downloaded dependencies. Fails when a dependency is missing.
+- `hydra ci run upgrade`: Read a versions file and update matching child chart dependencies in `apps/<rootApp>/<app>/<env>/Chart.yaml`.
 - `hydra ci run publish`: Download dependencies again as part of publishing, package and sign the chart, then optionally push the chart plus provenance signature. With `--skip-signing`, Hydra publishes unsigned charts and logs a warning.
 
 ## Configuration
