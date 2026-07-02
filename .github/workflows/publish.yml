@@ -99,7 +99,7 @@ jobs:
         run: tar -cf hydra-build-${{ matrix.target_artifact }}.tar dist
 
       - name: Upload CLI target artifact (${{ matrix.target_label }})
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: hydra-build-${{ matrix.target_artifact }}
           path: hydra-build-${{ matrix.target_artifact }}.tar
@@ -127,7 +127,7 @@ jobs:
         uses: ./.github/actions/install-cosign
 
       - name: Download CLI target artifacts
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v8
         with:
           pattern: hydra-build-*
           merge-multiple: true
@@ -166,7 +166,7 @@ jobs:
         uses: ./.github/actions/install-sops
 
       - name: Download CLI target artifacts
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v8
         with:
           pattern: hydra-build-*
           merge-multiple: true
@@ -204,7 +204,7 @@ jobs:
         uses: ./.github/actions/install-sops
 
       - name: Download CLI target artifacts
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v8
         with:
           pattern: hydra-build-*
           merge-multiple: true
