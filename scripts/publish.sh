@@ -649,22 +649,43 @@ release_archive_path() {
 }
 
 release_archive_sha256() {
-  local release_repo="$1"
-  local target_goos="$2"
-  local target_goarch="$3"
-  local archive_name archive_path archive_url archive_file
+  local target_goos="$1"
+  local target_goarch="$2"
+  local archive_name archive_path
 
   archive_name="$(target_archive_name "${target_goos}" "${target_goarch}")"
   archive_path="$(release_archive_path "${target_goos}" "${target_goarch}")"
-  if [[ -f "${archive_path}" ]]; then
-    sha256_file "${archive_path}"
+  if [[ ! -f "${archive_path}" ]]; then
+    echo "Required release artifact is missing: ${archive_path}" >&2
+    echo "Ensure workflow artifacts were downloaded and extracted before running homebrew publish." >&2
+    exit 1
+  fi
+
+  sha256_file "${archive_path}"
+}
+
+download_source_archive() {
+  local archive_url="$1"
+  local archive_file="$2"
+  local gh_token=""
+
+  if command -v gh >/dev/null 2>&1; then
+    gh_token="$(gh auth token 2>/dev/null || true)"
+  fi
+
+  if [[ -n "${gh_token}" ]] && curl -fsSL -H "Authorization: token ${gh_token}" "${archive_url}" -o "${archive_file}"; then
     return
   fi
 
-  archive_url="https://github.com/${release_repo}/releases/download/${tag}/${archive_name}"
-  archive_file="${tmp_dir}/${archive_name}"
+  if [[ -n "${GITHUB_TOKEN:-}" ]] && curl -fsSL -H "Authorization: token ${GITHUB_TOKEN}" "${archive_url}" -o "${archive_file}"; then
+    return
+  fi
+
+  if [[ -n "${GH_TOKEN:-}" ]] && curl -fsSL -H "Authorization: token ${GH_TOKEN}" "${archive_url}" -o "${archive_file}"; then
+    return
+  fi
+
   curl -fsSL "${archive_url}" -o "${archive_file}"
-  sha256_file "${archive_file}"
 }
 
 render_homebrew_cask() {
@@ -718,7 +739,7 @@ run_homebrew_formula() {
   load_publish_secrets
   configure_git_release_identity_env
 
-  local release_repo source_archive_url source_archive_file source_sha256 linux_amd64_sha256 linux_arm64_sha256 darwin_amd64_sha256 darwin_arm64_sha256
+  local release_repo source_archive_url source_archive_download_url source_archive_file source_sha256 linux_amd64_sha256 linux_arm64_sha256 darwin_amd64_sha256 darwin_arm64_sha256
   release_repo="${GITHUB_REPOSITORY:-${HYDRA_SECRETS_REPO:-}}"
   if [[ -z "${release_repo}" ]]; then
     echo "GITHUB_REPOSITORY or HYDRA_SECRETS_REPO must be set" >&2
@@ -726,14 +747,15 @@ run_homebrew_formula() {
   fi
 
   source_archive_url="https://github.com/${release_repo}/archive/refs/tags/${tag}.tar.gz"
+  source_archive_download_url="https://codeload.github.com/${release_repo}/tar.gz/refs/tags/${tag}"
   source_archive_file="${tmp_dir}/hydra_${tag}_source.tar.gz"
-  curl -fsSL "${source_archive_url}" -o "${source_archive_file}"
+  download_source_archive "${source_archive_download_url}" "${source_archive_file}"
   source_sha256="$(sha256_file "${source_archive_file}")"
 
-  linux_amd64_sha256="$(release_archive_sha256 "${release_repo}" linux amd64)"
-  linux_arm64_sha256="$(release_archive_sha256 "${release_repo}" linux arm64)"
-  darwin_amd64_sha256="$(release_archive_sha256 "${release_repo}" darwin amd64)"
-  darwin_arm64_sha256="$(release_archive_sha256 "${release_repo}" darwin arm64)"
+  linux_amd64_sha256="$(release_archive_sha256 linux amd64)"
+  linux_arm64_sha256="$(release_archive_sha256 linux arm64)"
+  darwin_amd64_sha256="$(release_archive_sha256 darwin amd64)"
+  darwin_arm64_sha256="$(release_archive_sha256 darwin arm64)"
 
   homebrew_formula_context="$(mktemp -d "${tmp_dir}/hydra-homebrew-formula.XXXXXX")"
 

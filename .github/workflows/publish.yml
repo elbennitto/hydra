@@ -215,6 +215,7 @@ jobs:
 
       - name: Update Homebrew formulas
         env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ github.ref_name }}
           SOPS_AGE_KEY_PUBLISH: ${{ secrets.SOPS_AGE_KEY_PUBLISH }}
         run: ./scripts/publish.sh homebrew
