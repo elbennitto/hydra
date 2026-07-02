@@ -44,6 +44,7 @@ release_public_config_file="${fork_secrets_dir}/release.yaml"
 
 hydra_bin=""
 signed_commits_ruleset_name="Hydra Require Signed Commits"
+repo_private=""
 manual_pages_repo=""
 manual_pages_owner=""
 manual_pages_name=""
@@ -65,6 +66,10 @@ warn() {
 
 is_github_actions() {
   [[ "${GITHUB_ACTIONS:-}" == "true" ]]
+}
+
+repo_is_private() {
+  [[ "${repo_private}" == "true" ]]
 }
 
 resolve_hydra_bin() {
@@ -401,6 +406,11 @@ ensure_signed_commits_ruleset() {
   local ruleset_id
   local created_id
 
+  if repo_is_private; then
+    echo "Skipping signed-commit ruleset for private repository ${repo}; GitHub requires a paid plan or public repository for this feature"
+    return
+  fi
+
   default_branch="$(gh repo view "${repo}" --json defaultBranchRef --jq '.defaultBranchRef.name')"
   full_ref="refs/heads/${default_branch}"
   include_ref="refs/heads/${default_branch}"
@@ -476,6 +486,7 @@ echo "Configuring GitHub settings for ${repo}"
 
 owner="${repo%/*}"
 name="${repo#*/}"
+repo_private="$(gh api "repos/${repo}" --jq '.private')"
 default_branch="$(gh repo view "${repo}" --json defaultBranchRef --jq '.defaultBranchRef.name')"
 load_manual_pages_settings
 

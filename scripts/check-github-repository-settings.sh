@@ -17,6 +17,7 @@ default_branch="${DEFAULT_BRANCH:-$(gh repo view --json defaultBranchRef --jq '.
 owner="${repo%/*}"
 name="${repo#*/}"
 full_ref="refs/heads/${default_branch}"
+repo_private="$(gh api "repos/${repo}" --jq '.private')"
 
 failures=0
 env_names=()
@@ -316,6 +317,11 @@ check_environment_secret() {
 check_signed_commits() {
   local branch_protection_status
   local ruleset_status
+
+  if [[ "${repo_private}" == "true" ]]; then
+    skip "Signed-commit requirement is skipped for private repository ${repo}; GitHub requires a paid plan or public repository for this feature"
+    return
+  fi
 
   if check_signed_commits_with_branch_protection; then
     pass "Signed commits are required for ${default_branch} via branch protection"
