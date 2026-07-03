@@ -315,6 +315,11 @@ func (r *Repo) CheckoutUpstreamBranch(upstream string) *Repo {
 	if err != nil {
 		fallbackBranch := fallbackLocalBranchForUpstream(upstream)
 		if fallbackBranch != "" && r.BranchExists(fallbackBranch) {
+			if current, cerr := r.CurrentBranch(); cerr == nil && current == fallbackBranch {
+				log.Default().DebugLog(logIdGitRepo, "skipping checkout; already on target branch",
+					log.String("branch", fallbackBranch))
+				return r
+			}
 			log.Default().Info(logIdGitRepo, "configured upstream unavailable; falling back to existing local branch",
 				log.String("upstream", upstream),
 				log.String("branch", fallbackBranch),
@@ -325,8 +330,14 @@ func (r *Repo) CheckoutUpstreamBranch(upstream string) *Repo {
 		return r
 	}
 
+	if current, cerr := r.CurrentBranch(); cerr == nil && current == resolved.localBranch {
+		log.Default().DebugLog(logIdGitRepo, "skipping checkout; already on target branch",
+			log.String("branch", resolved.localBranch))
+		return r
+	}
+
 	if cacheHit {
-		log.Default().Info(logIdGitRepo, "using cached upstream branch before checkout",
+		log.Default().DebugLog(logIdGitRepo, "using cached upstream branch before checkout",
 			log.String("upstream", resolved.requestedUpstream),
 			log.String("branch", resolved.localBranch),
 			log.String("remoteRef", resolved.remoteRef.String()))
