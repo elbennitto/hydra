@@ -2,6 +2,7 @@ package ci
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -41,6 +42,16 @@ func configYAML(envs, promotableRootApps string) string {
 
 func configPath(repo *git.Repo) string {
 	return filepath.Join(repo.Path(), ".hydra-ci.yaml")
+}
+
+func addOriginBareRemote(t *testing.T, repo *git.Repo) string {
+	t.Helper()
+	remoteDir := t.TempDir()
+	out, err := exec.Command("git", "init", "--bare", remoteDir).CombinedOutput()
+	require.NoError(t, err, string(out))
+	out, err = exec.Command("git", "-C", repo.Path(), "remote", "add", "origin", remoteDir).CombinedOutput()
+	require.NoError(t, err, string(out))
+	return remoteDir
 }
 
 // --- Detection Tests (using mock) ---
@@ -622,6 +633,7 @@ func TestPromote_CI_CreatesBranchAndCommit(t *testing.T) {
 			),
 		)
 	require.NoError(t, repo.Err)
+		remoteDir := addOriginBareRemote(t, repo)
 
 	actions := &ciPromoteActions{}
 	result, err := RunPromote(configPath(repo), ModeCI, actions, "", "")
@@ -641,6 +653,9 @@ func TestPromote_CI_CreatesBranchAndCommit(t *testing.T) {
 	val, err := promoted.GetValue("replicaCount")
 	require.NoError(t, err)
 	assert.Equal(t, "2", val, "values should come from source (dev)")
+
+	out, err := exec.Command("git", "--git-dir", remoteDir, "show-ref", "--verify", "refs/heads/"+branch).CombinedOutput()
+	require.NoError(t, err, string(out))
 }
 
 func TestPromote_CI_TargetBranchNotSupported(t *testing.T) {

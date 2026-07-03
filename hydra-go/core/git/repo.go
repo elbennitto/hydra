@@ -398,6 +398,32 @@ func (r *Repo) checkoutNewBranchFromOriginHead(name string, originHead originHea
 	return r
 }
 
+// PushSetUpstream pushes the given local branch to the given remote and sets upstream.
+// Equivalent to: git push --set-upstream <remote> <branch>
+func (r *Repo) PushSetUpstream(remote, branch string) *Repo {
+	if r.Err != nil {
+		return r
+	}
+	if strings.TrimSpace(remote) == "" {
+		r.Err = fmt.Errorf("git push: remote must not be empty")
+		return r
+	}
+	if strings.TrimSpace(branch) == "" {
+		r.Err = fmt.Errorf("git push: branch must not be empty")
+		return r
+	}
+	out, err := exec.Command("git", "-C", r.path, "push", "--set-upstream", remote, branch).CombinedOutput()
+	if err != nil {
+		msg := strings.TrimSpace(string(out))
+		if msg == "" {
+			r.Err = fmt.Errorf("git push --set-upstream %s %s: %w", remote, branch, err)
+			return r
+		}
+		r.Err = fmt.Errorf("git push --set-upstream %s %s: %w\n%s", remote, branch, err, msg)
+	}
+	return r
+}
+
 // BranchExists checks if a branch with the given name exists in the repository.
 func (r *Repo) BranchExists(name string) bool {
 	if r.Err != nil {

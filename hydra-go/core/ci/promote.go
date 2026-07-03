@@ -456,6 +456,10 @@ func (a *ciPromoteActions) ExecutePromotion(repo *git.Repo, entry PromotionEntry
 	if repo.Err != nil {
 		return repo.Err
 	}
+	repo.PushSetUpstream("origin", entry.Branch)
+	if repo.Err != nil {
+		return repo.Err
+	}
 	repo.CheckoutUpstreamBranch(cfg.CI.UpstreamBranch)
 	return repo.Err
 }
