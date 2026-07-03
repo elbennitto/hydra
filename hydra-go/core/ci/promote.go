@@ -134,6 +134,15 @@ func RunPromote(configPath string, mode Mode, actions PromoteActions, targetBran
 		}
 	}
 
+	if mode == ModeCI {
+		if _, ok := actions.(*ciPromoteActions); ok {
+			repo.Fetch("origin")
+			if repo.Err != nil {
+				return PromoteResult{}, fmt.Errorf("fetch origin: %w", repo.Err)
+			}
+		}
+	}
+
 	var result PromoteResult
 
 	for i := 0; i < len(cfg.CI.Environments)-1; i++ {

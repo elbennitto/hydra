@@ -424,6 +424,31 @@ func (r *Repo) PushSetUpstream(remote, branch string) *Repo {
 	return r
 }
 
+// Fetch updates remote-tracking refs for the given remote.
+func (r *Repo) Fetch(remote string) *Repo {
+	if r.Err != nil {
+		return r
+	}
+	if strings.TrimSpace(remote) == "" {
+		r.Err = fmt.Errorf("git fetch: remote must not be empty")
+		return r
+	}
+	out, err := exec.Command("git", "-C", r.path, "fetch", "--prune", remote).CombinedOutput()
+	if err != nil {
+		msg := strings.TrimSpace(string(out))
+		if msg == "" {
+			r.Err = fmt.Errorf("git fetch --prune %s: %w", remote, err)
+			return r
+		}
+		r.Err = fmt.Errorf("git fetch --prune %s: %w\n%s", remote, err, msg)
+		return r
+	}
+
+	// Drop cached upstream resolutions because remote refs may have changed.
+	r.upstreamResolutionCache = map[string]resolvedUpstreamBranch{}
+	return r
+}
+
 // BranchExists checks if a branch with the given name exists in the repository.
 func (r *Repo) BranchExists(name string) bool {
 	if r.Err != nil {

@@ -521,6 +521,45 @@ func TestRemoteBranchExists(t *testing.T) {
 	assert.False(t, repo.RemoteBranchExists("", "feature/remote"))
 }
 
+func TestFetch_UpdatesRemoteTrackingRefs(t *testing.T) {
+	repo := Init(t.TempDir()).
+		Commit("init", "a.txt", "hello")
+	require.NoError(t, repo.Err)
+
+	remoteDir := t.TempDir()
+	out, err := exec.Command("git", "init", "--bare", remoteDir).CombinedOutput()
+	require.NoError(t, err, string(out))
+
+	out, err = exec.Command("git", "-C", repo.Path(), "remote", "add", "origin", remoteDir).CombinedOutput()
+	require.NoError(t, err, string(out))
+
+	// Seed remote with a branch unknown to the local clone.
+	seed := Init(t.TempDir()).
+		Commit("seed", "seed.txt", "seed")
+	require.NoError(t, seed.Err)
+
+	out, err = exec.Command("git", "-C", seed.Path(), "remote", "add", "origin", remoteDir).CombinedOutput()
+	require.NoError(t, err, string(out))
+	out, err = exec.Command("git", "-C", seed.Path(), "push", "--set-upstream", "origin", "main:feature/fetched").CombinedOutput()
+	require.NoError(t, err, string(out))
+
+	assert.False(t, repo.RemoteBranchExists("origin", "feature/fetched"))
+
+	repo.Fetch("origin")
+	require.NoError(t, repo.Err)
+	assert.True(t, repo.RemoteBranchExists("origin", "feature/fetched"))
+}
+
+func TestFetch_EmptyRemoteSetsError(t *testing.T) {
+	repo := Init(t.TempDir()).
+		Commit("init", "a.txt", "hello")
+	require.NoError(t, repo.Err)
+
+	repo.Fetch("")
+	require.Error(t, repo.Err)
+	assert.Contains(t, repo.Err.Error(), "remote must not be empty")
+}
+
 func TestErrorAccumulation(t *testing.T) {
 	repo := Init(t.TempDir())
 	repo.Err = os.ErrPermission
