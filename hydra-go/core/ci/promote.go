@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"hydra-gitops.org/hydra/hydra-go/base/log"
 	"hydra-gitops.org/hydra/hydra-go/core/git"
 )
 
@@ -471,14 +472,44 @@ func (a *localPromoteActions) ExecutePromotion(repo *git.Repo, entry PromotionEn
 type ciPromoteActions struct{}
 
 func (a *ciPromoteActions) ExecutePromotion(repo *git.Repo, entry PromotionEntry, cfg *Config) error {
+	if repo.RemoteBranchExists("origin", entry.Branch) {
+		repo.CheckoutUpstreamBranch("origin/" + entry.Branch)
+		if repo.Err != nil {
+			return repo.Err
+		}
+
+		if err := preserveTargetChartVersionFromCurrentBranch(repo, &entry); err != nil {
+			return err
+		}
+	} else {
+		repo.CheckoutUpstreamBranch(cfg.CI.UpstreamBranch).
+			Branch(entry.Branch)
+		if repo.Err != nil {
+			return repo.Err
+		}
+	}
+
+	hasChanges, err := promotionWouldChangeCurrentBranch(repo, entry)
+	if err != nil {
+		return err
+	}
+	if !hasChanges {
+		log.Default().Info(logIdCI, "promote skipped: {group}/{app} {source} → {target} on branch {branch}: no differences",
+			log.String("group", entry.Group),
+			log.String("app", entry.App),
+			log.String("source", entry.SourceEnv),
+			log.String("target", entry.TargetEnv),
+			log.String("branch", entry.Branch),
+		)
+		repo.CheckoutUpstreamBranch(cfg.CI.UpstreamBranch)
+		return repo.Err
+	}
+
 	fs, err := buildPromotionFS(repo, entry)
 	if err != nil {
 		return err
 	}
-
-	repo.CheckoutUpstreamBranch(cfg.CI.UpstreamBranch).
-		Branch(entry.Branch).
-		CommitFS(entry.CommitMessage(), fs)
+	repo.CommitFS(entry.CommitMessage(), fs)
 	if repo.Err != nil {
 		return repo.Err
 	}
@@ -488,6 +519,46 @@ func (a *ciPromoteActions) ExecutePromotion(repo *git.Repo, entry PromotionEntry
 	}
 	repo.CheckoutUpstreamBranch(cfg.CI.UpstreamBranch)
 	return repo.Err
+}
+
+func preserveTargetChartVersionFromCurrentBranch(repo *git.Repo, entry *PromotionEntry) error {
+	targetAbs := filepath.Join(repo.Path(), entry.TargetPath)
+	if _, err := os.Stat(targetAbs); os.IsNotExist(err) {
+		return nil
+	} else if err != nil {
+		return fmt.Errorf("stat target chart path %s: %w", entry.TargetPath, err)
+	}
+
+	targetChart, err := repo.LoadChart(entry.TargetPath)
+	if err != nil {
+		return fmt.Errorf("load target chart %s: %w", entry.TargetPath, err)
+	}
+
+	entry.NewVersion = targetChart.GetVersion()
+	entry.OldVersion = entry.NewVersion
+	return nil
+}
+
+func promotionWouldChangeCurrentBranch(repo *git.Repo, entry PromotionEntry) (bool, error) {
+	targetAbs := filepath.Join(repo.Path(), entry.TargetPath)
+	if _, err := os.Stat(targetAbs); os.IsNotExist(err) {
+		return true, nil
+	} else if err != nil {
+		return false, fmt.Errorf("stat target chart path %s: %w", entry.TargetPath, err)
+	}
+
+	sourceChart, err := repo.LoadChart(entry.SourcePath)
+	if err != nil {
+		return false, fmt.Errorf("load source chart %s: %w", entry.SourcePath, err)
+	}
+
+	renderedSourceChartYAML := sourceChart.RenderWithVersion(entry.NewVersion)
+	equal, err := chartDirsEqual(repo.Path(), entry.SourcePath, entry.TargetPath, renderedSourceChartYAML)
+	if err != nil {
+		return false, fmt.Errorf("compare directories: %w", err)
+	}
+
+	return !equal, nil
 }
 
 func buildPromotionFS(repo *git.Repo, entry PromotionEntry) (*git.FS, error) {

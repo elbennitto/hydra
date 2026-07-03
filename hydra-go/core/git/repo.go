@@ -434,6 +434,21 @@ func (r *Repo) BranchExists(name string) bool {
 	return err == nil
 }
 
+// RemoteBranchExists checks if a branch exists for the given remote.
+func (r *Repo) RemoteBranchExists(remote, branch string) bool {
+	if r.Err != nil {
+		return false
+	}
+	remote = strings.TrimSpace(remote)
+	branch = strings.TrimSpace(branch)
+	if remote == "" || branch == "" {
+		return false
+	}
+	ref := normalizeRemoteRefName(remote + "/" + strings.TrimPrefix(branch, "refs/heads/"))
+	_, err := r.repo.Reference(ref, false)
+	return err == nil
+}
+
 func (r *Repo) unstagedDiffOnCheckoutError(err error) (string, bool) {
 	if err == nil || !strings.Contains(err.Error(), "worktree contains unstaged changes") {
 		return "", false

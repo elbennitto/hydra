@@ -499,6 +499,28 @@ func TestPushSetUpstream_EmptyBranchSetsError(t *testing.T) {
 	assert.Contains(t, repo.Err.Error(), "branch must not be empty")
 }
 
+func TestRemoteBranchExists(t *testing.T) {
+	repo := Init(t.TempDir()).
+		Commit("init", "a.txt", "hello").
+		Branch("feature/remote").
+		Commit("feature work", "b.txt", "world")
+	require.NoError(t, repo.Err)
+
+	remoteDir := t.TempDir()
+	out, err := exec.Command("git", "init", "--bare", remoteDir).CombinedOutput()
+	require.NoError(t, err, string(out))
+
+	out, err = exec.Command("git", "-C", repo.Path(), "remote", "add", "origin", remoteDir).CombinedOutput()
+	require.NoError(t, err, string(out))
+
+	repo.PushSetUpstream("origin", "feature/remote")
+	require.NoError(t, repo.Err)
+
+	assert.True(t, repo.RemoteBranchExists("origin", "feature/remote"))
+	assert.False(t, repo.RemoteBranchExists("origin", "missing"))
+	assert.False(t, repo.RemoteBranchExists("", "feature/remote"))
+}
+
 func TestErrorAccumulation(t *testing.T) {
 	repo := Init(t.TempDir())
 	repo.Err = os.ErrPermission

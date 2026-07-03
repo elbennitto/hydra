@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -714,6 +715,180 @@ func TestPromote_CI_CreatesBranchAndCommit(t *testing.T) {
 
 	out, err := exec.Command("git", "--git-dir", remoteDir, "show-ref", "--verify", "refs/heads/"+branch).CombinedOutput()
 	require.NoError(t, err, string(out))
+}
+
+func TestPromote_CI_ExistingRemoteBranch_PreservesVersionAndPushesChanges(t *testing.T) {
+	const branch = "hydra/promote/to-stage/demo/service-ui"
+
+	repo := git.Init(t.TempDir()).
+		CommitFS("init", git.NewFS().
+			File(".hydra-ci.yaml", configYAML("dev, stage", "")).
+			Add("apps/demo/service-ui/dev",
+				git.NewChart("service-ui").
+					Version("1.200.9-dev").
+					Dep("service-ui", "1.200.9", "oci://registry/helm").
+					Values("replicaCount: 2\n"),
+			).
+			Add("apps/demo/service-ui/stage",
+				git.NewChart("service-ui").
+					Version("1.198.3-stage").
+					Dep("service-ui", "1.198.3", "oci://registry/helm").
+					Values("replicaCount: 1\n"),
+			),
+		)
+	require.NoError(t, repo.Err)
+
+	remoteDir := addOriginBareRemote(t, repo)
+
+	repo.Branch(branch).
+		CommitFS("seed remote promote branch", git.NewFS().
+			Add("apps/demo/service-ui/stage",
+				git.NewChart("service-ui").
+					Version("9.9.9-stage").
+					Dep("service-ui", "1.198.3", "oci://registry/helm").
+					Values("replicaCount: 1\n"),
+			),
+		).
+		PushSetUpstream("origin", branch).
+		Checkout("main")
+	require.NoError(t, repo.Err)
+
+	beforeRaw, err := exec.Command("git", "--git-dir", remoteDir, "rev-parse", "refs/heads/"+branch).CombinedOutput()
+	require.NoError(t, err, string(beforeRaw))
+	before := strings.TrimSpace(string(beforeRaw))
+
+	actions := &ciPromoteActions{}
+	result, err := RunPromote(configPath(repo), ModeCI, actions, "", "")
+	require.NoError(t, err)
+	require.Len(t, result.Promotions, 1)
+	assert.False(t, result.Promotions[0].Skipped)
+
+	afterRaw, err := exec.Command("git", "--git-dir", remoteDir, "rev-parse", "refs/heads/"+branch).CombinedOutput()
+	require.NoError(t, err, string(afterRaw))
+	after := strings.TrimSpace(string(afterRaw))
+	assert.NotEqual(t, before, after, "updated branch should be pushed")
+
+	repo.Checkout(branch)
+	require.NoError(t, repo.Err)
+
+	promoted, err := repo.LoadChart("apps/demo/service-ui/stage")
+	require.NoError(t, err)
+	assert.Equal(t, "9.9.9-stage", promoted.GetVersion(), "existing remote chart version must stay unchanged")
+	assert.Equal(t, "1.200.9", promoted.GetDepVersion("service-ui"))
+
+	val, err := promoted.GetValue("replicaCount")
+	require.NoError(t, err)
+	assert.Equal(t, "2", val)
+}
+
+func TestPromote_CI_ExistingRemoteBranch_NoChanges_SkipsCommitAndPush(t *testing.T) {
+	const branch = "hydra/promote/to-stage/demo/service-ui"
+
+	repo := git.Init(t.TempDir()).
+		CommitFS("init", git.NewFS().
+			File(".hydra-ci.yaml", configYAML("dev, stage", "")).
+			Add("apps/demo/service-ui/dev",
+				git.NewChart("service-ui").
+					Version("1.200.9-dev").
+					Dep("service-ui", "1.200.9", "oci://registry/helm").
+					Values("replicaCount: 2\n"),
+			).
+			Add("apps/demo/service-ui/stage",
+				git.NewChart("service-ui").
+					Version("1.198.3-stage").
+					Dep("service-ui", "1.198.3", "oci://registry/helm").
+					Values("replicaCount: 1\n"),
+			),
+		)
+	require.NoError(t, repo.Err)
+
+	remoteDir := addOriginBareRemote(t, repo)
+
+	repo.Branch(branch).
+		CommitFS("seed remote promote branch", git.NewFS().
+			Add("apps/demo/service-ui/stage",
+				git.NewChart("service-ui").
+					Version("9.9.9-stage").
+					Dep("service-ui", "1.200.9", "oci://registry/helm").
+					Values("replicaCount: 2\n"),
+			),
+		).
+		PushSetUpstream("origin", branch).
+		Checkout("main")
+	require.NoError(t, repo.Err)
+
+	beforeRaw, err := exec.Command("git", "--git-dir", remoteDir, "rev-parse", "refs/heads/"+branch).CombinedOutput()
+	require.NoError(t, err, string(beforeRaw))
+	before := strings.TrimSpace(string(beforeRaw))
+
+	actions := &ciPromoteActions{}
+	result, err := RunPromote(configPath(repo), ModeCI, actions, "", "")
+	require.NoError(t, err)
+	require.Len(t, result.Promotions, 1)
+	assert.False(t, result.Promotions[0].Skipped)
+
+	afterRaw, err := exec.Command("git", "--git-dir", remoteDir, "rev-parse", "refs/heads/"+branch).CombinedOutput()
+	require.NoError(t, err, string(afterRaw))
+	after := strings.TrimSpace(string(afterRaw))
+	assert.Equal(t, before, after, "no-op updates must not be pushed")
+
+	repo.Checkout(branch)
+	require.NoError(t, repo.Err)
+	promoted, err := repo.LoadChart("apps/demo/service-ui/stage")
+	require.NoError(t, err)
+	assert.Equal(t, "9.9.9-stage", promoted.GetVersion(), "existing remote chart version must stay unchanged")
+}
+
+func TestPromote_CI_ExistingRemoteBranch_NoChanges_LogsSkipped(t *testing.T) {
+	const branch = "hydra/promote/to-stage/demo/service-ui"
+
+	repo := git.Init(t.TempDir()).
+		CommitFS("init", git.NewFS().
+			File(".hydra-ci.yaml", configYAML("dev, stage", "")).
+			Add("apps/demo/service-ui/dev",
+				git.NewChart("service-ui").
+					Version("1.200.9-dev").
+					Dep("service-ui", "1.200.9", "oci://registry/helm").
+					Values("replicaCount: 2\n"),
+			).
+			Add("apps/demo/service-ui/stage",
+				git.NewChart("service-ui").
+					Version("1.198.3-stage").
+					Dep("service-ui", "1.198.3", "oci://registry/helm").
+					Values("replicaCount: 1\n"),
+			),
+		)
+	require.NoError(t, repo.Err)
+
+	_ = addOriginBareRemote(t, repo)
+
+	repo.Branch(branch).
+		CommitFS("seed remote promote branch", git.NewFS().
+			Add("apps/demo/service-ui/stage",
+				git.NewChart("service-ui").
+					Version("9.9.9-stage").
+					Dep("service-ui", "1.200.9", "oci://registry/helm").
+					Values("replicaCount: 2\n"),
+			),
+		).
+		PushSetUpstream("origin", branch).
+		Checkout("main")
+	require.NoError(t, repo.Err)
+
+	actions := &ciPromoteActions{}
+	var (
+		result PromoteResult
+		runErr error
+	)
+	logs := captureCILogs(t, func() {
+		result, runErr = RunPromote(configPath(repo), ModeCI, actions, "", "")
+	})
+	require.NoError(t, runErr)
+	require.Len(t, result.Promotions, 1)
+
+	assert.Contains(t, logs, "promote skipped:")
+	assert.Contains(t, logs, "service-ui")
+	assert.Contains(t, logs, "no differences")
 }
 
 func TestPromote_CI_TargetBranchNotSupported(t *testing.T) {
