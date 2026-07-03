@@ -6,12 +6,12 @@ import (
 	"strings"
 	"testing"
 
-	"hydra-gitops.org/hydra/hydra-go/core/types"
-	"hydra-gitops.org/hydra/hydra-go/core/view"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	chartutil "helm.sh/helm/v4/pkg/chart/common/util"
 	"helm.sh/helm/v4/pkg/chart/loader"
+	"hydra-gitops.org/hydra/hydra-go/core/types"
+	"hydra-gitops.org/hydra/hydra-go/core/view"
 )
 
 // helper: set up a directory that looks like a previous cluster dump

@@ -6,8 +6,8 @@ import (
 	"log/slog"
 	"testing"
 
-	"hydra-gitops.org/hydra/hydra-go/base/log"
 	"github.com/stretchr/testify/assert"
+	"hydra-gitops.org/hydra/hydra-go/base/log"
 )
 
 func TestKubernetesAPICtxWarningHandler_Info_LogsSourceIdAndMessage(t *testing.T) {

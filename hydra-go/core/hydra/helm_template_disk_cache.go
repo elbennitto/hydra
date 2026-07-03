@@ -11,8 +11,8 @@ import (
 	"regexp"
 	"slices"
 
-	"hydra-gitops.org/hydra/hydra-go/core/types"
 	"gopkg.in/yaml.v3"
+	"hydra-gitops.org/hydra/hydra-go/core/types"
 )
 
 // helmTemplateDiskCacheParams is the on-disk cache key for Helm template renders.

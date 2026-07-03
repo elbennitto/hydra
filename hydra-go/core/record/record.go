@@ -834,19 +834,6 @@ func syncShellEnv(session *recordFileShell, before map[string]string, after map[
 	return runHiddenCommandSilently(session, strings.Join(lines, "\n"), 0, index, true)
 }
 
-func appendCastHistoryChunk(history *historyState, chunk string) {
-	if history == nil || chunk == "" {
-		return
-	}
-	visible := visibleRecordOutputChunk(chunk)
-	if visible == "" {
-		return
-	}
-	visible = strings.ReplaceAll(visible, "\r\n", "\n")
-	visible = strings.ReplaceAll(visible, "\r", "\n")
-	history.castHistory += visible
-}
-
 func renderRecordColor(spec *RecordColor) (string, bool) {
 	if spec == nil {
 		return "", false
@@ -1200,21 +1187,8 @@ func inlineSleepMarker(seconds float64) string {
 	return directive.SleepInline(seconds)
 }
 
-func buildPrintfCommand(text string) string {
-	return fmt.Sprintf("printf '%%b' %s", bashCStyleQuote(text))
-}
-
 func emitSleepDirective(session *recordFileShell, seconds float64) error {
 	return session.WriteOutput(directive.SleepInline(seconds))
-}
-
-func runHiddenCommand(session *recordFileShell, command string, index int) error {
-	_, err := runCommandWithStatus(session, command, index)
-	return err
-}
-
-func runCommandWithStatus(session *recordFileShell, command string, index int) (int, error) {
-	return runCommandWithStatusMode(session, command, index, false, true)
 }
 
 func runCommandWithStatusMode(session *recordFileShell, command string, index int, parentShell bool, waitForIdle bool) (int, error) {
@@ -1457,21 +1431,6 @@ func (s *recordFileShell) readLoop() {
 			return
 		}
 	}
-}
-
-func (s *recordFileShell) withMirrorSuppressed(run func() error) error {
-	s.mirrorMu.Lock()
-	previous := s.mirror
-	s.mirror = nil
-	s.mirrorMu.Unlock()
-
-	defer func() {
-		s.mirrorMu.Lock()
-		s.mirror = previous
-		s.mirrorMu.Unlock()
-	}()
-
-	return run()
 }
 
 func (s *recordFileShell) withOutputDiscarded(run func() error) error {
@@ -1878,32 +1837,6 @@ func shouldHideRecordFileLineForSanitize(trimmed string) bool {
 	return shouldHideRecordFileLine(trimmed)
 }
 
-func visibleRecordOutputChunk(text string) string {
-	lines := splitRecordFileLines(text)
-	var b strings.Builder
-	for _, line := range lines {
-		clean := stripANSICodes(line)
-		clean, _ = directive.StripSleepDirectives(clean)
-		clean, _ = directive.StripMarkerDirectives(clean)
-		trimmed := strings.TrimRight(clean, "\r\n")
-		leftTrimmed := strings.TrimLeft(trimmed, " \t\r")
-		if trimmed == "" {
-			continue
-		}
-		if strings.HasPrefix(leftTrimmed, "__hydra_record_run ") || strings.HasPrefix(leftTrimmed, "__hydra_record_run_parent ") {
-			continue
-		}
-		if strings.HasPrefix(leftTrimmed, "$ __hydra_record_run ") || strings.HasPrefix(leftTrimmed, "$ __hydra_record_run_parent ") {
-			continue
-		}
-		if shouldHideRecordFileLine(leftTrimmed) {
-			continue
-		}
-		b.WriteString(clean)
-	}
-	return b.String()
-}
-
 func splitRecordFileLines(data string) []string {
 	if data == "" {
 		return nil
@@ -1935,15 +1868,6 @@ func nextRecordFileLineChunk(data string) (line string, rest string, ok bool) {
 		}
 	}
 	return "", data, false
-}
-
-func isRecordFileVisibleStart(line string) bool {
-	line = stripANSICodes(line)
-	leftTrimmed := strings.TrimLeft(line, " \t\r")
-	return strings.HasPrefix(leftTrimmed, "$ ") ||
-		strings.HasPrefix(line, "╭") ||
-		strings.HasPrefix(line, "│") ||
-		strings.HasPrefix(line, "╰")
 }
 
 func shouldHideRecordFileLine(trimmed string) bool {
@@ -2077,42 +2001,4 @@ func splitVisibleLines(text string) []string {
 
 func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'"'"'`) + "'"
-}
-
-func bashCStyleQuote(s string) string {
-	var b strings.Builder
-	b.WriteString("$'")
-	for _, r := range s {
-		switch r {
-		case '\\':
-			b.WriteString(`\\`)
-		case '\'':
-			b.WriteString(`\'`)
-		case '\a':
-			b.WriteString(`\a`)
-		case '\b':
-			b.WriteString(`\b`)
-		case '\x1b':
-			b.WriteString(`\e`)
-		case '\f':
-			b.WriteString(`\f`)
-		case '\n':
-			b.WriteString(`\n`)
-		case '\r':
-			b.WriteString(`\r`)
-		case '\t':
-			b.WriteString(`\t`)
-		case '\v':
-			b.WriteString(`\v`)
-		default:
-			if r < 0x20 || r == 0x7f {
-				b.WriteString(`\x`)
-				b.WriteString(strings.ToUpper(strconv.FormatInt(int64(r), 16)))
-				continue
-			}
-			b.WriteRune(r)
-		}
-	}
-	b.WriteByte('\'')
-	return b.String()
 }

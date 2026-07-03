@@ -3,8 +3,8 @@ package flags
 import (
 	"fmt"
 
-	"hydra-gitops.org/hydra/hydra-go/core/hydra"
 	"github.com/spf13/cobra"
+	"hydra-gitops.org/hydra/hydra-go/core/hydra"
 )
 
 // ClusterRESTClientFlags holds optional Kubernetes client-go REST QPS/burst overrides for

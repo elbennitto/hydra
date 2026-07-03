@@ -4,9 +4,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"hydra-gitops.org/hydra/hydra-go/cli/flags"
 	"hydra-gitops.org/hydra/hydra-go/core/types"
-	"github.com/stretchr/testify/require"
 )
 
 func TestRenderClusterApplyOptionalBehaviorsTable_Defaults(t *testing.T) {

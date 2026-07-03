@@ -3,8 +3,8 @@ package commands
 import (
 	"testing"
 
-	htypes "hydra-gitops.org/hydra/hydra-go/core/types"
 	"github.com/stretchr/testify/assert"
+	htypes "hydra-gitops.org/hydra/hydra-go/core/types"
 )
 
 func TestScaleDependencyRefRoleFromLabeledDirectEdges(t *testing.T) {

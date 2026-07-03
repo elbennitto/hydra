@@ -11,8 +11,6 @@ type helmRepoUpdateGate struct {
 	done bool
 }
 
-var defaultHelmRepoUpdateGate = &helmRepoUpdateGate{}
-
 func (g *helmRepoUpdateGate) shouldSkipRepoUpdate() bool {
 	g.mu.Lock()
 	defer g.mu.Unlock()

@@ -8,8 +8,8 @@ import (
 	"slices"
 	"strings"
 
-	"hydra-gitops.org/hydra/hydra-go/core/types"
 	"gopkg.in/yaml.v3"
+	"hydra-gitops.org/hydra/hydra-go/core/types"
 )
 
 //go:embed ready-rules/*.yaml

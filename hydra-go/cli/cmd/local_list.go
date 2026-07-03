@@ -7,13 +7,13 @@ import (
 
 	"hydra-gitops.org/hydra/hydra-go/base/log"
 
+	"github.com/spf13/cobra"
 	"hydra-gitops.org/hydra/hydra-go/cli/action"
 	"hydra-gitops.org/hydra/hydra-go/cli/flags"
 	"hydra-gitops.org/hydra/hydra-go/core/commands"
 	"hydra-gitops.org/hydra/hydra-go/core/entity"
 	"hydra-gitops.org/hydra/hydra-go/core/hydra"
 	"hydra-gitops.org/hydra/hydra-go/core/types"
-	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 

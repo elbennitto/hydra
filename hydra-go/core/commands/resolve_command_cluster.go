@@ -59,30 +59,6 @@ func commandClusterNameFromOptions(opts ResolveCommandClusterOptions) (types.Clu
 	return opts.ClusterName, nil
 }
 
-func clusterNameFromAppIds(appIds sets.Set[types.AppId]) (types.ClusterName, error) {
-	oneAppId, ok := appIds.Clone().PopAny()
-	if !ok {
-		return "", log.CreateError(errors.ErrNoAppsSpecified, "no apps specified")
-	}
-	clusterName, err := oneAppId.ClusterName()
-	if err != nil {
-		return "", err
-	}
-	for appId := range appIds {
-		c, err := appId.ClusterName()
-		if err != nil {
-			return "", err
-		}
-		if c != clusterName {
-			return "", log.CreateError(errors.ErrAppIdsDifferentClusters,
-				"all app ids must belong to the same cluster",
-				log.String("app1", string(oneAppId)),
-				log.String("app2", string(appId)))
-		}
-	}
-	return clusterName, nil
-}
-
 func effectiveClusterNameFromAppIds(
 	hydraContext types.HydraContext,
 	config types.Config,

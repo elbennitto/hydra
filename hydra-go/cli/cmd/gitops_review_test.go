@@ -4,12 +4,12 @@ import (
 	"strings"
 	"testing"
 
-	"hydra-gitops.org/hydra/hydra-go/base/utils"
-	"hydra-gitops.org/hydra/hydra-go/cli/action"
-	"hydra-gitops.org/hydra/hydra-go/core/types"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"hydra-gitops.org/hydra/hydra-go/base/utils"
+	"hydra-gitops.org/hydra/hydra-go/cli/action"
+	"hydra-gitops.org/hydra/hydra-go/core/types"
 )
 
 func TestClusterCommandContainsReviewCommand(t *testing.T) {

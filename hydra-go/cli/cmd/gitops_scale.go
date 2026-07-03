@@ -3,9 +3,9 @@ package cmd
 import (
 	"fmt"
 
+	"github.com/spf13/cobra"
 	"hydra-gitops.org/hydra/hydra-go/cli/action"
 	"hydra-gitops.org/hydra/hydra-go/core/types"
-	"github.com/spf13/cobra"
 )
 
 type ClusterScaleCommandParams struct {

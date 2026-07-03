@@ -6,8 +6,8 @@ import (
 
 	"hydra-gitops.org/hydra/hydra-go/base/log"
 
-	"hydra-gitops.org/hydra/hydra-go/core/types"
 	"helm.sh/helm/v4/pkg/chart"
+	"hydra-gitops.org/hydra/hydra-go/core/types"
 )
 
 // ChartCacheEntry holds a cached chart with optional error

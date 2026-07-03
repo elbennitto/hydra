@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"hydra-gitops.org/hydra/hydra-go/core/types"
 	"github.com/stretchr/testify/require"
+	"hydra-gitops.org/hydra/hydra-go/core/types"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	kyaml "sigs.k8s.io/yaml"
 )

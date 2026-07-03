@@ -30,14 +30,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 	"hydra-gitops.org/hydra/hydra-go/base/log"
 	"hydra-gitops.org/hydra/hydra-go/core/cel"
 	"hydra-gitops.org/hydra/hydra-go/core/entity"
 	"hydra-gitops.org/hydra/hydra-go/core/references"
 	"hydra-gitops.org/hydra/hydra-go/core/types"
 	"hydra-gitops.org/hydra/hydra-go/core/workloadclosure"
-	"github.com/stretchr/testify/require"
-	"gopkg.in/yaml.v3"
 )
 
 var updateGolden = flag.Bool("update", false, "update golden files")

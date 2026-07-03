@@ -3,9 +3,9 @@ package types
 import (
 	"testing"
 
-	"hydra-gitops.org/hydra/hydra-go/base/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"hydra-gitops.org/hydra/hydra-go/base/errors"
 )
 
 func TestPreferredVersionMap_SingleEntry(t *testing.T) {

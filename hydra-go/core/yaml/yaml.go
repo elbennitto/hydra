@@ -7,9 +7,9 @@ import (
 
 	"hydra-gitops.org/hydra/hydra-go/base/log"
 
+	"gopkg.in/yaml.v3"
 	"hydra-gitops.org/hydra/hydra-go/base/errors"
 	"hydra-gitops.org/hydra/hydra-go/core/types"
-	"gopkg.in/yaml.v3"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	kyaml "sigs.k8s.io/yaml"
 )

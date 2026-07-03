@@ -3,9 +3,9 @@ package hydra
 import (
 	"testing"
 
-	"hydra-gitops.org/hydra/hydra-go/core/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"hydra-gitops.org/hydra/hydra-go/core/types"
 )
 
 func TestPreferredVersions_CachesFirstCompute(t *testing.T) {

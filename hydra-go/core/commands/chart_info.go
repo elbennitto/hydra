@@ -5,12 +5,12 @@ import (
 	"path/filepath"
 	"slices"
 
+	"helm.sh/helm/v4/pkg/chart"
+	v2chart "helm.sh/helm/v4/pkg/chart/v2"
 	"hydra-gitops.org/hydra/hydra-go/base/log"
 	"hydra-gitops.org/hydra/hydra-go/core/hydra"
 	"hydra-gitops.org/hydra/hydra-go/core/types"
 	"hydra-gitops.org/hydra/hydra-go/core/view"
-	"helm.sh/helm/v4/pkg/chart"
-	v2chart "helm.sh/helm/v4/pkg/chart/v2"
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 

@@ -142,10 +142,6 @@ func runRecordHelp(root *cobra.Command, opts recordCLIParams) error {
 	})
 }
 
-func runRecordFile(file string, opts recordCLIParams) error {
-	return runRecordFiles([]string{file}, opts)
-}
-
 func runRecordFiles(files []string, opts recordCLIParams) error {
 	if len(files) == 0 {
 		return nil

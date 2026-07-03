@@ -7,11 +7,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"hydra-gitops.org/hydra/hydra-go/base/log"
 	"hydra-gitops.org/hydra/hydra-go/core/entity"
 	"hydra-gitops.org/hydra/hydra-go/core/types"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // callRecord records events from start/waitReady callbacks in a thread-safe manner.
@@ -696,7 +696,7 @@ func TestResolveTransitiveWorkloadDeps_LongChain(t *testing.T) {
 
 func TestResolveTransitiveWorkloadDeps_ThroughStorageClassAndCSIDriver(t *testing.T) {
 	workloadIds := map[types.Id]bool{
-		"apps/v1/StatefulSet/demo/activemq":           true,
+		"apps/v1/StatefulSet/demo/activemq":          true,
 		"apps/v1/DaemonSet/kube-system/csi-nfs-node": true,
 	}
 

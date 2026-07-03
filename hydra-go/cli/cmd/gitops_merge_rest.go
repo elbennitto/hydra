@@ -1,8 +1,8 @@
 package cmd
 
 import (
-	hflags "hydra-gitops.org/hydra/hydra-go/cli/flags"
 	"github.com/spf13/cobra"
+	hflags "hydra-gitops.org/hydra/hydra-go/cli/flags"
 )
 
 func mergeAndValidateClusterREST(cmd *cobra.Command, dst *hflags.ClusterRESTClientFlags) error {

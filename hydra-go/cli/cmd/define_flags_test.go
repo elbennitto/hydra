@@ -4,10 +4,10 @@ import (
 	"testing"
 	"time"
 
-	"hydra-gitops.org/hydra/hydra-go/cli/flags"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"hydra-gitops.org/hydra/hydra-go/cli/flags"
 )
 
 type testTimeoutFlags struct {

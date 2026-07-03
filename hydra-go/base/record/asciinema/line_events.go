@@ -197,35 +197,6 @@ func foldTypedEnterLineEnding(prev, lineEnding string) string {
 	return prev + lineEnding
 }
 
-func stripSleepDirective(line string) (string, float64, bool) {
-	start, end, secs, ok := directive.FindSleepDirective(line)
-	if !ok {
-		return line, 0, false
-	}
-	before := line[:start]
-	if strings.TrimSpace(before) == "" {
-		return "", secs, true
-	}
-
-	afterDirective := line[end:]
-	switch {
-	case strings.HasPrefix(afterDirective, "\r\n"):
-		if !strings.HasSuffix(before, "\r\n") {
-			before += "\r\n"
-		}
-	case strings.HasPrefix(afterDirective, "\n"):
-		if !strings.HasSuffix(before, "\n") {
-			before += "\n"
-		}
-	case strings.HasPrefix(afterDirective, "\r"):
-		if !strings.HasSuffix(before, "\r") {
-			before += "\r"
-		}
-	}
-
-	return before, secs, true
-}
-
 // splitTerminalLines splits on line boundaries and keeps original line endings (\r\n, \r, or \n).
 func splitTerminalLines(data string) []string {
 	if data == "" {
@@ -258,22 +229,4 @@ func findLineEndingAt(data string, start int) (contentEnd int, ending string) {
 		}
 	}
 	return len(data), ""
-}
-
-func detectPrimaryLineEnding(data string) string {
-	if strings.Contains(data, "\r\n") {
-		return "\r\n"
-	}
-	if strings.Contains(data, "\r") {
-		return "\r"
-	}
-	return "\n"
-}
-
-func ensureTrailingLineEnding(data string) string {
-	_, ending := findLineEndingAt(data, 0)
-	if ending != "" {
-		return data
-	}
-	return data + detectPrimaryLineEnding(data)
 }

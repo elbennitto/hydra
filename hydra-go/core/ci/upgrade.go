@@ -208,7 +208,7 @@ func findChartVersionNode(doc *yaml.Node) (*yaml.Node, error) {
 			return mapping.Content[i+1], nil
 		}
 	}
-	return nil, fmt.Errorf("Chart.yaml version must not be empty")
+	return nil, fmt.Errorf("chart.yaml version must not be empty")
 }
 
 func findDependencyVersionNode(doc *yaml.Node, depName string) (*yaml.Node, error) {

@@ -1,8 +1,8 @@
 package cmd
 
 import (
-	"hydra-gitops.org/hydra/hydra-go/cli/action"
 	"github.com/spf13/cobra"
+	"hydra-gitops.org/hydra/hydra-go/cli/action"
 )
 
 type ClusterSyncCommandParams struct {

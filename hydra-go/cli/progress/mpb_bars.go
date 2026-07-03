@@ -8,12 +8,12 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"hydra-gitops.org/hydra/hydra-go/base/colors"
-	"hydra-gitops.org/hydra/hydra-go/base/log"
-	"hydra-gitops.org/hydra/hydra-go/core/k8s"
 	"github.com/vbauerster/mpb/v8"
 	"github.com/vbauerster/mpb/v8/decor"
 	"golang.org/x/term"
+	"hydra-gitops.org/hydra/hydra-go/base/colors"
+	"hydra-gitops.org/hydra/hydra-go/base/log"
+	"hydra-gitops.org/hydra/hydra-go/core/k8s"
 )
 
 // MpbProgressBars implements [log.ProgressBars] using mpb; logging goes through the mpb container [io.Writer].

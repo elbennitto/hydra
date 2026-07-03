@@ -8,6 +8,7 @@ import (
 
 	"hydra-gitops.org/hydra/hydra-go/base/log"
 
+	"gopkg.in/yaml.v3"
 	"hydra-gitops.org/hydra/hydra-go/cli/exitcode"
 	"hydra-gitops.org/hydra/hydra-go/cli/flags"
 	"hydra-gitops.org/hydra/hydra-go/core/commands"
@@ -15,7 +16,6 @@ import (
 	"hydra-gitops.org/hydra/hydra-go/core/hydra"
 	"hydra-gitops.org/hydra/hydra-go/core/references"
 	"hydra-gitops.org/hydra/hydra-go/core/types"
-	"gopkg.in/yaml.v3"
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 

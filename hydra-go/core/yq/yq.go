@@ -3,11 +3,11 @@ package yq
 import (
 	"hydra-gitops.org/hydra/hydra-go/base/log"
 
+	"github.com/mikefarah/yq/v4/pkg/yqlib"
+	"gopkg.in/op/go-logging.v1"
 	"hydra-gitops.org/hydra/hydra-go/base/errors"
 	"hydra-gitops.org/hydra/hydra-go/core/types"
 	"hydra-gitops.org/hydra/hydra-go/core/yaml"
-	"github.com/mikefarah/yq/v4/pkg/yqlib"
-	"gopkg.in/op/go-logging.v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
 

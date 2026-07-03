@@ -3,8 +3,8 @@ package cmd
 import (
 	"fmt"
 
-	"hydra-gitops.org/hydra/hydra-go/base/buildinfo"
 	"github.com/spf13/cobra"
+	"hydra-gitops.org/hydra/hydra-go/base/buildinfo"
 )
 
 func newVersionCommand() *cobra.Command {

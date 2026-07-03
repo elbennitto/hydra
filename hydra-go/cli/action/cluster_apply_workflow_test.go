@@ -3,10 +3,10 @@ package action
 import (
 	"testing"
 
-	"hydra-gitops.org/hydra/hydra-go/cli/flags"
-	"hydra-gitops.org/hydra/hydra-go/core/entity"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"hydra-gitops.org/hydra/hydra-go/cli/flags"
+	"hydra-gitops.org/hydra/hydra-go/core/entity"
 )
 
 func emptyEntityList(t *testing.T) entity.Entities {

@@ -3,11 +3,11 @@ package helm
 import (
 	"slices"
 
+	"helm.sh/helm/v4/pkg/chart/common"
+	v2chart "helm.sh/helm/v4/pkg/chart/v2"
 	"hydra-gitops.org/hydra/hydra-go/base/utils"
 	"hydra-gitops.org/hydra/hydra-go/core/types"
 	"hydra-gitops.org/hydra/hydra-go/core/yaml"
-	"helm.sh/helm/v4/pkg/chart/common"
-	v2chart "helm.sh/helm/v4/pkg/chart/v2"
 )
 
 func cloneFile(f *common.File) *common.File {

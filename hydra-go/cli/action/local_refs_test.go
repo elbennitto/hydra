@@ -4,12 +4,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"hydra-gitops.org/hydra/hydra-go/cli/flags"
 	"hydra-gitops.org/hydra/hydra-go/core/commands"
 	"hydra-gitops.org/hydra/hydra-go/core/types"
 	hyaml "hydra-gitops.org/hydra/hydra-go/core/yaml"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestLocalRefs_ListsTransitiveReachabilityForResource(t *testing.T) {

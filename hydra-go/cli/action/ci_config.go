@@ -9,9 +9,9 @@ import (
 	"sort"
 	"strings"
 
+	"gopkg.in/yaml.v3"
 	"hydra-gitops.org/hydra/hydra-go/base/colors"
 	"hydra-gitops.org/hydra/hydra-go/core/ci"
-	"gopkg.in/yaml.v3"
 )
 
 type palette struct {

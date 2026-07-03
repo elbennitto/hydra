@@ -31,8 +31,8 @@ type RecordStep struct {
 	Output           *bool
 	ExpectedExitCode *int
 
-	CD string
-	Marker string
+	CD                string
+	Marker            string
 	ExportToDirectory string
 
 	Env []RecordEnvEntry

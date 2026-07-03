@@ -3,9 +3,9 @@ package yq
 import (
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"hydra-gitops.org/hydra/hydra-go/core/types"
 	hyaml "hydra-gitops.org/hydra/hydra-go/core/yaml"
-	"github.com/stretchr/testify/require"
 )
 
 // TestHydraToYamlYqFromYaml_preservesLeadingNewlineInConfigMapData is the desired contract for the

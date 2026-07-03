@@ -6,12 +6,12 @@ import (
 	"path/filepath"
 	"slices"
 
+	helmchart "helm.sh/helm/v4/pkg/chart"
 	"hydra-gitops.org/hydra/hydra-go/base/log"
 	"hydra-gitops.org/hydra/hydra-go/core/helm"
 	"hydra-gitops.org/hydra/hydra-go/core/hydra"
 	"hydra-gitops.org/hydra/hydra-go/core/types"
 	"hydra-gitops.org/hydra/hydra-go/core/view"
-	helmchart "helm.sh/helm/v4/pkg/chart"
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 

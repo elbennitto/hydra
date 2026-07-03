@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"hydra-gitops.org/hydra/hydra-go/base/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"hydra-gitops.org/hydra/hydra-go/base/log"
 )
 
 func TestWithCosignHydraLogger_RedirectsOutputToHydraLogger(t *testing.T) {

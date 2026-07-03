@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"testing"
 
-	"hydra-gitops.org/hydra/hydra-go/core/types"
 	"github.com/stretchr/testify/require"
+	"hydra-gitops.org/hydra/hydra-go/core/types"
 )
 
 func intListFromCELValue(t *testing.T, v any) []int64 {

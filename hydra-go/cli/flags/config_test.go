@@ -3,8 +3,8 @@ package flags
 import (
 	"testing"
 
-	"hydra-gitops.org/hydra/hydra-go/core/types"
 	"github.com/stretchr/testify/assert"
+	"hydra-gitops.org/hydra/hydra-go/core/types"
 )
 
 func TestNewConfigFromFlags_defaultHelmTemplateCacheEnabledWhenEnvUnset(t *testing.T) {

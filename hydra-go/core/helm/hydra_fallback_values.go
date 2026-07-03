@@ -5,12 +5,12 @@ import (
 
 	"hydra-gitops.org/hydra/hydra-go/base/log"
 
-	"hydra-gitops.org/hydra/hydra-go/base/errors"
-	"hydra-gitops.org/hydra/hydra-go/core/types"
-	"hydra-gitops.org/hydra/hydra-go/core/values"
 	"helm.sh/helm/v4/pkg/chart"
 	"helm.sh/helm/v4/pkg/chart/common"
 	v2chart "helm.sh/helm/v4/pkg/chart/v2"
+	"hydra-gitops.org/hydra/hydra-go/base/errors"
+	"hydra-gitops.org/hydra/hydra-go/core/types"
+	"hydra-gitops.org/hydra/hydra-go/core/values"
 )
 
 func extractHydraFallbackValues(l log.Logger, chrt *v2chart.Chart, valuesMap types.ValuesMap) (types.ValuesMap, error) {

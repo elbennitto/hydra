@@ -3,8 +3,8 @@ package hydra
 import (
 	"testing"
 
-	"hydra-gitops.org/hydra/hydra-go/core/types"
 	"github.com/stretchr/testify/assert"
+	"hydra-gitops.org/hydra/hydra-go/core/types"
 )
 
 func TestApiVersionNormalizationDedupKey(t *testing.T) {

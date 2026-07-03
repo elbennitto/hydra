@@ -3,10 +3,10 @@ package cmd
 import (
 	"testing"
 
-	"hydra-gitops.org/hydra/hydra-go/cli/action"
-	"hydra-gitops.org/hydra/hydra-go/core/hydra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"hydra-gitops.org/hydra/hydra-go/cli/action"
+	"hydra-gitops.org/hydra/hydra-go/core/hydra"
 )
 
 func TestClusterShowCommandRegistersFlags(t *testing.T) {

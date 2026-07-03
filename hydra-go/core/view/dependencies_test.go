@@ -10,12 +10,12 @@ import (
 
 	"hydra-gitops.org/hydra/hydra-go/base/log"
 
-	"hydra-gitops.org/hydra/hydra-go/core/entity"
-	"hydra-gitops.org/hydra/hydra-go/core/references"
-	"hydra-gitops.org/hydra/hydra-go/core/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
+	"hydra-gitops.org/hydra/hydra-go/core/entity"
+	"hydra-gitops.org/hydra/hydra-go/core/references"
+	"hydra-gitops.org/hydra/hydra-go/core/types"
 )
 
 var updateGolden = flag.Bool("update", false, "update golden files")

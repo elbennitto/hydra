@@ -3,10 +3,10 @@ package hydra
 import (
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"hydra-gitops.org/hydra/hydra-go/base/log"
 	"hydra-gitops.org/hydra/hydra-go/core/types"
 	"hydra-gitops.org/hydra/hydra-go/core/values"
-	"github.com/stretchr/testify/require"
 )
 
 // TestRootLoadValuesMap_IncludesGlobalBaseUrlForExampleDevDemo checks that merged umbrella

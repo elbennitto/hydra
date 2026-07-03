@@ -1,9 +1,9 @@
 package cmd
 
 import (
+	"github.com/spf13/cobra"
 	"hydra-gitops.org/hydra/hydra-go/cli/action"
 	"hydra-gitops.org/hydra/hydra-go/core/types"
-	"github.com/spf13/cobra"
 )
 
 // NewClusterUninstallCommand creates and returns the uninstall command

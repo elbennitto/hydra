@@ -6,8 +6,8 @@ import (
 	"slices"
 	"strings"
 
-	"hydra-gitops.org/hydra/hydra-go/core/types"
 	"helm.sh/helm/v4/pkg/release/v1/util"
+	"hydra-gitops.org/hydra/hydra-go/core/types"
 )
 
 var sourceRegex = regexp.MustCompile(`(?m)^# Source:\s*(.+)$`)

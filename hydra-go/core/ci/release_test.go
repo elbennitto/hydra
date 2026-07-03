@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"hydra-gitops.org/hydra/hydra-go/core/git"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"hydra-gitops.org/hydra/hydra-go/core/git"
 )
 
 func TestRunRelease_NoChanges(t *testing.T) {

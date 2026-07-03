@@ -1,9 +1,9 @@
 package cmd
 
 import (
+	"github.com/spf13/cobra"
 	"hydra-gitops.org/hydra/hydra-go/cli/action"
 	"hydra-gitops.org/hydra/hydra-go/core/hydra"
-	"github.com/spf13/cobra"
 )
 
 func NewClusterShowCommand(show func(flags action.ClusterShowFlags) (hydra.Hydra, string, error)) *cobra.Command {

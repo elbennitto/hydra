@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/spf13/cobra"
 	"hydra-gitops.org/hydra/hydra-go/cli/action"
 	"hydra-gitops.org/hydra/hydra-go/cli/flags"
 	"hydra-gitops.org/hydra/hydra-go/core/types"
-	"github.com/spf13/cobra"
 )
 
 func newLocalAppsCommand(resolveApps func(flags action.AppsFlags) ([]types.AppId, error)) *cobra.Command {

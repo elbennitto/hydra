@@ -1,10 +1,10 @@
 package cmd
 
 import (
+	"github.com/spf13/cobra"
 	"hydra-gitops.org/hydra/hydra-go/cli/action"
 	"hydra-gitops.org/hydra/hydra-go/cli/exitcode"
 	"hydra-gitops.org/hydra/hydra-go/core/types"
-	"github.com/spf13/cobra"
 )
 
 func NewClusterReviewCommand(clusterReviewRefs func(flags action.ReviewRefsFlags) error) *cobra.Command {

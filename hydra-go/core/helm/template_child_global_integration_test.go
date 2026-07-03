@@ -7,10 +7,10 @@ import (
 
 	"hydra-gitops.org/hydra/hydra-go/base/log"
 
-	"hydra-gitops.org/hydra/hydra-go/core/types"
-	"hydra-gitops.org/hydra/hydra-go/core/values"
 	"github.com/stretchr/testify/require"
 	"helm.sh/helm/v4/pkg/chart/loader"
+	"hydra-gitops.org/hydra/hydra-go/core/types"
+	"hydra-gitops.org/hydra/hydra-go/core/values"
 )
 
 // TestHelmChildTemplate_HybridGlobalFromFullUmbrellaValues documents the regression where

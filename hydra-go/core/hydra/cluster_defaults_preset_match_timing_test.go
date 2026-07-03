@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"hydra-gitops.org/hydra/hydra-go/core/workloadclosure"
 	"github.com/stretchr/testify/require"
+	"hydra-gitops.org/hydra/hydra-go/core/workloadclosure"
 )
 
 func TestClusterDefaultsPresetMatchTiming_RecordMinMaxSum(t *testing.T) {

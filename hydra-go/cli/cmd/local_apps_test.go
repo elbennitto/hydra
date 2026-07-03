@@ -4,10 +4,10 @@ import (
 	"bytes"
 	"testing"
 
-	"hydra-gitops.org/hydra/hydra-go/cli/action"
-	"hydra-gitops.org/hydra/hydra-go/core/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"hydra-gitops.org/hydra/hydra-go/cli/action"
+	"hydra-gitops.org/hydra/hydra-go/core/types"
 )
 
 func TestLocalAppsCommandParsesFlagsAndPrintsSortedApps(t *testing.T) {

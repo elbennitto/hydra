@@ -6,10 +6,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"hydra-gitops.org/hydra/hydra-go/base/log"
 	"hydra-gitops.org/hydra/hydra-go/core/types"
 	hyaml "hydra-gitops.org/hydra/hydra-go/core/yaml"
-	"github.com/stretchr/testify/require"
 	kyaml "sigs.k8s.io/yaml"
 )
 

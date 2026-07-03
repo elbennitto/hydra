@@ -6,11 +6,11 @@ import (
 	"sort"
 	"strings"
 
-	"hydra-gitops.org/hydra/hydra-go/base/log"
-	"hydra-gitops.org/hydra/hydra-go/core/types"
 	"helm.sh/helm/v4/pkg/chart"
 	"helm.sh/helm/v4/pkg/chart/loader"
 	v2chart "helm.sh/helm/v4/pkg/chart/v2"
+	"hydra-gitops.org/hydra/hydra-go/base/log"
+	"hydra-gitops.org/hydra/hydra-go/core/types"
 )
 
 // EnsureLocalChartDependencies verifies that a chart can resolve all declared

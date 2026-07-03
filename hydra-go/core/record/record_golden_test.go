@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"sort"
 	"strings"
@@ -17,6 +18,8 @@ import (
 )
 
 var updateRecordFileGolden = flag.Bool("update", false, "update record file golden files")
+
+var pointerAddressRegexp = regexp.MustCompile(`0x[0-9a-fA-F]+`)
 
 func TestRecordFileGolden(t *testing.T) {
 	_, thisFile, _, ok := runtime.Caller(0)
@@ -124,15 +127,17 @@ func TestTutorialRecordingsGolden(t *testing.T) {
 			gotPath := filepath.Join(outDir, spec.OutputBase+".cast")
 			gotBytes, err := os.ReadFile(gotPath)
 			require.NoError(t, err)
+			normalizedGotBytes := normalizePointerAddresses(gotBytes)
 
 			expectedPath := TrimRecordSpecExtension(spec.Path) + ".cast"
 			if *updateRecordFileGolden {
-				require.NoError(t, os.WriteFile(expectedPath, gotBytes, 0o644))
+				require.NoError(t, os.WriteFile(expectedPath, normalizedGotBytes, 0o644))
 			}
 
 			expectedBytes, err := os.ReadFile(expectedPath)
 			require.NoError(t, err, "missing golden cast; run: go test ./core/record -run TestTutorialRecordingsGolden -update")
-			require.Equal(t, string(expectedBytes), string(gotBytes))
+			normalizedExpectedBytes := normalizePointerAddresses(expectedBytes)
+			require.Equal(t, string(normalizedExpectedBytes), string(normalizedGotBytes))
 		})
 	}
 }
@@ -146,10 +151,6 @@ func buildHydraCLIBinary(t *testing.T, moduleRoot string) string {
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, "build hydra cli binary: %s", string(out))
 	return hydraBin
-}
-
-func normalizeCombinedMirrorOutput(out []byte) []byte {
-	return bytes.TrimLeft(out, "\r\n")
 }
 
 func captureCombinedOutput(run func() error) ([]byte, error) {
@@ -200,6 +201,10 @@ func normalizeCastHeaderCommand(cast []byte) []byte {
 
 	lines[0] = normalizedHeader
 	return bytes.Join(lines, []byte("\n"))
+}
+
+func normalizePointerAddresses(cast []byte) []byte {
+	return pointerAddressRegexp.ReplaceAll(cast, []byte("0xPTR"))
 }
 
 func listRecordFileGoldenCases(root string) ([]string, error) {

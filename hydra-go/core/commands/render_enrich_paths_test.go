@@ -4,10 +4,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"hydra-gitops.org/hydra/hydra-go/core/entity"
-	"hydra-gitops.org/hydra/hydra-go/core/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"hydra-gitops.org/hydra/hydra-go/core/entity"
+	"hydra-gitops.org/hydra/hydra-go/core/types"
 )
 
 func TestEnrichEntityPaths_joinsRootAppDirectory(t *testing.T) {

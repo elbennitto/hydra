@@ -168,8 +168,7 @@ func applyChartFileOperationsV2(chart *v2chart.Chart, ops ChartFileOperations) e
 
 	deleteMatchingPaths := func(match func(string) bool) int {
 		removed := 0
-		var removeFromSlice func([]*common.File) ([]*common.File, int)
-		removeFromSlice = func(files []*common.File) ([]*common.File, int) {
+		removeFromSlice := func(files []*common.File) ([]*common.File, int) {
 			if len(files) == 0 {
 				return files, 0
 			}
@@ -189,13 +188,14 @@ func applyChartFileOperationsV2(chart *v2chart.Chart, ops ChartFileOperations) e
 			if c == nil {
 				return
 			}
-			var n int
-			c.Raw, n = removeFromSlice(c.Raw)
-			removed += n
-			c.Templates, n = removeFromSlice(c.Templates)
-			removed += n
-			c.Files, n = removeFromSlice(c.Files)
-			removed += n
+			accumulateRemoved := func(files []*common.File) []*common.File {
+				updated, removedInSlice := removeFromSlice(files)
+				removed += removedInSlice
+				return updated
+			}
+			c.Raw = accumulateRemoved(c.Raw)
+			c.Templates = accumulateRemoved(c.Templates)
+			c.Files = accumulateRemoved(c.Files)
 			for _, dep := range c.Dependencies() {
 				walkDelete(dep)
 			}

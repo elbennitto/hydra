@@ -3,8 +3,8 @@ package commands
 import (
 	"testing"
 
-	"hydra-gitops.org/hydra/hydra-go/core/types"
 	"github.com/stretchr/testify/assert"
+	"hydra-gitops.org/hydra/hydra-go/core/types"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 

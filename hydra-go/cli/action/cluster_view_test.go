@@ -3,12 +3,12 @@ package action
 import (
 	"testing"
 
-	"hydra-gitops.org/hydra/hydra-go/core/entity"
-	"hydra-gitops.org/hydra/hydra-go/core/types"
-	"hydra-gitops.org/hydra/hydra-go/core/view"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	v2chart "helm.sh/helm/v4/pkg/chart/v2"
+	"hydra-gitops.org/hydra/hydra-go/core/entity"
+	"hydra-gitops.org/hydra/hydra-go/core/types"
+	"hydra-gitops.org/hydra/hydra-go/core/view"
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
@@ -67,7 +67,7 @@ func TestSplitRenderResult_SeparatesRootAndChildEntities(t *testing.T) {
 	}
 	result.manifests = map[string][]byte{
 		"dev.demo/argoproj.io/v1alpha1/Application/argocd/dev.demo.service-auth.yaml": []byte("app-manifest"),
-		"dev.demo.service-auth/apps/v1/Deployment/service-auth/service-auth.yaml":    []byte("deploy-manifest"),
+		"dev.demo.service-auth/apps/v1/Deployment/service-auth/service-auth.yaml":     []byte("deploy-manifest"),
 	}
 	result.appValuesModels = []view.AppValuesModel{
 		{AppId: "dev.demo"},
