@@ -50,6 +50,7 @@ type PromotionEntry struct {
 	TargetPath string
 	OldVersion string
 	NewVersion string
+	DepVersion string
 	Branch     string
 	Skipped    bool
 	SkipReason string
@@ -58,6 +59,10 @@ type PromotionEntry struct {
 
 func (e PromotionEntry) CommitMessage() string {
 	if e.OldVersion == "" {
+		if e.DepVersion != "" {
+			return fmt.Sprintf("promote: %s %s → %s (new, version %s, dependency %s)",
+				e.App, e.SourceEnv, e.TargetEnv, e.NewVersion, e.DepVersion)
+		}
 		return fmt.Sprintf("promote: %s %s → %s (new, version %s)",
 			e.App, e.SourceEnv, e.TargetEnv, e.NewVersion)
 	}
@@ -221,6 +226,7 @@ func detectPromotions(repo *git.Repo, cfg *Config, mode Mode, sourceEnv, targetE
 			entries = append(entries, entry)
 			continue
 		}
+		entry.DepVersion = sourceChart.PrimaryDependencyVersion()
 
 		targetAbs := filepath.Join(repo.Path(), targetPath)
 		existingOnTarget := ""

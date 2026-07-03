@@ -208,6 +208,7 @@ func TestPromote_NewApp_NoTargetDir(t *testing.T) {
 	assert.False(t, p.Skipped)
 	assert.Equal(t, "", p.OldVersion)
 	assert.Equal(t, "1.200.9-stage", p.NewVersion)
+	assert.Equal(t, "1.200.9", p.DepVersion)
 
 	require.Len(t, mock.executions, 1)
 }
@@ -233,6 +234,7 @@ func TestPromote_NewApp_NoTargetDir_CI_DefaultResetVersion(t *testing.T) {
 	assert.False(t, p.Skipped)
 	assert.Equal(t, "", p.OldVersion)
 	assert.Equal(t, "0.0.0", p.NewVersion)
+	assert.Equal(t, "1.200.9", p.DepVersion)
 }
 
 func TestPromote_NewApp_NoTargetDir_CI_ConfiguredResetVersion(t *testing.T) {
@@ -265,6 +267,7 @@ func TestPromote_NewApp_NoTargetDir_CI_ConfiguredResetVersion(t *testing.T) {
 	assert.False(t, p.Skipped)
 	assert.Equal(t, "", p.OldVersion)
 	assert.Equal(t, "0.1.0-stage", p.NewVersion)
+	assert.Equal(t, "1.200.9", p.DepVersion)
 }
 
 func TestPromote_StageToProd(t *testing.T) {
@@ -954,8 +957,9 @@ func TestPromotionEntry_CommitMessage(t *testing.T) {
 		TargetEnv:  "stage",
 		OldVersion: "",
 		NewVersion: "1.200.9-stage",
+		DepVersion: "1.200.9",
 	}
-	assert.Equal(t, "promote: service-ui dev → stage (new, version 1.200.9-stage)", newApp.CommitMessage())
+	assert.Equal(t, "promote: service-ui dev → stage (new, version 1.200.9-stage, dependency 1.200.9)", newApp.CommitMessage())
 
 	contentChanged := PromotionEntry{
 		App:        "service-auth",

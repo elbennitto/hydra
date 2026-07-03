@@ -54,6 +54,25 @@ func logCiPromoteEntry(p ci.PromotionEntry) {
 			log.String("target", p.TargetEnv),
 			log.String("reason", p.SkipReason),
 		)
+	} else if p.OldVersion == "" {
+		if p.DepVersion != "" {
+			l.Info(logIdAction, "promoted {group}/{app} {source} → {target} (new, version {newVersion}, dependency {depVersion})",
+				log.String("group", p.Group),
+				log.String("app", p.App),
+				log.String("source", p.SourceEnv),
+				log.String("target", p.TargetEnv),
+				log.String("newVersion", p.NewVersion),
+				log.String("depVersion", p.DepVersion),
+			)
+		} else {
+			l.Info(logIdAction, "promoted {group}/{app} {source} → {target} (new, version {newVersion})",
+				log.String("group", p.Group),
+				log.String("app", p.App),
+				log.String("source", p.SourceEnv),
+				log.String("target", p.TargetEnv),
+				log.String("newVersion", p.NewVersion),
+			)
+		}
 	} else if p.OldVersion == p.NewVersion {
 		l.Info(logIdAction, "promoted {group}/{app} {source} → {target} (content changed)",
 			log.String("group", p.Group),
