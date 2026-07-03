@@ -37,6 +37,7 @@ type AppGroup struct {
 
 type Promote struct {
 	PromotableRootApps []string `yaml:"promotableRootApps"`
+	NewChartVersion    string   `yaml:"newChartVersion,omitempty"`
 }
 
 type Teams struct {
@@ -111,6 +112,11 @@ func validateConfig(cfg *Config) error {
 	}
 	if err := validateAutoStepsField(cfg); err != nil {
 		return err
+	}
+	if cfg.CI.Promote.NewChartVersion != "" {
+		if _, err := ParseChartVersion(cfg.CI.Promote.NewChartVersion); err != nil {
+			return fmt.Errorf("%s: ci.promote.newChartVersion must be a valid chart version: %w", ConfigFileName, err)
+		}
 	}
 	return nil
 }

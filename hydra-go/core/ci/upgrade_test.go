@@ -36,7 +36,7 @@ func TestRunUpgrade_Local_UpdatesDependencyVersion(t *testing.T) {
 	chart, err := repo.LoadChart("apps/demo/service-ui/dev")
 	require.NoError(t, err)
 	assert.Equal(t, "1.2.3", chart.GetDepVersion("service-ui"))
-	assert.Equal(t, "1.2.3-dev", chart.GetVersion())
+	assert.Equal(t, "1.2.2-dev", chart.GetVersion())
 }
 
 func TestRunUpgrade_DryRun_DoesNotWrite(t *testing.T) {
@@ -67,7 +67,7 @@ func TestRunUpgrade_DryRun_DoesNotWrite(t *testing.T) {
 	assert.Equal(t, "1.2.2-dev", chart.GetVersion())
 }
 
-func TestRunUpgrade_Local_UpdatesChartVersionWhenDependencyAlreadyCurrent(t *testing.T) {
+func TestRunUpgrade_Local_DoesNotChangeChartVersionWhenDependencyAlreadyCurrent(t *testing.T) {
 	repo := git.Init(t.TempDir()).
 		CommitFS("init", git.NewFS().
 			File(".hydra-ci.yaml", configYAML("dev, stage", "")).
@@ -92,10 +92,10 @@ func TestRunUpgrade_Local_UpdatesChartVersionWhenDependencyAlreadyCurrent(t *tes
 	chart, err := repo.LoadChart("apps/demo/service-ui/dev")
 	require.NoError(t, err)
 	assert.Equal(t, "1.2.3", chart.GetDepVersion("service-ui"))
-	assert.Equal(t, "1.2.3-dev", chart.GetVersion())
+	assert.Equal(t, "1.2.2-dev", chart.GetVersion())
 }
 
-func TestRunUpgrade_Local_IncrementsExistingWrapperExtraForNewDependencyBase(t *testing.T) {
+func TestRunUpgrade_Local_DoesNotChangeExistingWrapperExtraForNewDependencyBase(t *testing.T) {
 	repo := git.Init(t.TempDir()).
 		CommitFS("init", git.NewFS().
 			File(".hydra-ci.yaml", configYAML("dev, stage", "")).
@@ -120,7 +120,7 @@ func TestRunUpgrade_Local_IncrementsExistingWrapperExtraForNewDependencyBase(t *
 	chart, err := repo.LoadChart("apps/demo/service-ui/dev")
 	require.NoError(t, err)
 	assert.Equal(t, "1.2.3", chart.GetDepVersion("service-ui"))
-	assert.Equal(t, "1.2.3-2-dev", chart.GetVersion())
+	assert.Equal(t, "1.2.3-1-dev", chart.GetVersion())
 }
 
 func TestRunUpgrade_WithoutVersionsFileReadsStdin(t *testing.T) {
@@ -146,7 +146,7 @@ func TestRunUpgrade_WithoutVersionsFileReadsStdin(t *testing.T) {
 	chart, err := repo.LoadChart("apps/demo/service-ui/dev")
 	require.NoError(t, err)
 	assert.Equal(t, "1.2.3", chart.GetDepVersion("service-ui"))
-	assert.Equal(t, "1.2.3-dev", chart.GetVersion())
+	assert.Equal(t, "1.2.2-dev", chart.GetVersion())
 }
 
 func TestRunUpgrade_MissingDependencyReturnsError(t *testing.T) {

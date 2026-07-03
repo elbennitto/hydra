@@ -174,7 +174,7 @@ func TestRunAuto_Local_ValuesChangeReleaseThenPromoteGitOrder(t *testing.T) {
 
 	stageChart, err := repo.LoadChart("apps/demo/service-ui/stage")
 	require.NoError(t, err)
-	assert.Equal(t, "1.200.9-stage", stageChart.GetVersion())
+	assert.Equal(t, "1.198.3-stage", stageChart.GetVersion())
 }
 
 func TestRunAuto_Local_PromoteOnlyNoReleaseCommitOnMain(t *testing.T) {
@@ -211,7 +211,7 @@ func TestRunAuto_Local_PromoteOnlyNoReleaseCommitOnMain(t *testing.T) {
 	require.NoError(t, repo.Err)
 	stageChart, err := repo.LoadChart("apps/demo/service-ui/stage")
 	require.NoError(t, err)
-	assert.Equal(t, "1.200.9-stage", stageChart.GetVersion())
+	assert.Equal(t, "1.198.3-stage", stageChart.GetVersion())
 }
 
 func TestRunAuto_DryRun_ReleasePromoteUnchangedCharts(t *testing.T) {
@@ -310,7 +310,7 @@ func TestRunAuto_TargetBranchPromoteNoHydraBranch(t *testing.T) {
 	require.NoError(t, repo.Err)
 	ui, err := repo.LoadChart("apps/demo/service-ui/stage")
 	require.NoError(t, err)
-	assert.Equal(t, "1.200.9-stage", ui.GetVersion())
+	assert.Equal(t, "1.198.3-stage", ui.GetVersion())
 }
 
 func TestRunAuto_OnPromoteEntryRecordsEachPromotion(t *testing.T) {

@@ -11,6 +11,8 @@ import (
 	"hydra-gitops.org/hydra/hydra-go/core/git"
 )
 
+const defaultCIPromoteNewChartVersion = "0.0.0"
+
 // PromoteActions defines mode-dependent operations for the promote pipeline.
 // Three implementations exist: dryRunPromoteActions, localPromoteActions, ciPromoteActions.
 type PromoteActions interface {
@@ -136,7 +138,7 @@ func RunPromote(configPath string, mode Mode, actions PromoteActions, targetBran
 			continue
 		}
 
-		entries, err := detectPromotions(repo, cfg, sourceEnv, targetEnv)
+		entries, err := detectPromotions(repo, cfg, mode, sourceEnv, targetEnv)
 		if err != nil {
 			return result, fmt.Errorf("detect promotions %s→%s: %w", sourceEnv, targetEnv, err)
 		}
@@ -169,7 +171,7 @@ func RunPromote(configPath string, mode Mode, actions PromoteActions, targetBran
 	return result, nil
 }
 
-func detectPromotions(repo *git.Repo, cfg *Config, sourceEnv, targetEnv string) ([]PromotionEntry, error) {
+func detectPromotions(repo *git.Repo, cfg *Config, mode Mode, sourceEnv, targetEnv string) ([]PromotionEntry, error) {
 	var entries []PromotionEntry
 
 	pattern := filepath.Join(cfg.CI.RootAppsPath, "*", "*", "*")
@@ -241,23 +243,31 @@ func detectPromotions(repo *git.Repo, cfg *Config, sourceEnv, targetEnv string) 
 			continue
 		}
 
-		newVersion, err := ComputePromoteTargetVersion(sourceChart.GetVersion(), sourceEnv, targetEnv, existingOnTarget)
-		if err != nil {
+		if existingOnTarget == "" {
+			newVersion, err := computeNewTargetChartVersion(cfg, mode, sourceChart.GetVersion(), sourceEnv, targetEnv)
+			if err != nil {
+				entry.HasError = true
+				entry.Skipped = true
+				entry.SkipReason = fmt.Sprintf("rewrite version for %s: %v", sourcePath, err)
+				entries = append(entries, entry)
+				continue
+			}
+			entry.NewVersion = newVersion
+			entry.OldVersion = ""
+			entries = append(entries, entry)
+			continue
+		}
+
+		if _, err := ComputePromoteTargetVersion(sourceChart.GetVersion(), sourceEnv, targetEnv, existingOnTarget); err != nil {
 			entry.HasError = true
 			entry.Skipped = true
 			entry.SkipReason = fmt.Sprintf("rewrite version for %s: %v", sourcePath, err)
 			entries = append(entries, entry)
 			continue
 		}
-		entry.NewVersion = newVersion
+		entry.NewVersion = existingOnTarget
 
-		if existingOnTarget == "" {
-			entry.OldVersion = ""
-			entries = append(entries, entry)
-			continue
-		}
-
-		renderedSourceChartYAML := sourceChart.RenderWithVersion(newVersion)
+		renderedSourceChartYAML := sourceChart.RenderWithVersion(entry.NewVersion)
 
 		equal, err := chartDirsEqual(repo.Path(), sourcePath, targetPath, renderedSourceChartYAML)
 		if err != nil {
@@ -278,6 +288,16 @@ func detectPromotions(repo *git.Repo, cfg *Config, sourceEnv, targetEnv string) 
 	}
 
 	return entries, nil
+}
+
+func computeNewTargetChartVersion(cfg *Config, mode Mode, sourceVersion, sourceEnv, targetEnv string) (string, error) {
+	if mode == ModeCI {
+		if cfg.CI.Promote.NewChartVersion != "" {
+			return cfg.CI.Promote.NewChartVersion, nil
+		}
+		return defaultCIPromoteNewChartVersion, nil
+	}
+	return ComputePromoteTargetVersion(sourceVersion, sourceEnv, targetEnv, "")
 }
 
 // versionContentEqual compares two versions ignoring the environment suffix.

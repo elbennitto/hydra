@@ -69,6 +69,34 @@ func TestParseConfig_PromotableRootApps(t *testing.T) {
 	assert.Equal(t, []string{"demo", "cluster-infra"}, cfg.CI.Promote.PromotableRootApps)
 }
 
+func TestParseConfig_PromoteNewChartVersion(t *testing.T) {
+	cfg, err := ParseConfig([]byte(`
+ci:
+  rootAppsPath: apps
+  environments: [dev, stage]
+  promote:
+    promotableRootApps: []
+    newChartVersion: 0.0.0
+`))
+
+	require.NoError(t, err)
+	assert.Equal(t, "0.0.0", cfg.CI.Promote.NewChartVersion)
+}
+
+func TestParseConfig_PromoteNewChartVersionInvalid(t *testing.T) {
+	_, err := ParseConfig([]byte(`
+ci:
+  rootAppsPath: apps
+  environments: [dev, stage]
+  promote:
+    promotableRootApps: []
+    newChartVersion: invalid-version
+`))
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "ci.promote.newChartVersion")
+}
+
 func TestParseConfig_UpstreamBranchOverride(t *testing.T) {
 	cfg, err := ParseConfig([]byte(`
 ci:

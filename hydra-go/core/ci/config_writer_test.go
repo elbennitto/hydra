@@ -214,6 +214,7 @@ func TestDefaultConfig(t *testing.T) {
 	assert.Empty(t, cfg.CI.AppGroups)
 	assert.Empty(t, cfg.CI.Registry)
 	assert.Empty(t, cfg.CI.Promote.PromotableRootApps)
+	assert.Empty(t, cfg.CI.Promote.NewChartVersion)
 	assert.Empty(t, cfg.CI.Teams.WebhookURL)
 }
 

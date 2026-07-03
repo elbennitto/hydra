@@ -65,7 +65,7 @@ func runUpgrade(configPath string, mode Mode, versionsFile string, skipMissing b
 
 		rel := filepath.ToSlash(filepath.Join(cfg.CI.RootAppsPath, entry.RootApp, entry.App, entry.Env))
 		chartPath := filepath.Join(repo.Path(), rel, "Chart.yaml")
-		oldVersion, changed, err := updateChartDependencyVersion(chartPath, entry.App, entry.Env, entry.Version, mode == ModeDryRun)
+		oldVersion, changed, err := updateChartDependencyVersion(chartPath, entry.App, entry.Version, mode == ModeDryRun)
 		if err != nil {
 			if skipMissing && isUpgradeMissingError(err) {
 				log.Default().Warn(logIdCI, "upgrade: skipped missing dependency {path} {app}: {reason}",
@@ -150,7 +150,7 @@ func parseUpgradeVersions(data []byte, source string) ([]UpgradeVersionEntry, er
 	return doc.Versions, nil
 }
 
-func updateChartDependencyVersion(chartPath string, depName string, env string, newVersion string, dryRun bool) (string, bool, error) {
+func updateChartDependencyVersion(chartPath string, depName string, newVersion string, dryRun bool) (string, bool, error) {
 	raw, err := os.ReadFile(chartPath)
 	if err != nil {
 		return "", false, fmt.Errorf("read Chart.yaml: %w", err)
@@ -160,29 +160,19 @@ func updateChartDependencyVersion(chartPath string, depName string, env string, 
 	if err := yaml.Unmarshal(raw, &doc); err != nil {
 		return "", false, fmt.Errorf("parse Chart.yaml: %w", err)
 	}
-	chartVersionNode, err := findChartVersionNode(&doc)
-	if err != nil {
-		return "", false, err
-	}
-	chartVersion, err := NextChildChartWrapperVersion(newVersion, env, chartVersionNode.Value)
-	if err != nil {
-		return "", false, err
-	}
 	versionNode, err := findDependencyVersionNode(&doc, depName)
 	if err != nil {
 		return "", false, err
 	}
 
 	oldVersion := versionNode.Value
-	if oldVersion == newVersion && chartVersionNode.Value == chartVersion {
+	if oldVersion == newVersion {
 		return oldVersion, false, nil
 	}
 	if dryRun {
 		return oldVersion, true, nil
 	}
 
-	chartVersionNode.Value = chartVersion
-	chartVersionNode.Tag = "!!str"
 	versionNode.Value = newVersion
 	versionNode.Tag = "!!str"
 	out, err := yaml.Marshal(&doc)
@@ -196,19 +186,6 @@ func updateChartDependencyVersion(chartPath string, depName string, env string, 
 		return "", false, fmt.Errorf("write Chart.yaml: %w", err)
 	}
 	return oldVersion, true, nil
-}
-
-func findChartVersionNode(doc *yaml.Node) (*yaml.Node, error) {
-	if doc.Kind != yaml.DocumentNode || len(doc.Content) == 0 || doc.Content[0].Kind != yaml.MappingNode {
-		return nil, fmt.Errorf("unexpected Chart.yaml structure")
-	}
-	mapping := doc.Content[0]
-	for i := 0; i < len(mapping.Content)-1; i += 2 {
-		if mapping.Content[i].Value == "version" {
-			return mapping.Content[i+1], nil
-		}
-	}
-	return nil, fmt.Errorf("chart.yaml version must not be empty")
 }
 
 func findDependencyVersionNode(doc *yaml.Node, depName string) (*yaml.Node, error) {

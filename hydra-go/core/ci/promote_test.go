@@ -84,7 +84,7 @@ func TestPromote_DevToStage(t *testing.T) {
 	assert.Equal(t, "dev", p.SourceEnv)
 	assert.Equal(t, "stage", p.TargetEnv)
 	assert.Equal(t, "1.198.3-stage", p.OldVersion)
-	assert.Equal(t, "1.200.9-stage", p.NewVersion)
+	assert.Equal(t, "1.198.3-stage", p.NewVersion)
 	assert.Equal(t, "hydra/promote/to-stage/demo/service-ui", p.Branch)
 	assert.False(t, p.Skipped)
 
@@ -212,6 +212,61 @@ func TestPromote_NewApp_NoTargetDir(t *testing.T) {
 	require.Len(t, mock.executions, 1)
 }
 
+func TestPromote_NewApp_NoTargetDir_CI_DefaultResetVersion(t *testing.T) {
+	repo := git.Init(t.TempDir()).
+		CommitFS("init", git.NewFS().
+			File(".hydra-ci.yaml", configYAML("dev, stage", "")).
+			Add("apps/demo/service-ui/dev",
+				git.NewChart("service-ui").
+					Version("1.200.9-dev").
+					Dep("service-ui", "1.200.9", "oci://registry/helm"),
+			),
+		)
+	require.NoError(t, repo.Err)
+
+	mock := &mockPromoteActions{}
+	result, err := RunPromote(configPath(repo), ModeCI, mock, "", "")
+	require.NoError(t, err)
+
+	require.Len(t, result.Promotions, 1)
+	p := result.Promotions[0]
+	assert.False(t, p.Skipped)
+	assert.Equal(t, "", p.OldVersion)
+	assert.Equal(t, "0.0.0", p.NewVersion)
+}
+
+func TestPromote_NewApp_NoTargetDir_CI_ConfiguredResetVersion(t *testing.T) {
+	repo := git.Init(t.TempDir()).
+		CommitFS("init", git.NewFS().
+			File(".hydra-ci.yaml", "ci:\n"+
+				"  rootAppsPath: apps\n"+
+				"  environments: [dev, stage]\n"+
+				"  appGroups:\n"+
+				"    - name: demo\n"+
+				"      path: apps/demo\n"+
+				"  registry: \"oci://registry/helm\"\n"+
+				"  promote:\n"+
+				"    promotableRootApps: []\n"+
+				"    newChartVersion: 0.1.0-stage\n").
+			Add("apps/demo/service-ui/dev",
+				git.NewChart("service-ui").
+					Version("1.200.9-dev").
+					Dep("service-ui", "1.200.9", "oci://registry/helm"),
+			),
+		)
+	require.NoError(t, repo.Err)
+
+	mock := &mockPromoteActions{}
+	result, err := RunPromote(configPath(repo), ModeCI, mock, "", "")
+	require.NoError(t, err)
+
+	require.Len(t, result.Promotions, 1)
+	p := result.Promotions[0]
+	assert.False(t, p.Skipped)
+	assert.Equal(t, "", p.OldVersion)
+	assert.Equal(t, "0.1.0-stage", p.NewVersion)
+}
+
 func TestPromote_StageToProd(t *testing.T) {
 	repo := git.Init(t.TempDir()).
 		CommitFS("init", git.NewFS().
@@ -237,7 +292,7 @@ func TestPromote_StageToProd(t *testing.T) {
 	p := result.Promotions[0]
 	assert.Equal(t, "stage", p.SourceEnv)
 	assert.Equal(t, "prod", p.TargetEnv)
-	assert.Equal(t, "1.200.9", p.NewVersion)
+	assert.Equal(t, "1.198.3", p.NewVersion)
 	assert.False(t, p.Skipped)
 }
 
@@ -264,8 +319,8 @@ func TestPromote_ExtraVersionDiffers(t *testing.T) {
 
 	require.Len(t, result.Promotions, 1)
 	p := result.Promotions[0]
-	assert.False(t, p.Skipped)
-	assert.Equal(t, "1.200.9-stage", p.NewVersion)
+	assert.True(t, p.Skipped)
+	assert.Equal(t, "no differences", p.SkipReason)
 }
 
 func TestPromote_ExtraDevResetsCounterWhenStageUsesExtraLine(t *testing.T) {
@@ -291,9 +346,9 @@ func TestPromote_ExtraDevResetsCounterWhenStageUsesExtraLine(t *testing.T) {
 
 	require.Len(t, result.Promotions, 1)
 	p := result.Promotions[0]
-	assert.False(t, p.Skipped, "promote must rewrite version to base line 1.200.9-stage, so Chart.yaml differs from 1.200.9-1-stage")
-	assert.Equal(t, "1.200.9-stage", p.NewVersion)
-	require.Len(t, mock.executions, 1)
+	assert.True(t, p.Skipped)
+	assert.Equal(t, "no differences", p.SkipReason)
+	assert.Empty(t, mock.executions)
 }
 
 func TestPromote_RootAppBlocked(t *testing.T) {
@@ -425,12 +480,12 @@ func TestPromote_ThreeEnvs_BothPairs(t *testing.T) {
 	devToStage := result.Promotions[0]
 	assert.Equal(t, "dev", devToStage.SourceEnv)
 	assert.Equal(t, "stage", devToStage.TargetEnv)
-	assert.Equal(t, "1.200.9-stage", devToStage.NewVersion)
+	assert.Equal(t, "1.198.3-stage", devToStage.NewVersion)
 
 	stageToProd := result.Promotions[1]
 	assert.Equal(t, "stage", stageToProd.SourceEnv)
 	assert.Equal(t, "prod", stageToProd.TargetEnv)
-	assert.Equal(t, "1.198.3", stageToProd.NewVersion)
+	assert.Equal(t, "1.195.0", stageToProd.NewVersion)
 }
 
 func TestPromote_PromoteTo_FiltersTargetEnv(t *testing.T) {
@@ -562,7 +617,7 @@ func TestPromote_Local_CreatesBranchAndCommit(t *testing.T) {
 
 	promoted, err := repo.LoadChart("apps/demo/service-ui/stage")
 	require.NoError(t, err)
-	assert.Equal(t, "1.200.9-stage", promoted.GetVersion())
+	assert.Equal(t, "1.198.3-stage", promoted.GetVersion())
 	assert.Equal(t, "1.200.9", promoted.GetDepVersion("service-ui"))
 
 	val, err := promoted.GetValue("replicaCount")
@@ -606,13 +661,13 @@ func TestPromote_Local_MultipleBranches(t *testing.T) {
 	require.NoError(t, repo.Err)
 	uiChart, err := repo.LoadChart("apps/demo/service-ui/stage")
 	require.NoError(t, err)
-	assert.Equal(t, "1.200.9-stage", uiChart.GetVersion())
+	assert.Equal(t, "1.198.3-stage", uiChart.GetVersion())
 
 	repo.Checkout("hydra/promote/to-stage/demo/service-auth")
 	require.NoError(t, repo.Err)
 	authChart, err := repo.LoadChart("apps/demo/service-auth/stage")
 	require.NoError(t, err)
-	assert.Equal(t, "18.33.28-stage", authChart.GetVersion())
+	assert.Equal(t, "18.30.0-stage", authChart.GetVersion())
 }
 
 func TestPromote_CI_CreatesBranchAndCommit(t *testing.T) {
@@ -647,7 +702,7 @@ func TestPromote_CI_CreatesBranchAndCommit(t *testing.T) {
 
 	promoted, err := repo.LoadChart("apps/demo/service-ui/stage")
 	require.NoError(t, err)
-	assert.Equal(t, "1.200.9-stage", promoted.GetVersion())
+	assert.Equal(t, "1.198.3-stage", promoted.GetVersion())
 	assert.Equal(t, "1.200.9", promoted.GetDepVersion("service-ui"))
 
 	val, err := promoted.GetValue("replicaCount")
@@ -825,13 +880,13 @@ func TestPromote_ConfigInNestedRepo_ChartsInParent(t *testing.T) {
 	assert.False(t, p.Skipped)
 	assert.Equal(t, "demo", p.Group)
 	assert.Equal(t, "service-ui", p.App)
-	assert.Equal(t, "1.200.9-stage", p.NewVersion)
+	assert.Equal(t, "1.198.3-stage", p.NewVersion)
 
 	parentRepo.Checkout("hydra/promote/to-stage/demo/service-ui")
 	require.NoError(t, parentRepo.Err)
 	promoted, err := parentRepo.LoadChart("apps/demo/service-ui/stage")
 	require.NoError(t, err)
-	assert.Equal(t, "1.200.9-stage", promoted.GetVersion())
+	assert.Equal(t, "1.198.3-stage", promoted.GetVersion())
 }
 
 func TestPromote_ConfigInNestedRepo_PreservesNestedRepoContents(t *testing.T) {
@@ -889,9 +944,9 @@ func TestPromotionEntry_CommitMessage(t *testing.T) {
 		SourceEnv:  "dev",
 		TargetEnv:  "stage",
 		OldVersion: "1.198.3-stage",
-		NewVersion: "1.200.9-stage",
+		NewVersion: "1.198.3-stage",
 	}
-	assert.Equal(t, "promote: service-ui dev → stage (1.198.3-stage → 1.200.9-stage)", entry.CommitMessage())
+	assert.Equal(t, "promote: service-ui dev → stage (content changed)", entry.CommitMessage())
 
 	newApp := PromotionEntry{
 		App:        "service-ui",
@@ -1091,7 +1146,7 @@ func TestPromote_Local_PreservesSourceFormatting(t *testing.T) {
 		"apps/cluster-infra/fluent-bit/stage/Chart.yaml"))
 	require.NoError(t, readErr)
 
-	expected := "apiVersion: v2\nname: fluent-bit\ndescription: Fluent Bit DaemonSet for Kubernetes logging\ntype: application\nversion: 0.55.0-stage\n\ndependencies:\n  - name: fluent-bit\n    repository: oci://ghcr.io/fluent/helm-charts\n    version: 0.55.0\n"
+	expected := "apiVersion: v2\nname: fluent-bit\ndescription: Fluent Bit DaemonSet for Kubernetes logging\ntype: application\nversion: 0.50.0-stage\n\ndependencies:\n  - name: fluent-bit\n    repository: oci://ghcr.io/fluent/helm-charts\n    version: 0.55.0\n"
 	assert.Equal(t, expected, string(promotedRaw),
 		"promoted Chart.yaml must preserve source formatting (description, blank lines)")
 }

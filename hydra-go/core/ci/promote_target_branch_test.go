@@ -53,11 +53,11 @@ func TestPromote_TargetBranch_Local_AllCommitsOnBranch(t *testing.T) {
 
 	uiChart, err := repo.LoadChart("apps/demo/service-ui/stage")
 	require.NoError(t, err)
-	assert.Equal(t, "1.200.9-stage", uiChart.GetVersion())
+	assert.Equal(t, "1.198.3-stage", uiChart.GetVersion())
 
 	authChart, err := repo.LoadChart("apps/demo/service-auth/stage")
 	require.NoError(t, err)
-	assert.Equal(t, "18.33.28-stage", authChart.GetVersion())
+	assert.Equal(t, "18.30.0-stage", authChart.GetVersion())
 
 	repo.Checkout("hydra/promote/to-stage/demo/service-ui")
 	assert.Error(t, repo.Err, "auto-generated branch should not exist")
@@ -157,7 +157,7 @@ func TestPromote_TargetBranch_SingleChart(t *testing.T) {
 
 	promoted, err := repo.LoadChart("apps/demo/service-ui/stage")
 	require.NoError(t, err)
-	assert.Equal(t, "1.200.9-stage", promoted.GetVersion())
+	assert.Equal(t, "1.198.3-stage", promoted.GetVersion())
 }
 
 func TestPromote_TargetBranch_NoDiffs(t *testing.T) {
