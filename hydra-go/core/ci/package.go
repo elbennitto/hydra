@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -14,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/ProtonMail/go-crypto/openpgp/armor"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	cosignopts "github.com/sigstore/cosign/v2/cmd/cosign/cli/options"
 	cosignsign "github.com/sigstore/cosign/v2/cmd/cosign/cli/sign"
 	helmchart "helm.sh/helm/v4/pkg/chart"
@@ -27,7 +29,11 @@ import (
 	"hydra-gitops.org/hydra/hydra-go/core/git"
 	"hydra-gitops.org/hydra/hydra-go/core/helm"
 	coretypes "hydra-gitops.org/hydra/hydra-go/core/types"
+	"oras.land/oras-go/v2"
 	oraserrdef "oras.land/oras-go/v2/errdef"
+	"oras.land/oras-go/v2/registry/remote"
+	orasauth "oras.land/oras-go/v2/registry/remote/auth"
+	orascredentials "oras.land/oras-go/v2/registry/remote/credentials"
 	"sigs.k8s.io/yaml"
 )
 
@@ -36,6 +42,8 @@ const hydraVersionAnnotation = "io.hydracd.hydra.version"
 var helmRunHook func(ctx context.Context, dir string, args ...string) ([]byte, error)
 var packageChartArchiveHook func(chartDir, stageDir string, signing *packageSigningConfig) (packageArtifact, error)
 var pushChartArchiveHook func(artifact packageArtifact, registryURL, chartName, version string, registryConfigPath string) error
+var uploadChartWithoutTagHook func(artifact packageArtifact, registryURL, chartName, version string, registryConfigPath string) (string, error)
+var tagOCIChartHook func(registryURL, chartName, version, digestRef, registryConfigPath string) error
 var remoteChartExistsHook func(registryURL, chartName, version string, registryConfigPath string) (bool, error)
 var signOCIChartHook func(ref string, keyPath string) error
 var resolveOCIChartDigestRefHook func(registryURL, chartName, version string, registryConfigPath string) (string, error)
@@ -144,95 +152,105 @@ func RunPublish(configPath string, mode Mode, selectedCharts []string, forceRun 
 		}
 	}
 
-	for _, rel := range chartRelPaths {
-		absDir := filepath.Join(repo.Path(), filepath.FromSlash(rel))
-		ch, err := repo.LoadChart(rel)
-		if err != nil {
-			return fmt.Errorf("load chart %s: %w", rel, err)
-		}
-		name := ch.GetName()
-		ver := ch.GetVersion()
-		if mode == ModeDryRun {
-			l.Info(logIdCI, "publish dry-run: would run helm dependency update and helm package for {chart} at {path} version {version}",
-				log.String("chart", name), log.String("path", rel), log.String("version", ver))
-			if registry != "" {
-				if skipSigning {
-					l.Warn(logIdCI, "publish dry-run: would push unsigned chart {artifact} to {registry}",
-						log.String("artifact", name+"-"+ver+".tgz"), log.String("registry", registry))
+	return withHelmRegistryConfig(registryConfigPath, func() error {
+		for _, rel := range chartRelPaths {
+			absDir := filepath.Join(repo.Path(), filepath.FromSlash(rel))
+			ch, err := repo.LoadChart(rel)
+			if err != nil {
+				return fmt.Errorf("load chart %s: %w", rel, err)
+			}
+			name := ch.GetName()
+			ver := ch.GetVersion()
+			if mode == ModeDryRun {
+				l.Info(logIdCI, "publish dry-run: would run helm dependency update and helm package for {chart} at {path} version {version}",
+					log.String("chart", name), log.String("path", rel), log.String("version", ver))
+				if registry != "" {
+					if skipSigning {
+						l.Warn(logIdCI, "publish dry-run: would push unsigned chart {artifact} to {registry}",
+							log.String("artifact", name+"-"+ver+".tgz"), log.String("registry", registry))
+					} else {
+						switch {
+						case signing != nil && cosignSigning != nil:
+							l.Info(logIdCI, "publish dry-run: would push {artifact} with Helm provenance and Cosign signature to {registry}",
+								log.String("artifact", name+"-"+ver+".tgz"), log.String("registry", registry))
+						case signing != nil:
+							l.Info(logIdCI, "publish dry-run: would sign {artifact} with Helm provenance and push it to {registry}",
+								log.String("artifact", name+"-"+ver+".tgz"), log.String("registry", registry))
+						case cosignSigning != nil:
+							l.Info(logIdCI, "publish dry-run: would push {artifact} and attach a Cosign signature in {registry}",
+								log.String("artifact", name+"-"+ver+".tgz"), log.String("registry", registry))
+						}
+					}
 				} else {
-					switch {
-					case signing != nil && cosignSigning != nil:
-						l.Info(logIdCI, "publish dry-run: would push {artifact} with Helm provenance and Cosign signature to {registry}",
-							log.String("artifact", name+"-"+ver+".tgz"), log.String("registry", registry))
-					case signing != nil:
-						l.Info(logIdCI, "publish dry-run: would sign {artifact} with Helm provenance and push it to {registry}",
-							log.String("artifact", name+"-"+ver+".tgz"), log.String("registry", registry))
-					case cosignSigning != nil:
-						l.Info(logIdCI, "publish dry-run: would push {artifact} and attach a Cosign signature in {registry}",
-							log.String("artifact", name+"-"+ver+".tgz"), log.String("registry", registry))
+					if skipSigning {
+						l.Warn(logIdCI, "publish dry-run: would package chart locally without signing (no ci.registry configured)")
+					} else {
+						l.Info(logIdCI, "publish dry-run: would package the chart locally using the configured signing settings (no ci.registry push)")
 					}
 				}
-			} else {
-				if skipSigning {
-					l.Warn(logIdCI, "publish dry-run: would package chart locally without signing (no ci.registry configured)")
-				} else {
-					l.Info(logIdCI, "publish dry-run: would package the chart locally using the configured signing settings (no ci.registry push)")
+				continue
+			}
+			if mode == ModeCI {
+				remoteRef := buildOCIChartRef(registry, name, ver)
+				exists, err := remoteChartExists(registry, name, ver, registryConfigPath)
+				if err != nil {
+					return fmt.Errorf("chart %s: check remote chart: %w", rel, err)
 				}
-			}
-			continue
-		}
-		if mode == ModeCI {
-			remoteRef := buildOCIChartRef(registry, name, ver)
-			exists, err := remoteChartExists(registry, name, ver, registryConfigPath)
-			if err != nil {
-				return fmt.Errorf("chart %s: check remote chart: %w", rel, err)
-			}
-			if exists {
-				if !forcePublishUpload {
-					l.Warn(logIdCI, "remote chart already exists; skipping publish for {chart} version {version} at {ref}",
+				if exists {
+					if !forcePublishUpload {
+						l.Warn(logIdCI, "remote chart already exists; skipping publish for {chart} version {version} at {ref}",
+							log.String("chart", name),
+							log.String("version", ver),
+							log.String("ref", remoteRef))
+						continue
+					}
+					l.Warn(logIdCI, "remote chart already exists; forcing upload for {chart} version {version} at {ref}",
 						log.String("chart", name),
 						log.String("version", ver),
 						log.String("ref", remoteRef))
-					continue
-				}
-				l.Warn(logIdCI, "remote chart already exists; forcing upload for {chart} version {version} at {ref}",
-					log.String("chart", name),
-					log.String("version", ver),
-					log.String("ref", remoteRef))
-			}
-		}
-
-		if err := helm.DownloadChartDependencies(l, absDir, nil, ""); err != nil {
-			return fmt.Errorf("chart %s: dependency update: %w", rel, err)
-		}
-
-		stageName := strings.ReplaceAll(rel, "/", "_")
-		stageDir := filepath.Join(tmpDir, stageName)
-		if err := os.MkdirAll(stageDir, 0o755); err != nil {
-			return fmt.Errorf("mkdir stage: %w", err)
-		}
-
-		packaged, err := packagePreparedChart(absDir, stageDir, signing)
-		if err != nil {
-			return fmt.Errorf("chart %s: helm package: %w", rel, err)
-		}
-
-		if mode == ModeCI {
-			artifact := packageArtifact{TGZPath: packaged.TGZPath, ProvPath: packaged.ProvPath}
-			if err := pushChartArchive(artifact, registry, name, ver, registryConfigPath); err != nil {
-				return fmt.Errorf("chart %s: helm push: %w", rel, err)
-			}
-			if cosignSigning != nil {
-				if err := signOCIChart(registry, name, ver, cosignSigning, registryConfigPath); err != nil {
-					return fmt.Errorf("chart %s: cosign sign: %w", rel, err)
 				}
 			}
-			l.Info(logIdCI, "published {chart} version {version}", log.String("chart", name), log.String("version", ver))
-		} else {
-			l.Info(logIdCI, "publish local: packaged {chart} to {path}", log.String("chart", name), log.String("path", packaged.TGZPath))
+
+			if err := downloadChartDependencies(l, absDir, nil); err != nil {
+				return fmt.Errorf("chart %s: dependency update: %w", rel, err)
+			}
+
+			stageName := strings.ReplaceAll(rel, "/", "_")
+			stageDir := filepath.Join(tmpDir, stageName)
+			if err := os.MkdirAll(stageDir, 0o755); err != nil {
+				return fmt.Errorf("mkdir stage: %w", err)
+			}
+
+			packaged, err := packagePreparedChart(absDir, stageDir, signing)
+			if err != nil {
+				return fmt.Errorf("chart %s: helm package: %w", rel, err)
+			}
+
+			if mode == ModeCI {
+				artifact := packageArtifact{TGZPath: packaged.TGZPath, ProvPath: packaged.ProvPath}
+				if cosignSigning == nil {
+					if err := pushChartArchive(artifact, registry, name, ver, registryConfigPath); err != nil {
+						return fmt.Errorf("chart %s: helm push: %w", rel, err)
+					}
+				} else {
+					digestRef, err := uploadChartWithoutTag(artifact, registry, name, ver, registryConfigPath)
+					if err != nil {
+						return fmt.Errorf("chart %s: helm push: %w", rel, err)
+					}
+					if err := signOCIRef(digestRef, cosignSigning); err != nil {
+						return fmt.Errorf("chart %s: cosign sign: %w", rel, err)
+					}
+					if err := tagOCIChart(registry, name, ver, digestRef, registryConfigPath); err != nil {
+						return fmt.Errorf("chart %s: helm push tag: %w", rel, err)
+					}
+				}
+				l.Info(logIdCI, "published {chart} version {version}", log.String("chart", name), log.String("version", ver))
+			} else {
+				l.Info(logIdCI, "publish local: packaged {chart} to {path}", log.String("chart", name), log.String("path", packaged.TGZPath))
+			}
 		}
-	}
-	return nil
+		return nil
+	})
 }
 
 func RunLocalPackage(chartDir string, destinationDir string) (PackagedChart, error) {
@@ -248,7 +266,7 @@ func RunLocalPackage(chartDir string, destinationDir string) (PackagedChart, err
 	if err := os.MkdirAll(absDestinationDir, 0o755); err != nil {
 		return PackagedChart{}, fmt.Errorf("create destination dir: %w", err)
 	}
-	if err := helm.DownloadChartDependencies(l, absChartDir, nil, ""); err != nil {
+	if err := downloadChartDependencies(l, absChartDir, nil); err != nil {
 		return PackagedChart{}, fmt.Errorf("dependency update: %w", err)
 	}
 	return packagePreparedChart(absChartDir, absDestinationDir, nil)
@@ -397,6 +415,118 @@ func pushChartArchive(artifact packageArtifact, registryURL, chartName, version 
 	return nil
 }
 
+func uploadChartWithoutTag(artifact packageArtifact, registryURL, chartName, version string, registryConfigPath string) (string, error) {
+	if uploadChartWithoutTagHook != nil {
+		return uploadChartWithoutTagHook(artifact, registryURL, chartName, version, registryConfigPath)
+	}
+	_ = version
+	_ = registryConfigPath
+
+	chartData, err := os.ReadFile(artifact.TGZPath)
+	if err != nil {
+		return "", fmt.Errorf("read packaged chart: %w", err)
+	}
+
+	chrt, err := loader.LoadFile(artifact.TGZPath)
+	if err != nil {
+		return "", fmt.Errorf("load chart for OCI upload: %w", err)
+	}
+	v2chrt, err := convertToV2Chart(chrt)
+	if err != nil {
+		return "", err
+	}
+	configData, err := json.Marshal(v2chrt.Metadata)
+	if err != nil {
+		return "", fmt.Errorf("marshal chart metadata for OCI upload: %w", err)
+	}
+
+	repo, err := newOCIRepository(registryURL, chartName)
+	if err != nil {
+		return "", err
+	}
+
+	ctx := context.Background()
+	chartDesc, err := oras.PushBytes(ctx, repo, registry.ChartLayerMediaType, chartData)
+	if err != nil {
+		return "", fmt.Errorf("upload chart layer: %w", err)
+	}
+	configDesc, err := oras.PushBytes(ctx, repo, registry.ConfigMediaType, configData)
+	if err != nil {
+		return "", fmt.Errorf("upload chart config: %w", err)
+	}
+
+	layers := []ocispec.Descriptor{chartDesc}
+	if artifact.ProvPath != "" {
+		provData, err := os.ReadFile(artifact.ProvPath)
+		if err != nil {
+			return "", fmt.Errorf("read chart provenance: %w", err)
+		}
+		provDesc, err := oras.PushBytes(ctx, repo, registry.ProvLayerMediaType, provData)
+		if err != nil {
+			return "", fmt.Errorf("upload chart provenance: %w", err)
+		}
+		layers = append(layers, provDesc)
+	}
+
+	sort.Slice(layers, func(i, j int) bool {
+		return layers[i].Digest < layers[j].Digest
+	})
+
+	manifestDesc, err := oras.PackManifest(ctx, repo, oras.PackManifestVersion1_0, "", oras.PackManifestOptions{
+		ConfigDescriptor: &configDesc,
+		Layers:           layers,
+	})
+	if err != nil {
+		return "", fmt.Errorf("upload chart manifest: %w", err)
+	}
+
+	digestRef := buildOCIRepositoryRef(registryURL, chartName) + "@" + manifestDesc.Digest.String()
+	return digestRef, nil
+}
+
+func tagOCIChart(registryURL, chartName, version, digestRef, registryConfigPath string) error {
+	if tagOCIChartHook != nil {
+		return tagOCIChartHook(registryURL, chartName, version, digestRef, registryConfigPath)
+	}
+	_ = registryConfigPath
+
+	repo, err := newOCIRepository(registryURL, chartName)
+	if err != nil {
+		return err
+	}
+
+	ctx := context.Background()
+	desc, err := repo.Resolve(ctx, strings.TrimPrefix(digestRef, buildOCIRepositoryRef(registryURL, chartName)+"@"))
+	if err != nil {
+		return fmt.Errorf("resolve uploaded digest before tagging: %w", err)
+	}
+	if err := repo.Tag(ctx, desc, version); err != nil {
+		return err
+	}
+	return nil
+}
+
+func newOCIRepository(registryURL, chartName string) (*remote.Repository, error) {
+	repoRef := buildOCIRepositoryRef(registryURL, chartName)
+	repo, err := remote.NewRepository(repoRef)
+	if err != nil {
+		return nil, fmt.Errorf("create remote repository: %w", err)
+	}
+
+	store, err := openRegistryCredentialStore()
+	if err != nil {
+		return nil, fmt.Errorf("open registry credentials: %w", err)
+	}
+	if store != nil {
+		client := *orasauth.DefaultClient
+		client.Credential = func(ctx context.Context, hostport string) (orasauth.Credential, error) {
+			return store.Get(ctx, orascredentials.ServerAddressFromRegistry(hostport))
+		}
+		repo.Client = &client
+	}
+	return repo, nil
+}
+
 func preparePackageSigningConfig(configPath, workDir string) (*packageSigningConfig, error) {
 	publicCfg, secretCfg, err := LoadValidatedSignConfig(configPath)
 	if err != nil {
@@ -491,6 +621,10 @@ func signOCIChart(registryURL, chartName, version string, signing *cosignSigning
 	if err != nil {
 		return err
 	}
+	return signOCIRef(ref, signing)
+}
+
+func signOCIRef(ref string, signing *cosignSigningConfig) error {
 	if signOCIChartHook != nil {
 		return signOCIChartHook(ref, signing.KeyPath)
 	}
@@ -637,6 +771,11 @@ func buildOCIChartRef(registryURL, chartName, version string) string {
 
 func buildOCIResolveRef(registryURL, chartName, version string) string {
 	return strings.TrimPrefix(buildOCIChartRef(registryURL, chartName, version), "oci://")
+}
+
+func buildOCIRepositoryRef(registryURL, chartName string) string {
+	base := strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(registryURL, "oci://"), "/"))
+	return fmt.Sprintf("%s/%s", base, chartName)
 }
 
 func convertToV2Chart(chrt helmchart.Charter) (*v2chart.Chart, error) {

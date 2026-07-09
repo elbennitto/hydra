@@ -32,6 +32,7 @@ type SecretsConfig struct {
 type SecretsValues struct {
 	Sign           SignSecrets        `yaml:"sign,omitempty"`
 	Cosign         CosignSecrets      `yaml:"cosign,omitempty"`
+	Publish        PublishSecrets     `yaml:"publish,omitempty"`
 	RegistryTokens []RegistryTokenRef `yaml:"registryTokens,omitempty"`
 }
 
@@ -41,6 +42,10 @@ type SignSecrets struct {
 
 type CosignSecrets struct {
 	PrivateKey string `yaml:"privateKey,omitempty"`
+}
+
+type PublishSecrets struct {
+	GitLabToken string `yaml:"gitlabToken,omitempty"`
 }
 
 type RegistryTokenRef struct {
@@ -399,13 +404,17 @@ func validateSecrets(secrets SecretsValues, targetPath string) error {
 	if err := validateCosignSecrets(secrets.Cosign, targetPath); err != nil {
 		return err
 	}
+	if err := validatePublishSecrets(secrets.Publish, targetPath); err != nil {
+		return err
+	}
 	if err := validateRegistryTokens(secrets.RegistryTokens, targetPath); err != nil {
 		return err
 	}
 	if strings.TrimSpace(secrets.Sign.SecretKeyring) == "" &&
 		strings.TrimSpace(secrets.Cosign.PrivateKey) == "" &&
+		strings.TrimSpace(secrets.Publish.GitLabToken) == "" &&
 		len(secrets.RegistryTokens) == 0 {
-		return fmt.Errorf("decrypted secrets config %s: at least one of secrets.sign, secrets.cosign, or secrets.registryTokens must be configured", targetPath)
+		return fmt.Errorf("decrypted secrets config %s: at least one of secrets.sign, secrets.cosign, secrets.publish, or secrets.registryTokens must be configured", targetPath)
 	}
 	return nil
 }
@@ -524,6 +533,13 @@ func validateCosignSecrets(sign CosignSecrets, targetPath string) error {
 	}
 	if _, err := base64.StdEncoding.DecodeString(strings.TrimSpace(sign.PrivateKey)); err != nil {
 		return fmt.Errorf("decrypted secrets config %s: decode secrets.cosign.privateKey: %w", targetPath, err)
+	}
+	return nil
+}
+
+func validatePublishSecrets(publish PublishSecrets, targetPath string) error {
+	if strings.TrimSpace(publish.GitLabToken) == "" {
+		return nil
 	}
 	return nil
 }

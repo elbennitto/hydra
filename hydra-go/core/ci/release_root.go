@@ -17,6 +17,7 @@ type groupEnvKey struct {
 type rootChartUpdate struct {
 	relPath string
 	chart   *git.Chart
+	oldVersion string
 }
 
 // buildRootChartUpdates loads each affected root chart, applies child version
@@ -58,7 +59,7 @@ func buildRootChartUpdates(repo *git.Repo, cfg *Config, plan []ReleaseChildEntry
 			return nil, fmt.Errorf("normalize root version %s for env %s: %w", rel, k.env, err)
 		}
 		rc.Version(newRoot)
-		out[k] = rootChartUpdate{relPath: rel, chart: rc}
+		out[k] = rootChartUpdate{relPath: rel, chart: rc, oldVersion: oldRoot}
 	}
 	return out, nil
 }

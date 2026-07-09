@@ -158,7 +158,7 @@ func (p PersistentChartDirectory) loadChart(
 
 	if mode == types.HelmNetworkModeOnline && len(missingCharts) > 0 {
 		for path, missingChart := range missingCharts {
-			err := DownloadChartDependencies(p.l, path, missingChart, "")
+			err := DownloadChartDependencies(p.l, path, missingChart)
 			if err != nil {
 				return ChartCacheEntry{
 					Error: log.CreateError(errors.ErrLoadingHelmChartDependenciesFailed, "failed to download missing chart dependencies for chart in path '{path}'",

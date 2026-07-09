@@ -151,6 +151,25 @@ func TestLastBuildTag_NoTags(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestFirstCommitAffectingPath_FindsIntroductionCommit(t *testing.T) {
+	repo := Init(t.TempDir()).
+		Commit("init", "a.txt", "hello").
+		CommitFS("add chart", NewFS().
+			Add("apps/demo/service-ui/dev",
+				NewChart("service-ui").Version("1.0.0-dev"),
+			),
+		).
+		Commit("change chart", "apps/demo/service-ui/dev/values.yaml", "x: y\n")
+	require.NoError(t, repo.Err)
+
+	h, err := repo.FirstCommitAffectingPath("apps/demo/service-ui/dev")
+	require.NoError(t, err)
+
+	commit, err := repo.resolveCommit(h)
+	require.NoError(t, err)
+	require.Equal(t, "add chart", commit.Message)
+}
+
 func TestInitialCommitHash(t *testing.T) {
 	repo := Init(t.TempDir()).
 		Commit("init", "a.txt", "hello").

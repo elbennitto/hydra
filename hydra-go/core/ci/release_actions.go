@@ -2,7 +2,9 @@ package ci
 
 import (
 	"fmt"
+	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -15,7 +17,7 @@ import (
 var releaseTagTime = time.Now
 
 type releaseExecutor interface {
-	run(repo *git.Repo, cfg *Config, plan []ReleaseChildEntry, roots map[groupEnvKey]rootChartUpdate) (ReleaseResult, error)
+	run(repo *git.Repo, cfg *Config, plan []ReleaseChildEntry, roots map[groupEnvKey]rootChartUpdate, tags []string) (ReleaseResult, error)
 }
 
 // NewReleaseExecutor returns the mode-specific release executor.
@@ -26,7 +28,7 @@ func NewReleaseExecutor(mode Mode, targetBranch string) releaseExecutor {
 	case ModeLocal:
 		return localReleaseExecutor{targetBranch: targetBranch}
 	default:
-		return ciReleaseExecutor{}
+		return ciReleaseExecutor{targetBranch: targetBranch}
 	}
 }
 
@@ -34,10 +36,13 @@ type dryRunReleaseExecutor struct {
 	targetBranch string
 }
 
-func (a dryRunReleaseExecutor) run(_ *git.Repo, _ *Config, plan []ReleaseChildEntry, roots map[groupEnvKey]rootChartUpdate) (ReleaseResult, error) {
+func (a dryRunReleaseExecutor) run(_ *git.Repo, _ *Config, plan []ReleaseChildEntry, roots map[groupEnvKey]rootChartUpdate, tags []string) (ReleaseResult, error) {
 	l := log.Default()
 	if a.targetBranch != "" {
 		l.Info(logIdCI, "release dry-run: target branch {branch}", log.String("branch", a.targetBranch))
+	}
+	if len(tags) == 0 {
+		tags = releaseTags(plan, roots)
 	}
 	for _, e := range plan {
 		l.Info(logIdCI, "release dry-run: {path} {old} → {new}",
@@ -52,6 +57,9 @@ func (a dryRunReleaseExecutor) run(_ *git.Repo, _ *Config, plan []ReleaseChildEn
 			log.String("version", ru.chart.GetVersion()),
 		)
 	}
+	for _, tag := range tags {
+		l.Info(logIdCI, "release dry-run: create tag {tag}", log.String("tag", tag))
+	}
 	return releaseResultFromPlan(plan), nil
 }
 
@@ -59,7 +67,7 @@ type localReleaseExecutor struct {
 	targetBranch string
 }
 
-func (a localReleaseExecutor) run(repo *git.Repo, cfg *Config, plan []ReleaseChildEntry, roots map[groupEnvKey]rootChartUpdate) (ReleaseResult, error) {
+func (a localReleaseExecutor) run(repo *git.Repo, cfg *Config, plan []ReleaseChildEntry, roots map[groupEnvKey]rootChartUpdate, tags []string) (ReleaseResult, error) {
 	l := log.Default()
 	if a.targetBranch != "" {
 		if !repo.BranchExists(a.targetBranch) {
@@ -74,6 +82,19 @@ func (a localReleaseExecutor) run(repo *git.Repo, cfg *Config, plan []ReleaseChi
 	}
 	if repo.Err != nil {
 		return ReleaseResult{}, repo.Err
+	}
+	if len(tags) == 0 {
+		tags = releaseTags(plan, roots)
+	}
+	if len(plan) == 0 && len(roots) == 0 {
+		for _, tag := range tags {
+			repo.Tag(tag)
+			if repo.Err != nil {
+				return ReleaseResult{}, repo.Err
+			}
+			l.Info(logIdCI, "release local: created tag {tag}", log.String("tag", tag))
+		}
+		return releaseResultFromPlan(plan), nil
 	}
 
 	for _, e := range plan {
@@ -120,7 +141,6 @@ func (a localReleaseExecutor) run(repo *git.Repo, cfg *Config, plan []ReleaseChi
 		return ReleaseResult{}, repo.Err
 	}
 
-	tags := releaseTags(plan, roots)
 	for _, tag := range tags {
 		repo.Tag(tag)
 		if repo.Err != nil {
@@ -131,10 +151,170 @@ func (a localReleaseExecutor) run(repo *git.Repo, cfg *Config, plan []ReleaseChi
 	return releaseResultFromPlan(plan), nil
 }
 
-type ciReleaseExecutor struct{}
+type ciReleaseExecutor struct {
+	targetBranch string
+}
 
-func (ciReleaseExecutor) run(_ *git.Repo, _ *Config, _ []ReleaseChildEntry, _ map[groupEnvKey]rootChartUpdate) (ReleaseResult, error) {
-	return ReleaseResult{}, fmt.Errorf("ci release: not yet implemented")
+func (a ciReleaseExecutor) run(repo *git.Repo, cfg *Config, plan []ReleaseChildEntry, roots map[groupEnvKey]rootChartUpdate, tags []string) (ReleaseResult, error) {
+	if a.targetBranch != "" {
+		return ReleaseResult{}, fmt.Errorf("target branch is not supported in ci mode")
+	}
+
+	l := log.Default()
+	if err := stageTrackedChangesBeforeBranchCheckout(repo, "release"); err != nil {
+		return ReleaseResult{}, err
+	}
+	l.Info(logIdCI, "release ci: checkout default branch from upstream {upstream}",
+		log.String("upstream", cfg.CI.UpstreamBranch))
+	repo.CheckoutUpstreamBranch(cfg.CI.UpstreamBranch)
+	if repo.Err != nil {
+		return ReleaseResult{}, repo.Err
+	}
+	if len(tags) == 0 {
+		tags = releaseTags(plan, roots)
+	}
+	if len(plan) == 0 && len(roots) == 0 {
+		for _, tag := range tags {
+			repo.Tag(tag)
+			if repo.Err != nil {
+				return ReleaseResult{}, repo.Err
+			}
+			l.Info(logIdCI, "release ci: created tag {tag}", log.String("tag", tag))
+		}
+		if err := pushReleaseTags(repo, "origin", tags); err != nil {
+			return ReleaseResult{}, err
+		}
+		return releaseResultFromPlan(plan), nil
+	}
+
+	for _, e := range plan {
+		l.Info(logIdCI, "release ci: update {path} {old} -> {new}",
+			log.String("path", e.Path),
+			log.String("old", e.OldVersion),
+			log.String("new", e.NewVersion),
+		)
+		ch, err := repo.LoadChart(e.Path)
+		if err != nil {
+			return ReleaseResult{}, fmt.Errorf("load %s: %w", e.Path, err)
+		}
+		ch.Version(e.NewVersion)
+		if err := ch.Save(); err != nil {
+			return ReleaseResult{}, fmt.Errorf("save child %s: %w", e.Path, err)
+		}
+	}
+	for _, ru := range roots {
+		l.Info(logIdCI, "release ci: update root {path} version {version}",
+			log.String("path", ru.relPath),
+			log.String("version", ru.chart.GetVersion()),
+		)
+		if err := ru.chart.Save(); err != nil {
+			return ReleaseResult{}, fmt.Errorf("save root %s: %w", ru.relPath, err)
+		}
+	}
+
+	files := map[string]string{}
+	for _, e := range plan {
+		if err := mergeChartDirFiles(repo, e.Path, files); err != nil {
+			return ReleaseResult{}, err
+		}
+	}
+	for _, ru := range roots {
+		if err := mergeChartDirFiles(repo, ru.relPath, files); err != nil {
+			return ReleaseResult{}, err
+		}
+	}
+
+	msg := releaseCommitMessage(plan)
+	l.Info(logIdCI, "release ci: create commit {message}", log.String("message", msg))
+	repo.CommitFiles(msg, files)
+	if repo.Err != nil {
+		return ReleaseResult{}, repo.Err
+	}
+
+	for _, tag := range tags {
+		repo.Tag(tag)
+		if repo.Err != nil {
+			return ReleaseResult{}, repo.Err
+		}
+		l.Info(logIdCI, "release ci: created tag {tag}", log.String("tag", tag))
+	}
+
+	branch, err := repo.CurrentBranch()
+	if err != nil {
+		return ReleaseResult{}, err
+	}
+	l.Info(logIdCI, "release ci: push branch {branch}", log.String("branch", branch))
+	repo.PushSetUpstream("origin", branch)
+	if repo.Err != nil {
+		return ReleaseResult{}, repo.Err
+	}
+	if err := pushReleaseTags(repo, "origin", tags); err != nil {
+		return ReleaseResult{}, err
+	}
+
+	return releaseResultFromPlan(plan), nil
+}
+
+func pushReleaseTags(repo *git.Repo, remote string, tags []string) error {
+	if len(tags) == 0 {
+		return nil
+	}
+	pushRemote := remote
+	pushToken := ""
+	if token, header, err := gitLabToken(repo); err == nil && header == "PRIVATE-TOKEN" {
+		if remoteURL, remoteErr := repo.RemoteURL(); remoteErr == nil {
+			authRemote, authErr := gitLabTokenPushRemote(remoteURL, token)
+			if authErr == nil {
+				pushRemote = authRemote
+				pushToken = token
+			}
+		}
+	}
+
+	args := []string{"-C", repo.Path(), "push", pushRemote}
+	args = append(args, tags...)
+	out, err := exec.Command("git", args...).CombinedOutput()
+	if err != nil {
+		msg := strings.TrimSpace(string(out))
+		if pushToken != "" {
+			msg = strings.ReplaceAll(msg, pushToken, "***")
+			escapedToken := url.QueryEscape(pushToken)
+			if escapedToken != pushToken {
+				msg = strings.ReplaceAll(msg, escapedToken, "***")
+			}
+		}
+		if msg == "" {
+			return fmt.Errorf("git push %s <tags>: %w", remote, err)
+		}
+		return fmt.Errorf("git push %s <tags>: %w\n%s", remote, err, msg)
+	}
+	return nil
+}
+
+func gitLabTokenPushRemote(remoteURL, token string) (string, error) {
+	host, err := parseGitRemoteHost(remoteURL)
+	if err != nil {
+		return "", err
+	}
+	projectPath, err := parseGitRemoteProjectPath(remoteURL)
+	if err != nil {
+		return "", err
+	}
+
+	scheme := "https"
+	if parsed, err := url.Parse(remoteURL); err == nil {
+		if parsed.Scheme == "http" {
+			scheme = "http"
+		}
+	}
+
+	authURL := &url.URL{
+		Scheme: scheme,
+		User:   url.UserPassword("oauth2", token),
+		Host:   host,
+		Path:   "/" + strings.TrimPrefix(projectPath, "/") + ".git",
+	}
+	return authURL.String(), nil
 }
 
 func mergeChartDirFiles(repo *git.Repo, rel string, dest map[string]string) error {

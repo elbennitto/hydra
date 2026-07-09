@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -17,7 +18,7 @@ const defaultCIPromoteNewChartVersion = "0.0.0"
 // PromoteActions defines mode-dependent operations for the promote pipeline.
 // Three implementations exist: dryRunPromoteActions, localPromoteActions, ciPromoteActions.
 type PromoteActions interface {
-	ExecutePromotion(repo *git.Repo, entry PromotionEntry, cfg *Config) error
+	ExecutePromotion(repo *git.Repo, entry *PromotionEntry, cfg *Config) error
 }
 
 // PromoteResult captures all promote operations performed (or planned in dry-run).
@@ -166,16 +167,17 @@ func RunPromote(configPath string, mode Mode, actions PromoteActions, targetBran
 			}
 		}
 
-		for _, entry := range entries {
+		for i := range entries {
+			entry := &entries[i]
 			if !entry.Skipped {
 				if err := actions.ExecutePromotion(repo, entry, cfg); err != nil {
 					return result, fmt.Errorf("promote %s/%s %s→%s: %w",
 						entry.Group, entry.App, entry.SourceEnv, entry.TargetEnv, err)
 				}
 			}
-			result.Promotions = append(result.Promotions, entry)
+			result.Promotions = append(result.Promotions, *entry)
 			for _, fn := range onEntry {
-				fn(entry)
+				fn(*entry)
 			}
 		}
 	}
@@ -224,6 +226,20 @@ func detectPromotions(repo *git.Repo, cfg *Config, mode Mode, sourceEnv, targetE
 		if app == "root" && !cfg.IsRootAppPromotable(group) {
 			entry.Skipped = true
 			entry.SkipReason = "root app not promotable"
+			entries = append(entries, entry)
+			continue
+		}
+
+		sourceChartYAML := filepath.Join(absPath, "Chart.yaml")
+		if _, statErr := os.Stat(sourceChartYAML); os.IsNotExist(statErr) {
+			entry.Skipped = true
+			entry.SkipReason = "source chart missing Chart.yaml"
+			entries = append(entries, entry)
+			continue
+		} else if statErr != nil {
+			entry.HasError = true
+			entry.Skipped = true
+			entry.SkipReason = fmt.Sprintf("stat source chart %s: %v", sourcePath, statErr)
 			entries = append(entries, entry)
 			continue
 		}
@@ -444,7 +460,7 @@ type dryRunPromoteActions struct {
 
 func (a *dryRunPromoteActions) setTargetBranch(b string) { a.targetBranch = b }
 
-func (a *dryRunPromoteActions) ExecutePromotion(_ *git.Repo, _ PromotionEntry, _ *Config) error {
+func (a *dryRunPromoteActions) ExecutePromotion(_ *git.Repo, _ *PromotionEntry, _ *Config) error {
 	return nil
 }
 
@@ -456,8 +472,8 @@ type localPromoteActions struct {
 
 func (a *localPromoteActions) setTargetBranch(b string) { a.targetBranch = b }
 
-func (a *localPromoteActions) ExecutePromotion(repo *git.Repo, entry PromotionEntry, cfg *Config) error {
-	fs, err := buildPromotionFS(repo, entry)
+func (a *localPromoteActions) ExecutePromotion(repo *git.Repo, entry *PromotionEntry, cfg *Config) error {
+	fs, err := buildPromotionFS(repo, *entry)
 	if err != nil {
 		return err
 	}
@@ -480,14 +496,18 @@ func (a *localPromoteActions) ExecutePromotion(repo *git.Repo, entry PromotionEn
 
 type ciPromoteActions struct{}
 
-func (a *ciPromoteActions) ExecutePromotion(repo *git.Repo, entry PromotionEntry, cfg *Config) error {
+func (a *ciPromoteActions) ExecutePromotion(repo *git.Repo, entry *PromotionEntry, cfg *Config) error {
+	if err := stageTrackedChangesBeforeBranchCheckout(repo, "promote"); err != nil {
+		return err
+	}
+
 	if repo.RemoteBranchExists("origin", entry.Branch) {
 		repo.CheckoutUpstreamBranch("origin/" + entry.Branch)
 		if repo.Err != nil {
 			return repo.Err
 		}
 
-		if err := preserveTargetChartVersionFromCurrentBranch(repo, &entry); err != nil {
+		if err := preserveTargetChartVersionFromCurrentBranch(repo, entry); err != nil {
 			return err
 		}
 	} else {
@@ -498,11 +518,13 @@ func (a *ciPromoteActions) ExecutePromotion(repo *git.Repo, entry PromotionEntry
 		}
 	}
 
-	hasChanges, err := promotionWouldChangeCurrentBranch(repo, entry)
+	hasChanges, err := promotionWouldChangeCurrentBranch(repo, *entry)
 	if err != nil {
 		return err
 	}
 	if !hasChanges {
+		entry.Skipped = true
+		entry.SkipReason = "no differences"
 		log.Default().Info(logIdCI, "promote skipped: {group}/{app} {source} → {target} on branch {branch}: no differences",
 			log.String("group", entry.Group),
 			log.String("app", entry.App),
@@ -510,11 +532,14 @@ func (a *ciPromoteActions) ExecutePromotion(repo *git.Repo, entry PromotionEntry
 			log.String("target", entry.TargetEnv),
 			log.String("branch", entry.Branch),
 		)
+		if err := ensurePromoteMergeRequest(repo, *entry, cfg); err != nil {
+			return err
+		}
 		repo.CheckoutUpstreamBranch(cfg.CI.UpstreamBranch)
 		return repo.Err
 	}
 
-	fs, err := buildPromotionFS(repo, entry)
+	fs, err := buildPromotionFS(repo, *entry)
 	if err != nil {
 		return err
 	}
@@ -526,8 +551,45 @@ func (a *ciPromoteActions) ExecutePromotion(repo *git.Repo, entry PromotionEntry
 	if repo.Err != nil {
 		return repo.Err
 	}
+	if err := ensurePromoteMergeRequest(repo, *entry, cfg); err != nil {
+		return err
+	}
 	repo.CheckoutUpstreamBranch(cfg.CI.UpstreamBranch)
 	return repo.Err
+}
+
+func stageTrackedChangesBeforeBranchCheckout(repo *git.Repo, operation string) error {
+	out, err := exec.Command("git", "-C", repo.Path(), "diff", "--name-only").CombinedOutput()
+	if err != nil {
+		msg := strings.TrimSpace(string(out))
+		if msg == "" {
+			return fmt.Errorf("git diff --name-only: %w", err)
+		}
+		return fmt.Errorf("git diff --name-only: %w\n%s", err, msg)
+	}
+
+	changedFiles := strings.Fields(strings.TrimSpace(string(out)))
+	if len(changedFiles) == 0 {
+		return nil
+	}
+
+	addOut, addErr := exec.Command("git", "-C", repo.Path(), "add", "-u").CombinedOutput()
+	if addErr != nil {
+		msg := strings.TrimSpace(string(addOut))
+		if msg == "" {
+			return fmt.Errorf("git add -u: %w", addErr)
+		}
+		return fmt.Errorf("git add -u: %w\n%s", addErr, msg)
+	}
+
+	if operation == "" {
+		operation = "checkout"
+	}
+	log.Default().Info(logIdCI, "staged tracked changes before {operation} branch checkout",
+		log.Int("files", len(changedFiles)),
+		log.String("operation", operation))
+
+	return nil
 }
 
 func preserveTargetChartVersionFromCurrentBranch(repo *git.Repo, entry *PromotionEntry) error {

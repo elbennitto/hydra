@@ -235,7 +235,10 @@ func ComputePromoteTargetVersion(sourceVersion, sourceEnv, targetEnv, existingTa
 		return "", err
 	}
 
-	if v.Env != sourceEnv && !(v.Env == "" && sourceEnv == "prod") {
+	// CI promote may use a reset/default chart version (0.0.0) without an
+	// environment suffix. Treat it as a valid source exception for all
+	// source environments.
+	if !isDefaultPromoteResetVersion(v) && v.Env != sourceEnv && !(v.Env == "" && sourceEnv == "prod") {
 		return "", fmt.Errorf("version %q does not have expected suffix for %q", sourceVersion, sourceEnv)
 	}
 
@@ -262,4 +265,16 @@ func ComputePromoteTargetVersion(sourceVersion, sourceEnv, targetEnv, existingTa
 		return v.String(), nil
 	}
 	return candidate, nil
+}
+
+func isDefaultPromoteResetVersion(v ChartVersion) bool {
+	return v.Major == 0 && v.Minor == 0 && v.Patch == 0 && v.PreRelease == "" && v.Extra < 0 && v.Env == ""
+}
+
+func isDefaultPromoteResetVersionString(version string) bool {
+	v, err := ParseChartVersion(version)
+	if err != nil {
+		return false
+	}
+	return isDefaultPromoteResetVersion(v)
 }

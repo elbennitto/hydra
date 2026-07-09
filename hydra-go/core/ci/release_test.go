@@ -2,7 +2,9 @@ package ci
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -27,6 +29,228 @@ func TestRunRelease_NoChanges(t *testing.T) {
 	res, err := RunRelease(configPath(repo), ModeLocal, "")
 	require.NoError(t, err)
 	assert.Empty(t, res.Children)
+}
+
+func TestChartDirChangedSinceLastRelease_IgnoresVersionOnlyChartYamlChanges(t *testing.T) {
+	repo := git.Init(t.TempDir()).
+		CommitFS("init", git.NewFS().
+			File(".hydra-ci.yaml", configYAML("dev, stage", "")).
+			Add("apps/demo/service-ui/dev",
+				git.NewChart("service-ui").
+					Version("1.0.0-dev").
+					Dep("service-ui", "1.0.0", "oci://registry/helm"),
+			),
+		).
+		Tag("build-001").
+		CommitFS("bump version only", git.NewFS().
+			Add("apps/demo/service-ui/dev",
+				git.NewChart("service-ui").
+					Version("1.0.0-1-dev").
+					Dep("service-ui", "1.0.0", "oci://registry/helm"),
+			),
+		)
+	require.NoError(t, repo.Err)
+
+	changed, err := chartDirChangedSinceLastRelease(repo, "apps/demo/service-ui/dev")
+	require.NoError(t, err)
+	assert.False(t, changed)
+}
+
+func TestRunRelease_FirstRelease_KeepsExistingNonDefaultVersionWithoutFollowupChanges(t *testing.T) {
+	repo := git.Init(t.TempDir()).
+		Commit("init", "README.md", "hello\n").
+		CommitFS("add chart", git.NewFS().
+			File(".hydra-ci.yaml", configYAML("dev, stage", "")).
+			Add("apps/demo/service-ui/dev",
+				git.NewChart("service-ui").
+					Version("1.0.0-dev").
+					Dep("service-ui", "1.0.0", "oci://registry/helm"),
+			),
+		)
+	require.NoError(t, repo.Err)
+
+	res, err := RunRelease(configPath(repo), ModeLocal, "")
+	require.NoError(t, err)
+	assert.Empty(t, res.Children)
+
+	child, err := repo.LoadChart("apps/demo/service-ui/dev")
+	require.NoError(t, err)
+	assert.Equal(t, "1.0.0-dev", child.GetVersion())
+}
+
+func TestRunRelease_FirstRelease_KeepsExistingExtraCounterWithoutFollowupChanges(t *testing.T) {
+	repo := git.Init(t.TempDir()).
+		Commit("init", "README.md", "hello\n").
+		CommitFS("add chart", git.NewFS().
+			File(".hydra-ci.yaml", configYAML("dev, stage", "")).
+			Add("apps/demo/service-ui/dev",
+				git.NewChart("service-ui").
+					Version("1.0.0-1-dev").
+					Dep("service-ui", "1.0.0", "oci://registry/helm"),
+			),
+		)
+	require.NoError(t, repo.Err)
+
+	res, err := RunRelease(configPath(repo), ModeLocal, "")
+	require.NoError(t, err)
+	assert.Empty(t, res.Children)
+
+	child, err := repo.LoadChart("apps/demo/service-ui/dev")
+	require.NoError(t, err)
+	assert.Equal(t, "1.0.0-1-dev", child.GetVersion())
+}
+
+func TestRunRelease_FirstRelease_DefaultVersionStillReleases(t *testing.T) {
+	oldClock := releaseTagTime
+	releaseTagTime = func() time.Time { return time.Date(2026, 3, 5, 15, 55, 0, 0, time.UTC) }
+	t.Cleanup(func() { releaseTagTime = oldClock })
+
+	repo := git.Init(t.TempDir()).
+		Commit("init", "README.md", "hello\n").
+		CommitFS("add chart", git.NewFS().
+			File(".hydra-ci.yaml", configYAML("dev, stage", "")).
+			Add("apps/demo/service-ui/dev",
+				git.NewChart("service-ui").
+					Version("0.0.0").
+					Dep("service-ui", "1.0.0", "oci://registry/helm"),
+			).
+			Add("apps/demo/root/dev",
+				git.NewChart("demo").
+					Version("200.22.0-dev").
+					Values("apps:\n  service-ui:\n    enabled: true\n    version: \"0.0.0\"\n"),
+			),
+		)
+	require.NoError(t, repo.Err)
+
+	res, err := RunRelease(configPath(repo), ModeLocal, "")
+	require.NoError(t, err)
+	require.Len(t, res.Children, 1)
+	assert.Equal(t, "1.0.0-dev", res.Children[0].NewVersion)
+}
+
+func TestRunRelease_FirstRelease_CorrectVersionDoesNothing(t *testing.T) {
+	oldClock := releaseTagTime
+	releaseTagTime = func() time.Time { return time.Date(2026, 3, 5, 15, 55, 0, 0, time.UTC) }
+	t.Cleanup(func() { releaseTagTime = oldClock })
+
+	repo := git.Init(t.TempDir()).
+		Commit("init", "README.md", "hello\n").
+		CommitFS("add chart", git.NewFS().
+			File(".hydra-ci.yaml", configYAML("dev, stage", "")).
+			Add("apps/demo/service-ui/dev",
+				git.NewChart("service-ui").
+					Version("1.0.0-dev").
+					Dep("service-ui", "1.0.0", "oci://registry/helm"),
+			),
+		)
+	require.NoError(t, repo.Err)
+
+	res, err := RunRelease(configPath(repo), ModeLocal, "")
+	require.NoError(t, err)
+	assert.Empty(t, res.Children)
+
+	tags, err := repo.Tags("demo-*")
+	require.NoError(t, err)
+	assert.Contains(t, tags, "demo-service-ui-1.0.0-dev")
+
+	buildTags, err := repo.Tags("build-*")
+	require.NoError(t, err)
+	assert.Contains(t, buildTags, "build-202603051555")
+}
+
+func TestRunRelease_CI_FirstRelease_TagsAllChartsForPublish(t *testing.T) {
+	oldClock := releaseTagTime
+	releaseTagTime = func() time.Time { return time.Date(2026, 3, 5, 15, 55, 0, 0, time.UTC) }
+	t.Cleanup(func() { releaseTagTime = oldClock })
+
+	repo := git.Init(t.TempDir()).
+		Commit("init", "README.md", "hello\n").
+		CommitFS("import charts", git.NewFS().
+			File(".hydra-ci.yaml", configYAML("dev, stage", "")).
+			Add("apps/demo/service-ui/dev",
+				git.NewChart("service-ui").
+					Version("1.0.0-dev").
+					Dep("service-ui", "1.0.0", "oci://registry/helm"),
+			).
+			Add("apps/demo/service-auth/dev",
+				git.NewChart("service-auth").
+					Version("2.0.0-dev").
+					Dep("service-auth", "2.0.0", "oci://registry/helm"),
+			).
+			Add("apps/demo/root/dev",
+				git.NewChart("demo").
+					Version("200.22.0-dev").
+					Values("apps:\n  service-ui:\n    enabled: true\n    version: \"1.0.0-dev\"\n  service-auth:\n    enabled: true\n    version: \"2.0.0-dev\"\n"),
+			),
+		)
+	require.NoError(t, repo.Err)
+	remoteDir := addOriginBareRemote(t, repo)
+
+	res, err := RunRelease(configPath(repo), ModeCI, "")
+	require.NoError(t, err)
+	assert.Empty(t, res.Children)
+
+	out, err := exec.Command("git", "--git-dir", remoteDir, "show-ref", "--verify", "refs/tags/demo-service-ui-1.0.0-dev").CombinedOutput()
+	require.NoError(t, err, string(out))
+	out, err = exec.Command("git", "--git-dir", remoteDir, "show-ref", "--verify", "refs/tags/demo-service-auth-2.0.0-dev").CombinedOutput()
+	require.NoError(t, err, string(out))
+	out, err = exec.Command("git", "--git-dir", remoteDir, "show-ref", "--verify", "refs/tags/demo-root-200.22.0-dev").CombinedOutput()
+	require.NoError(t, err, string(out))
+	out, err = exec.Command("git", "--git-dir", remoteDir, "show-ref", "--verify", "refs/tags/build-202603051555").CombinedOutput()
+	require.NoError(t, err, string(out))
+}
+
+func TestRunRelease_FirstRelease_OtherVersionReleasesCanonicalVersion(t *testing.T) {
+	oldClock := releaseTagTime
+	releaseTagTime = func() time.Time { return time.Date(2026, 3, 5, 15, 55, 0, 0, time.UTC) }
+	t.Cleanup(func() { releaseTagTime = oldClock })
+
+	repo := git.Init(t.TempDir()).
+		Commit("init", "README.md", "hello\n").
+		CommitFS("add chart", git.NewFS().
+			File(".hydra-ci.yaml", configYAML("dev, stage", "")).
+			Add("apps/demo/service-ui/dev",
+				git.NewChart("service-ui").
+					Version("9.9.9-dev").
+					Dep("service-ui", "1.0.0", "oci://registry/helm"),
+			),
+		)
+	require.NoError(t, repo.Err)
+
+	res, err := RunRelease(configPath(repo), ModeLocal, "")
+	require.NoError(t, err)
+	require.Len(t, res.Children, 1)
+	assert.Equal(t, "1.0.0-dev", res.Children[0].NewVersion)
+
+	child, err := repo.LoadChart("apps/demo/service-ui/dev")
+	require.NoError(t, err)
+	assert.Equal(t, "1.0.0-dev", child.GetVersion())
+
+	tags, err := repo.Tags("demo-*")
+	require.NoError(t, err)
+	assert.Contains(t, tags, "demo-service-ui-1.0.0-dev")
+}
+
+func TestRunRelease_FirstRelease_OnlySuffixDiffCountsAsSameVersion(t *testing.T) {
+	repo := git.Init(t.TempDir()).
+		Commit("init", "README.md", "hello\n").
+		CommitFS("add chart", git.NewFS().
+			File(".hydra-ci.yaml", configYAML("dev, stage", "")).
+			Add("apps/demo/service-ui/dev",
+				git.NewChart("service-ui").
+					Version("1.2.3-4-stage").
+					Dep("service-ui", "1.2.3-4", "oci://registry/helm"),
+			),
+		)
+	require.NoError(t, repo.Err)
+
+	res, err := RunRelease(configPath(repo), ModeLocal, "")
+	require.NoError(t, err)
+	assert.Empty(t, res.Children)
+
+	child, err := repo.LoadChart("apps/demo/service-ui/dev")
+	require.NoError(t, err)
+	assert.Equal(t, "1.2.3-4-stage", child.GetVersion())
 }
 
 func TestRunRelease_Local_ExtraVersionAndRoot(t *testing.T) {
@@ -188,7 +412,11 @@ func TestRunRelease_DryRun_NoWrites(t *testing.T) {
 	assert.Equal(t, "1.200.9-dev", ch.GetVersion(), "dry-run must not write Chart.yaml")
 }
 
-func TestRunRelease_CI_NotImplemented(t *testing.T) {
+func TestRunRelease_CI_PushesBranchAndTags(t *testing.T) {
+	oldClock := releaseTagTime
+	releaseTagTime = func() time.Time { return time.Date(2026, 3, 5, 15, 55, 0, 0, time.UTC) }
+	t.Cleanup(func() { releaseTagTime = oldClock })
+
 	repo := git.Init(t.TempDir()).
 		CommitFS("init", git.NewFS().
 			File(".hydra-ci.yaml", configYAML("dev, stage", "")).
@@ -206,10 +434,66 @@ func TestRunRelease_CI_NotImplemented(t *testing.T) {
 		Tag("build-001").
 		Commit("tweak", "apps/demo/service-ui/dev/values.yaml", "x: y\n")
 	require.NoError(t, repo.Err)
+	remoteDir := addOriginBareRemote(t, repo)
 
-	_, err := RunRelease(configPath(repo), ModeCI, "")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "not yet implemented")
+	res, err := RunRelease(configPath(repo), ModeCI, "")
+	require.NoError(t, err)
+	require.Len(t, res.Children, 1)
+
+	out, err := exec.Command("git", "--git-dir", remoteDir, "show-ref", "--verify", "refs/heads/main").CombinedOutput()
+	require.NoError(t, err, string(out))
+
+	out, err = exec.Command("git", "--git-dir", remoteDir, "show-ref", "--verify", "refs/tags/demo-service-ui-1.200.9-1-dev").CombinedOutput()
+	require.NoError(t, err, string(out))
+	out, err = exec.Command("git", "--git-dir", remoteDir, "show-ref", "--verify", "refs/tags/demo-root-200.22.1-dev").CombinedOutput()
+	require.NoError(t, err, string(out))
+	out, err = exec.Command("git", "--git-dir", remoteDir, "show-ref", "--verify", "refs/tags/build-202603051555").CombinedOutput()
+	require.NoError(t, err, string(out))
+}
+
+func TestRunRelease_CI_DetachedHeadWithTrackedChanges_CheckoutSucceeds(t *testing.T) {
+	oldClock := releaseTagTime
+	releaseTagTime = func() time.Time { return time.Date(2026, 3, 5, 15, 55, 0, 0, time.UTC) }
+	t.Cleanup(func() { releaseTagTime = oldClock })
+
+	repo := git.Init(t.TempDir()).
+		CommitFS("init", git.NewFS().
+			File(".hydra-ci.yaml", configYAML("dev, stage", "")).
+			Add("apps/demo/service-ui/dev",
+				git.NewChart("service-ui").
+					Version("1.200.9-dev").
+					Dep("service-ui", "1.200.9", "oci://registry/helm"),
+			).
+			Add("apps/demo/root/dev",
+				git.NewChart("demo").
+					Version("200.22.0-dev").
+					Values("apps:\n  service-ui:\n    enabled: true\n    version: \"1.200.9-dev\"\n"),
+			),
+		).
+		Tag("build-001").
+		Commit("tweak", "apps/demo/service-ui/dev/values.yaml", "x: y\n")
+	require.NoError(t, repo.Err)
+	remoteDir := addOriginBareRemote(t, repo)
+
+	cfgRaw, err := os.ReadFile(configPath(repo))
+	require.NoError(t, err)
+	cfgWithUpstream := strings.Replace(string(cfgRaw), "  rootAppsPath: apps\n", "  rootAppsPath: apps\n  upstreamBranch: origin/main\n", 1)
+	require.NoError(t, os.WriteFile(configPath(repo), []byte(cfgWithUpstream), 0o644))
+
+	out, err := exec.Command("git", "-C", repo.Path(), "push", "--set-upstream", "origin", "main").CombinedOutput()
+	require.NoError(t, err, string(out))
+	out, err = exec.Command("git", "-C", repo.Path(), "checkout", "--detach").CombinedOutput()
+	require.NoError(t, err, string(out))
+	out, err = exec.Command("git", "-C", repo.Path(), "branch", "-D", "main").CombinedOutput()
+	require.NoError(t, err, string(out))
+
+	require.NoError(t, os.WriteFile(filepath.Join(repo.Path(), "README.md"), []byte("local change\n"), 0o644))
+
+	_, err = RunRelease(configPath(repo), ModeCI, "")
+	require.NoError(t, err)
+
+	out, err = exec.Command("git", "--git-dir", remoteDir, "show-ref", "--verify", "refs/heads/main").CombinedOutput()
+	require.NoError(t, err, string(out))
 }
 
 func TestDependencyVersionForWrapperRelease(t *testing.T) {
@@ -258,6 +542,54 @@ func TestDependencyVersionForWrapperRelease(t *testing.T) {
 			got, err := dependencyVersionForWrapperRelease(tt.chart, tt.oldVer, "apps/g/example/dev")
 			if tt.wantErr {
 				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestGitLabTokenPushRemote(t *testing.T) {
+	tests := []struct {
+		name      string
+		remoteURL string
+		token     string
+		want      string
+		wantErr   string
+	}{
+		{
+			name:      "https remote",
+			remoteURL: "https://gitlab.example.com/group/subgroup/repo.git",
+			token:     "glpat-123",
+			want:      "https://oauth2:glpat-123@gitlab.example.com/group/subgroup/repo.git",
+		},
+		{
+			name:      "ssh remote",
+			remoteURL: "ssh://git@gitlab.example.com/group/subgroup/repo.git",
+			token:     "glpat-123",
+			want:      "https://oauth2:glpat-123@gitlab.example.com/group/subgroup/repo.git",
+		},
+		{
+			name:      "scp remote",
+			remoteURL: "git@gitlab.example.com:group/subgroup/repo.git",
+			token:     "glpat-123",
+			want:      "https://oauth2:glpat-123@gitlab.example.com/group/subgroup/repo.git",
+		},
+		{
+			name:      "unsupported local remote",
+			remoteURL: "/tmp/origin.git",
+			token:     "glpat-123",
+			wantErr:   "unsupported remote URL",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := gitLabTokenPushRemote(tt.remoteURL, tt.token)
+			if tt.wantErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantErr)
 				return
 			}
 			require.NoError(t, err)

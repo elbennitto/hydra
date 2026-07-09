@@ -36,7 +36,7 @@ dependencies:
 `)
 	require.NoError(t, os.WriteFile(filepath.Join(chartDir, "Chart.yaml"), originalChart, 0o644))
 
-	require.NoError(t, DownloadChartDependencies(log.Default(), chartDir, nil, ""))
+	require.NoError(t, DownloadChartDependencies(log.Default(), chartDir, nil))
 	require.FileExists(t, filepath.Join(chartDir, "charts", "infra_library-1.2.3.tgz"))
 
 	restoredChart, err := os.ReadFile(filepath.Join(chartDir, "Chart.yaml"))

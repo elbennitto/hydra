@@ -265,23 +265,23 @@ func (r *Repo) Checkout(name string) *Repo {
 
 	originHead, originHeadErr := r.resolveOriginHead()
 	if originHeadErr != nil {
-		log.Default().Info(logIdGitRepo, "origin/HEAD could not be resolved before checkout",
+		log.Default().DebugLog(logIdGitRepo, "origin/HEAD could not be resolved before checkout",
 			log.String("branch", name),
 			log.String("reason", originHeadErr.Error()))
 	} else {
-		log.Default().Info(logIdGitRepo, "resolved origin/HEAD before checkout",
+		log.Default().DebugLog(logIdGitRepo, "resolved origin/HEAD before checkout",
 			log.String("branch", originHead.localBranch),
 			log.String("remoteRef", originHead.remoteRef.String()))
 	}
 
 	if r.BranchExists(name) {
-		log.Default().Info(logIdGitRepo, "checking out existing local branch",
+		log.Default().DebugLog(logIdGitRepo, "checking out existing local branch",
 			log.String("branch", name))
 		return r.checkoutBranch(name)
 	}
 
 	if originHeadErr == nil {
-		log.Default().Info(logIdGitRepo, "local branch missing; creating it from origin/HEAD",
+		log.Default().DebugLog(logIdGitRepo, "local branch missing; creating it from origin/HEAD",
 			log.String("branch", name),
 			log.String("originHead", originHead.localBranch),
 			log.String("remoteRef", originHead.remoteRef.String()))
@@ -320,7 +320,7 @@ func (r *Repo) CheckoutUpstreamBranch(upstream string) *Repo {
 					log.String("branch", fallbackBranch))
 				return r
 			}
-			log.Default().Info(logIdGitRepo, "configured upstream unavailable; falling back to existing local branch",
+			log.Default().DebugLog(logIdGitRepo, "configured upstream unavailable; falling back to existing local branch",
 				log.String("upstream", upstream),
 				log.String("branch", fallbackBranch),
 				log.String("reason", err.Error()))
@@ -342,19 +342,19 @@ func (r *Repo) CheckoutUpstreamBranch(upstream string) *Repo {
 			log.String("branch", resolved.localBranch),
 			log.String("remoteRef", resolved.remoteRef.String()))
 	} else {
-		log.Default().Info(logIdGitRepo, "resolved upstream branch before checkout",
+		log.Default().DebugLog(logIdGitRepo, "resolved upstream branch before checkout",
 			log.String("upstream", resolved.requestedUpstream),
 			log.String("branch", resolved.localBranch),
 			log.String("remoteRef", resolved.remoteRef.String()))
 	}
 
 	if r.BranchExists(resolved.localBranch) {
-		log.Default().Info(logIdGitRepo, "checking out existing local branch",
+		log.Default().DebugLog(logIdGitRepo, "checking out existing local branch",
 			log.String("branch", resolved.localBranch))
 		return r.checkoutBranch(resolved.localBranch)
 	}
 
-	log.Default().Info(logIdGitRepo, "local branch missing; creating it from configured upstream",
+	log.Default().DebugLog(logIdGitRepo, "local branch missing; creating it from configured upstream",
 		log.String("branch", resolved.localBranch),
 		log.String("upstream", resolved.requestedUpstream),
 		log.String("remoteRef", resolved.remoteRef.String()))
@@ -498,6 +498,28 @@ func (r *Repo) LoadChart(dir string) (*Chart, error) {
 	return loadChartFromDir(absDir, r.path, dir)
 }
 
+// ChartYAMLAt returns the raw Chart.yaml contents at the given ref and chart
+// directory.
+func (r *Repo) ChartYAMLAt(ref, dir string) (string, error) {
+	commit, err := r.resolveCommit(ref)
+	if err != nil {
+		return "", err
+	}
+	tree, err := commit.Tree()
+	if err != nil {
+		return "", err
+	}
+	file, err := tree.File(filepath.ToSlash(filepath.Join(dir, "Chart.yaml")))
+	if err != nil {
+		return "", err
+	}
+	contents, err := file.Contents()
+	if err != nil {
+		return "", err
+	}
+	return contents, nil
+}
+
 // RemoteURL returns the URL of the "origin" remote.
 func (r *Repo) RemoteURL() (string, error) {
 	remote, err := r.repo.Remote("origin")
@@ -509,6 +531,19 @@ func (r *Repo) RemoteURL() (string, error) {
 		return "", fmt.Errorf("remote origin has no URLs")
 	}
 	return urls[0], nil
+}
+
+// ResolveUpstreamBranch returns the local branch name for the configured upstream ref.
+// Examples: "origin/main" -> "main", "origin/HEAD" -> repository default branch.
+func (r *Repo) ResolveUpstreamBranch(upstream string) (string, error) {
+	if r.Err != nil {
+		return "", r.Err
+	}
+	resolved, err := r.resolveUpstreamBranch(upstream)
+	if err != nil {
+		return "", err
+	}
+	return resolved.localBranch, nil
 }
 
 // CurrentBranch returns the current branch name.

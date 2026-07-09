@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -14,7 +15,7 @@ import (
 	"hydra-gitops.org/hydra/hydra-go/core/git"
 )
 
-func TestRunTest_NoChanges_SkipsHelm(t *testing.T) {
+func TestRunTest_NoChanges_StillRunsHelmForAllCharts(t *testing.T) {
 	repo := git.Init(t.TempDir()).
 		CommitFS("init", git.NewFS().
 			File(".hydra-ci.yaml", configYAML("dev, stage", "")).
@@ -24,12 +25,22 @@ func TestRunTest_NoChanges_SkipsHelm(t *testing.T) {
 	require.NoError(t, repo.Err)
 
 	old := helmRunHook
+	var helmCalls int
 	helmRunHook = func(ctx context.Context, dir string, args ...string) ([]byte, error) {
-		return nil, fmt.Errorf("helm must not run when nothing changed: %v", args)
+		helmCalls++
+		switch {
+		case len(args) == 2 && args[0] == "lint" && args[1] == ".":
+			return []byte("lint ok"), nil
+		case len(args) == 3 && args[0] == "template" && args[1] == "service-ui" && args[2] == ".":
+			return []byte("template ok"), nil
+		default:
+			return nil, fmt.Errorf("unexpected helm invocation: %v", args)
+		}
 	}
 	t.Cleanup(func() { helmRunHook = old })
 
 	require.NoError(t, RunTest(configPath(repo), ModeLocal))
+	assert.Equal(t, 2, helmCalls)
 }
 
 func TestRunTest_DryRun_DoesNotInvokeHelm(t *testing.T) {
@@ -62,7 +73,7 @@ func TestRunDownload_DryRun_DoesNotInvokeDownloader(t *testing.T) {
 	require.NoError(t, repo.Err)
 
 	old := downloadChartDependencies
-	downloadChartDependencies = func(_ log.Logger, _ string, _ *v2chart.Chart, _ string) error {
+	downloadChartDependencies = func(_ log.Logger, _ string, _ *v2chart.Chart) error {
 		return fmt.Errorf("downloader must not run in dry-run")
 	}
 	t.Cleanup(func() { downloadChartDependencies = old })
@@ -70,7 +81,7 @@ func TestRunDownload_DryRun_DoesNotInvokeDownloader(t *testing.T) {
 	require.NoError(t, RunDownload(configPath(repo), ModeDryRun))
 }
 
-func TestRunTest_Local_RunsLintAndTemplateForChangedCharts(t *testing.T) {
+func TestRunTest_Local_RunsLintAndTemplateForAllCharts(t *testing.T) {
 	repo := git.Init(t.TempDir()).
 		CommitFS("init", git.NewFS().
 			File(".hydra-ci.yaml", configYAML("dev, stage", "")).
@@ -79,8 +90,7 @@ func TestRunTest_Local_RunsLintAndTemplateForChangedCharts(t *testing.T) {
 					Version("1.0.0-dev").
 					Dep("service-ui", "1.0.0", "oci://registry/helm"),
 			).
-			Add("apps/demo/service-ui/dev/charts/service-ui", git.NewChart("service-ui").Version("1.0.0")).
-			Add("apps/demo/service-auth/dev", git.NewChart("service-auth").Version("1.0.0-dev")),
+			Add("apps/demo/service-ui/dev/charts/service-ui", git.NewChart("service-ui").Version("1.0.0")),
 		).
 		Tag("build-001").
 		Commit("change one chart", "apps/demo/service-ui/dev/values.yaml", "x: y\n")
@@ -236,6 +246,110 @@ func TestRunTest_Local_FailsWhenChildVersionDoesNotMatchDependencyAndEnv(t *test
 	assert.Contains(t, err.Error(), `expected "1.0.0-dev"`)
 }
 
+func TestRunTest_Local_AllowsConfiguredPromoteDefaultVersion(t *testing.T) {
+	repo := git.Init(t.TempDir()).
+		CommitFS("init", git.NewFS().
+			File(".hydra-ci.yaml", "ci:\n"+
+				"  rootAppsPath: apps\n"+
+				"  environments: [dev, stage]\n"+
+				"  appGroups:\n"+
+				"    - name: demo\n"+
+				"      path: apps/demo\n"+
+				"  registry: \"oci://registry/helm\"\n"+
+				"  promote:\n"+
+				"    promotableRootApps: []\n"+
+				"    newChartVersion: 0.0.0\n").
+			Add("apps/demo/service-ui/dev",
+				git.NewChart("service-ui").
+					Version("0.0.0").
+					Dep("service-ui", "1.0.0", "oci://registry/helm"),
+			).
+			Add("apps/demo/service-ui/dev/charts/service-ui", git.NewChart("service-ui").Version("1.0.0")),
+		).
+		Tag("build-001").
+		Commit("change chart", "apps/demo/service-ui/dev/values.yaml", "x: y\n")
+	require.NoError(t, repo.Err)
+
+	old := helmRunHook
+	var helmCalls int
+	helmRunHook = func(ctx context.Context, dir string, args ...string) ([]byte, error) {
+		helmCalls++
+		switch {
+		case len(args) == 2 && args[0] == "lint" && args[1] == ".":
+			return []byte("lint ok"), nil
+		case len(args) == 3 && args[0] == "template" && args[1] == "service-ui" && args[2] == ".":
+			return []byte("template ok"), nil
+		default:
+			return nil, fmt.Errorf("unexpected helm invocation: %v", args)
+		}
+	}
+	t.Cleanup(func() { helmRunHook = old })
+
+	require.NoError(t, RunTest(configPath(repo), ModeLocal))
+	assert.Equal(t, 2, helmCalls)
+}
+
+func TestRunTest_Local_RejectsResetVersionWhenNotConfigured(t *testing.T) {
+	repo := git.Init(t.TempDir()).
+		CommitFS("init", git.NewFS().
+			File(".hydra-ci.yaml", configYAML("dev, stage", "")).
+			Add("apps/demo/service-ui/dev",
+				git.NewChart("service-ui").
+					Version("0.0.0").
+					Dep("service-ui", "1.0.0", "oci://registry/helm"),
+			).
+			Add("apps/demo/service-ui/dev/charts/service-ui", git.NewChart("service-ui").Version("1.0.0")),
+		).
+		Tag("build-001").
+		Commit("change chart", "apps/demo/service-ui/dev/values.yaml", "x: y\n")
+	require.NoError(t, repo.Err)
+
+	old := helmRunHook
+	helmRunHook = func(ctx context.Context, dir string, args ...string) ([]byte, error) {
+		return nil, fmt.Errorf("helm must not run when version validation fails: %v", args)
+	}
+	t.Cleanup(func() { helmRunHook = old })
+
+	err := RunTest(configPath(repo), ModeLocal)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `version "0.0.0" does not match`)
+	assert.Contains(t, err.Error(), `directory environment "dev"`)
+}
+
+func TestRunTest_CI_AllowsImplicitPromoteDefaultVersion(t *testing.T) {
+	repo := git.Init(t.TempDir()).
+		CommitFS("init", git.NewFS().
+			File(".hydra-ci.yaml", configYAML("dev, stage", "")).
+			Add("apps/demo/service-ui/stage",
+				git.NewChart("service-ui").
+					Version("0.0.0").
+					Dep("service-ui", "1.0.0", "oci://registry/helm"),
+			).
+			Add("apps/demo/service-ui/stage/charts/service-ui", git.NewChart("service-ui").Version("1.0.0")),
+		).
+		Tag("build-001").
+		Commit("change chart", "apps/demo/service-ui/stage/values.yaml", "x: y\n")
+	require.NoError(t, repo.Err)
+
+	old := helmRunHook
+	var helmCalls int
+	helmRunHook = func(ctx context.Context, dir string, args ...string) ([]byte, error) {
+		helmCalls++
+		switch {
+		case len(args) == 2 && args[0] == "lint" && args[1] == ".":
+			return []byte("lint ok"), nil
+		case len(args) == 3 && args[0] == "template" && args[1] == "service-ui" && args[2] == ".":
+			return []byte("template ok"), nil
+		default:
+			return nil, fmt.Errorf("unexpected helm invocation: %v", args)
+		}
+	}
+	t.Cleanup(func() { helmRunHook = old })
+
+	require.NoError(t, RunTest(configPath(repo), ModeCI))
+	assert.Equal(t, 2, helmCalls)
+}
+
 func TestRunTest_Local_FailsWhenRootVersionEnvSuffixIsWrong(t *testing.T) {
 	repo := git.Init(t.TempDir()).
 		CommitFS("init", git.NewFS().
@@ -340,7 +454,7 @@ func TestRunTest_Local_LogsSummaryWhenSomeChartsFail(t *testing.T) {
 	assert.Contains(t, logs, "1 chart(s) failed")
 }
 
-func TestRunDownload_Local_DownloadsChangedChartsEvenWhenDependenciesExist(t *testing.T) {
+func TestRunDownload_Local_DownloadsAllChartsEvenWhenDependenciesExist(t *testing.T) {
 	repo := git.Init(t.TempDir()).
 		CommitFS("init", git.NewFS().
 			File(".hydra-ci.yaml", configYAML("dev, stage", "")).
@@ -357,7 +471,7 @@ func TestRunDownload_Local_DownloadsChangedChartsEvenWhenDependenciesExist(t *te
 
 	old := downloadChartDependencies
 	var downloadPaths []string
-	downloadChartDependencies = func(_ log.Logger, chartPath string, _ *v2chart.Chart, _ string) error {
+	downloadChartDependencies = func(_ log.Logger, chartPath string, _ *v2chart.Chart) error {
 		downloadPaths = append(downloadPaths, chartPath)
 		return nil
 	}
@@ -389,9 +503,9 @@ func TestRunDownload_Local_LogsIntoConfiguredDownloadRegistries(t *testing.T) {
 		assert.Equal(t, configPath(repo), gotConfigPath)
 		return "/tmp/hydra-test-registry-config.json", func() {}, nil
 	}
-	downloadChartDependencies = func(_ log.Logger, chartPath string, _ *v2chart.Chart, registryConfigPath string) error {
+	downloadChartDependencies = func(_ log.Logger, chartPath string, _ *v2chart.Chart) error {
 		assert.Contains(t, chartPath, "apps/demo/service-ui/dev")
-		usedConfigPath = registryConfigPath
+		usedConfigPath = os.Getenv("HELM_REGISTRY_CONFIG")
 		return nil
 	}
 	t.Cleanup(func() {
@@ -423,7 +537,7 @@ func TestRunDownload_Local_ExtendsMissingTokenErrorReport(t *testing.T) {
 		assert.Equal(t, configPath(repo), gotConfigPath)
 		return "", func() {}, nil
 	}
-	downloadChartDependencies = func(_ log.Logger, chartPath string, _ *v2chart.Chart, registryConfigPath string) error {
+	downloadChartDependencies = func(_ log.Logger, chartPath string, _ *v2chart.Chart) error {
 		return fmt.Errorf(`could not download oci://harbor.example.test/team/chart: failed to perform "FetchReference" on source: GET "https://harbor.example.test/v2/team/chart/manifests/1.2.3": basic credential not found`)
 	}
 	t.Cleanup(func() {

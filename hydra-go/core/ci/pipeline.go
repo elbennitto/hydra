@@ -34,11 +34,11 @@ const (
 
 func RunTest(configPath string, mode Mode) error {
 	l := log.Default()
-	return runChangedChartPipeline(configPath, mode, "test", herrors.ErrCiTest, func(rel string) {
+	return runChartPipeline(configPath, mode, "test", herrors.ErrCiTest, func(rel string) {
 		l.Info(logIdCI, "ci test dry-run: would verify local dependencies, then run helm lint and helm template for {path}",
 			log.String("path", rel))
-	}, func(repo *git.Repo, rel, absDir string) error {
-		if err := validateChartVersionForTest(repo, rel); err != nil {
+	}, func(repo *git.Repo, cfg *Config, rel, absDir string) error {
+		if err := validateChartVersionForTest(repo, cfg, rel, mode); err != nil {
 			return err
 		}
 
@@ -94,25 +94,27 @@ func RunDownload(configPath string, mode Mode) error {
 	}
 	defer cleanup()
 
-	return runChangedChartPipeline(configPath, mode, "download", herrors.ErrCiDownload, func(rel string) {
-		l.Info(logIdCI, "ci download dry-run: would fetch dependencies for chart {path}",
-			log.String("path", rel))
-	}, func(_ *git.Repo, rel, absDir string) error {
-		if err := downloadChartDependencies(l, absDir, nil, registryConfigPath); err != nil {
-			return fmt.Errorf("chart %s: dependency download: %w", rel, extendDownloadAuthError(configPath, err, registryConfigPath))
-		}
-		l.Info(logIdCI, "ci download fetched dependencies for chart {path}", log.String("path", rel))
-		return nil
-	}, false, nil)
+	return withHelmRegistryConfig(registryConfigPath, func() error {
+		return runChartPipeline(configPath, mode, "download", herrors.ErrCiDownload, func(rel string) {
+			l.Info(logIdCI, "ci download dry-run: would fetch dependencies for chart {path}",
+				log.String("path", rel))
+		}, func(_ *git.Repo, _ *Config, rel, absDir string) error {
+			if err := downloadChartDependencies(l, absDir, nil); err != nil {
+				return fmt.Errorf("chart %s: dependency download: %w", rel, extendDownloadAuthError(configPath, err, registryConfigPath))
+			}
+			l.DebugLog(logIdCI, "ci download fetched dependencies for chart {path}", log.String("path", rel))
+			return nil
+		}, false, nil)
+	})
 }
 
-func runChangedChartPipeline(
+func runChartPipeline(
 	configPath string,
 	mode Mode,
 	pipelineName string,
 	pipelineErrId herrors.ErrorId,
 	logDryRun func(rel string),
-	runChart func(repo *git.Repo, rel, absDir string) error,
+	runChart func(repo *git.Repo, cfg *Config, rel, absDir string) error,
 	collectErrors bool,
 	logSummary func(successCount, failureCount int),
 ) error {
@@ -151,15 +153,15 @@ func runChangedChartPipeline(
 	}
 	cfg.CI.RootAppsPath = filepath.ToSlash(relChartsPath)
 
-	chartRelPaths, err := changedChartPathsForTest(repo, cfg)
+	chartRelPaths, err := chartPathsForPipeline(repo, cfg)
 	if err != nil {
-		return log.CreateError(pipelineErrId, "ci {pipeline}: detect changed charts: {err}",
+		return log.CreateError(pipelineErrId, "ci {pipeline}: list charts: {err}",
 			log.String("pipeline", pipelineName),
 			log.Err(err),
 		)
 	}
 	if len(chartRelPaths) == 0 {
-		l.Info(logIdCI, "ci {pipeline}: no changed charts detected", log.String("pipeline", pipelineName))
+		l.Info(logIdCI, "ci {pipeline}: no charts detected", log.String("pipeline", pipelineName))
 		return nil
 	}
 
@@ -171,7 +173,7 @@ func runChangedChartPipeline(
 			logDryRun(rel)
 			continue
 		}
-		if err := runChart(repo, rel, absDir); err != nil {
+		if err := runChart(repo, cfg, rel, absDir); err != nil {
 			pipelineErr := log.CreateError(pipelineErrId, "ci {pipeline} failed for chart {path}: {err}",
 				log.String("pipeline", pipelineName),
 				log.String("path", rel),
@@ -273,7 +275,7 @@ func registryHostFromError(err error) string {
 	return normalizeRegistryHost(rawURL)
 }
 
-func changedChartPathsForTest(repo *git.Repo, cfg *Config) ([]string, error) {
+func chartPathsForPipeline(repo *git.Repo, cfg *Config) ([]string, error) {
 	pattern := filepath.Join(cfg.CI.RootAppsPath, "*", "*", "*")
 	matches, err := filepath.Glob(filepath.Join(repo.Path(), pattern))
 	if err != nil {
@@ -295,13 +297,7 @@ func changedChartPathsForTest(repo *git.Repo, cfg *Config) ([]string, error) {
 			continue
 		}
 
-		changed, errChanged := chartDirChangedSinceLastRelease(repo, relPath)
-		if errChanged != nil {
-			return nil, errChanged
-		}
-		if changed {
-			chartRelPaths = append(chartRelPaths, relPath)
-		}
+		chartRelPaths = append(chartRelPaths, relPath)
 	}
 
 	sort.Strings(chartRelPaths)
@@ -331,7 +327,7 @@ func optionalTestValuesArgs(chartDir string) ([]string, error) {
 	return nil, fmt.Errorf("stat optional test values file %s: %w", path, err)
 }
 
-func validateChartVersionForTest(repo *git.Repo, relPath string) error {
+func validateChartVersionForTest(repo *git.Repo, cfg *Config, relPath string, mode Mode) error {
 	group, app, env, err := ParseChartPath(relPath)
 	if err != nil {
 		return fmt.Errorf("chart %s: parse chart path: %w", relPath, err)
@@ -343,6 +339,24 @@ func validateChartVersionForTest(repo *git.Repo, relPath string) error {
 	}
 
 	version := ch.GetVersion()
+	if mode == ModeCI {
+		allowedDefault := defaultCIPromoteNewChartVersion
+		if cfg != nil {
+			configuredDefault := strings.TrimSpace(cfg.CI.Promote.NewChartVersion)
+			if configuredDefault != "" {
+				allowedDefault = configuredDefault
+			}
+		}
+		if version == allowedDefault {
+			return nil
+		}
+	} else if cfg != nil {
+		configuredDefault := strings.TrimSpace(cfg.CI.Promote.NewChartVersion)
+		if configuredDefault != "" && version == configuredDefault {
+			return nil
+		}
+	}
+
 	parsed, err := ParseChartVersion(version)
 	if err != nil {
 		return fmt.Errorf("chart %s: invalid Chart.yaml version %q: %w", relPath, version, err)

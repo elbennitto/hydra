@@ -106,6 +106,15 @@ func TestValidateSecrets_RejectsIncompleteRegistryToken(t *testing.T) {
 	assert.Contains(t, err.Error(), "secrets.registryTokens[0].token must not be empty")
 }
 
+func TestValidateSecrets_AllowsPublishGitLabTokenWithoutSigningKeys(t *testing.T) {
+	err := validateSecrets(SecretsValues{
+		Publish: PublishSecrets{
+			GitLabToken: "glpat-example",
+		},
+	}, filepath.Join(t.TempDir(), SecretsFileName))
+	require.NoError(t, err)
+}
+
 func TestFindNearestSopsConfig_FindsParentConfig(t *testing.T) {
 	root := t.TempDir()
 	targetDir := filepath.Join(root, "nested")

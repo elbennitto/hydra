@@ -360,6 +360,59 @@ func TestRunPublish_CI_UsesPreparedRegistryAuthForRemoteChecksAndPush(t *testing
 	assert.Equal(t, "/tmp/hydra-publish-registry-config.json", seenPushConfig)
 }
 
+func TestRunPublish_CI_UsesPreparedRegistryAuthForDependencyDownload(t *testing.T) {
+	stubPackageSigningSecrets(t)
+	dir := t.TempDir()
+	fs := git.NewFS().
+		File(ConfigFileName, `ci:
+  rootAppsPath: apps
+  environments: [dev, stage, prod]
+  registry: oci://registry/helm
+  appGroups:
+    - name: demo
+      path: apps/demo
+`).
+		Add("apps/demo/service-ui/dev", git.NewChart("service-ui").Version("1.0.0-dev"))
+	repo := git.Init(dir).CommitFS("init", fs)
+	require.NoError(t, repo.Err)
+	repo.Tag("build-202601011200").Tag("demo-service-ui-1.0.0-dev")
+	require.NoError(t, repo.Err)
+
+	oldAuth := prepareRegistryAuthHook
+	oldDownload := downloadChartDependencies
+	oldPackage := packageChartArchiveHook
+	oldPush := pushChartArchiveHook
+	oldExists := remoteChartExistsHook
+	var seenConfig string
+	prepareRegistryAuthHook = func(configPath string) (string, func(), error) {
+		assert.Equal(t, filepath.Join(dir, ConfigFileName), configPath)
+		return "/tmp/hydra-publish-registry-config.json", func() {}, nil
+	}
+	downloadChartDependencies = func(_ log.Logger, _ string, _ *v2chart.Chart) error {
+		seenConfig = os.Getenv("HELM_REGISTRY_CONFIG")
+		return nil
+	}
+	packageChartArchiveHook = func(chartDir, stageDir string, signing *packageSigningConfig) (packageArtifact, error) {
+		return packageArtifact{TGZPath: filepath.Join(stageDir, "service-ui-1.0.0-dev.tgz"), ProvPath: filepath.Join(stageDir, "service-ui-1.0.0-dev.tgz.prov")}, nil
+	}
+	remoteChartExistsHook = func(registryURL, chartName, version string, registryConfigPath string) (bool, error) {
+		return false, nil
+	}
+	pushChartArchiveHook = func(artifact packageArtifact, registryURL, chartName, version string, registryConfigPath string) error {
+		return nil
+	}
+	t.Cleanup(func() {
+		prepareRegistryAuthHook = oldAuth
+		downloadChartDependencies = oldDownload
+		packageChartArchiveHook = oldPackage
+		pushChartArchiveHook = oldPush
+		remoteChartExistsHook = oldExists
+	})
+
+	require.NoError(t, RunPublish(filepath.Join(dir, ConfigFileName), ModeCI, nil, false, false, false))
+	assert.Equal(t, "/tmp/hydra-publish-registry-config.json", seenConfig)
+}
+
 func TestRunPublish_CI_FailsWithoutUploadRegistryToken(t *testing.T) {
 	stubPackageSigningSecrets(t)
 	dir := t.TempDir()
@@ -487,39 +540,50 @@ func TestRunPublish_CI_CosignOnlySignsRemoteArtifact(t *testing.T) {
 	}
 	oldPackage := packageChartArchiveHook
 	oldPush := pushChartArchiveHook
+	oldUploadWithoutTag := uploadChartWithoutTagHook
+	oldTagOCI := tagOCIChartHook
 	oldExists := remoteChartExistsHook
 	oldResolve := signOCIChartHook
-	oldDigestResolve := resolveOCIChartDigestRefHook
 	var signedRef string
+	callOrder := make([]string, 0, 3)
 	packageChartArchiveHook = func(chartDir, stageDir string, signing *packageSigningConfig) (packageArtifact, error) {
 		assert.Nil(t, signing)
 		return packageArtifact{TGZPath: filepath.Join(stageDir, "service-ui-1.0.0-dev.tgz")}, nil
 	}
 	pushChartArchiveHook = func(artifact packageArtifact, registryURL, chartName, version string, registryConfigPath string) error {
+		return fmt.Errorf("legacy push path must not run when cosign signing is enabled")
+	}
+	uploadChartWithoutTagHook = func(artifact packageArtifact, registryURL, chartName, version string, registryConfigPath string) (string, error) {
+		callOrder = append(callOrder, "upload")
+		return "registry/helm/service-ui@sha256:deadbeef", nil
+	}
+	tagOCIChartHook = func(registryURL, chartName, version, digestRef, registryConfigPath string) error {
+		assert.Equal(t, "registry/helm/service-ui@sha256:deadbeef", digestRef)
+		callOrder = append(callOrder, "tag")
 		return nil
 	}
 	remoteChartExistsHook = func(registryURL, chartName, version string, registryConfigPath string) (bool, error) {
 		return false, nil
 	}
 	signOCIChartHook = func(ref string, keyPath string) error {
+		callOrder = append(callOrder, "sign")
 		signedRef = ref
 		assert.NotEmpty(t, keyPath)
 		return nil
-	}
-	resolveOCIChartDigestRefHook = func(registryURL, chartName, version string, registryConfigPath string) (string, error) {
-		return "registry/helm/service-ui@sha256:deadbeef", nil
 	}
 	t.Cleanup(func() {
 		loadSecretsConfigHook = oldSecretsLoad
 		loadPublicCosignConfigHook = oldPublicCosignLoad
 		packageChartArchiveHook = oldPackage
 		pushChartArchiveHook = oldPush
+		uploadChartWithoutTagHook = oldUploadWithoutTag
+		tagOCIChartHook = oldTagOCI
 		remoteChartExistsHook = oldExists
 		signOCIChartHook = oldResolve
-		resolveOCIChartDigestRefHook = oldDigestResolve
 	})
 
 	require.NoError(t, RunPublish(filepath.Join(dir, ConfigFileName), ModeCI, nil, false, false, false))
+	assert.Equal(t, []string{"upload", "sign", "tag"}, callOrder)
 	assert.Contains(t, signedRef, "registry/helm/service-ui@")
 }
 

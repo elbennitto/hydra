@@ -388,6 +388,14 @@ func TestComputePromoteTargetVersion(t *testing.T) {
 			wantErr:       true,
 		},
 		{
+			name:                  "default reset version allowed without source suffix",
+			sourceVersion:         "0.0.0",
+			sourceEnv:             "stage",
+			targetEnv:             "prod",
+			existingTargetVersion: "1.2.3",
+			expected:              "0.0.0",
+		},
+		{
 			name:                  "prerelease dev to stage",
 			sourceVersion:         "1.5.1-2b866935-dev",
 			sourceEnv:             "dev",

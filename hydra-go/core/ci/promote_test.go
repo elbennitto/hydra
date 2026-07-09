@@ -20,8 +20,8 @@ type mockPromoteActions struct {
 	err        error
 }
 
-func (m *mockPromoteActions) ExecutePromotion(_ *git.Repo, entry PromotionEntry, _ *Config) error {
-	m.executions = append(m.executions, entry)
+func (m *mockPromoteActions) ExecutePromotion(_ *git.Repo, entry *PromotionEntry, _ *Config) error {
+	m.executions = append(m.executions, *entry)
 	return m.err
 }
 
@@ -53,6 +53,15 @@ func addOriginBareRemote(t *testing.T, repo *git.Repo) string {
 	out, err = exec.Command("git", "-C", repo.Path(), "remote", "add", "origin", remoteDir).CombinedOutput()
 	require.NoError(t, err, string(out))
 	return remoteDir
+}
+
+func stubEnsurePromoteMergeRequest(t *testing.T, fn func(repo *git.Repo, entry PromotionEntry, cfg *Config) error) {
+	t.Helper()
+	prev := ensurePromoteMergeRequestHook
+	ensurePromoteMergeRequestHook = fn
+	t.Cleanup(func() {
+		ensurePromoteMergeRequestHook = prev
+	})
 }
 
 // --- Detection Tests (using mock) ---
@@ -402,6 +411,39 @@ func TestPromote_RootAppAllowed(t *testing.T) {
 	require.Len(t, mock.executions, 1)
 }
 
+func TestPromote_MissingSourceChartYAML_IsSkippedWithoutError(t *testing.T) {
+	repo := git.Init(t.TempDir())
+
+	repo.CommitFS("init", git.NewFS().
+		File(".hydra-ci.yaml", configYAML("stage, prod", "")).
+		File("apps/demo/service-ui/stage/values.yaml", "replicaCount: 1\n").
+		Add("apps/demo/service-ui/prod",
+			git.NewChart("service-ui").
+				Version("1.195.0").
+				Dep("service-ui", "1.195.0", "oci://registry/helm"),
+		),
+	)
+	require.NoError(t, repo.Err)
+
+	mock := &mockPromoteActions{}
+	result, err := RunPromote(configPath(repo), ModeLocal, mock, "", "")
+	require.NoError(t, err)
+	require.Len(t, result.Promotions, 1)
+
+	var stageToProd PromotionEntry
+	for _, p := range result.Promotions {
+		if p.SourceEnv == "stage" && p.TargetEnv == "prod" {
+			stageToProd = p
+			break
+		}
+	}
+
+	assert.True(t, stageToProd.Skipped)
+	assert.False(t, stageToProd.HasError)
+	assert.Equal(t, "source chart missing Chart.yaml", stageToProd.SkipReason)
+	require.Empty(t, mock.executions)
+}
+
 func TestPromote_MultipleCharts(t *testing.T) {
 	repo := git.Init(t.TempDir()).
 		CommitFS("init", git.NewFS().
@@ -490,6 +532,35 @@ func TestPromote_ThreeEnvs_BothPairs(t *testing.T) {
 	assert.Equal(t, "stage", stageToProd.SourceEnv)
 	assert.Equal(t, "prod", stageToProd.TargetEnv)
 	assert.Equal(t, "1.195.0", stageToProd.NewVersion)
+}
+
+func TestPromote_StageToProd_AllowsDefaultResetVersionSource(t *testing.T) {
+	repo := git.Init(t.TempDir()).
+		CommitFS("init", git.NewFS().
+			File(".hydra-ci.yaml", configYAML("stage, prod", "")).
+			Add("apps/demo/service-ui/stage",
+				git.NewChart("service-ui").
+					Version("0.0.0").
+					Dep("service-ui", "1.200.9", "oci://registry/helm"),
+			).
+			Add("apps/demo/service-ui/prod",
+				git.NewChart("service-ui").
+					Version("1.195.0").
+					Dep("service-ui", "1.195.0", "oci://registry/helm"),
+			),
+		)
+	require.NoError(t, repo.Err)
+
+	mock := &mockPromoteActions{}
+	result, err := RunPromote(configPath(repo), ModeLocal, mock, "", "")
+	require.NoError(t, err)
+
+	require.Len(t, result.Promotions, 1)
+	p := result.Promotions[0]
+	assert.Equal(t, "stage", p.SourceEnv)
+	assert.Equal(t, "prod", p.TargetEnv)
+	assert.False(t, p.Skipped)
+	assert.Equal(t, "1.195.0", p.NewVersion)
 }
 
 func TestPromote_PromoteTo_FiltersTargetEnv(t *testing.T) {
@@ -692,7 +763,10 @@ func TestPromote_CI_CreatesBranchAndCommit(t *testing.T) {
 			),
 		)
 	require.NoError(t, repo.Err)
-		remoteDir := addOriginBareRemote(t, repo)
+	remoteDir := addOriginBareRemote(t, repo)
+	stubEnsurePromoteMergeRequest(t, func(_ *git.Repo, _ PromotionEntry, _ *Config) error {
+		return nil
+	})
 
 	actions := &ciPromoteActions{}
 	result, err := RunPromote(configPath(repo), ModeCI, actions, "", "")
@@ -715,6 +789,45 @@ func TestPromote_CI_CreatesBranchAndCommit(t *testing.T) {
 
 	out, err := exec.Command("git", "--git-dir", remoteDir, "show-ref", "--verify", "refs/heads/"+branch).CombinedOutput()
 	require.NoError(t, err, string(out))
+}
+
+func TestPromote_CI_AutoStagesTrackedChangesBeforeBranchCheckout(t *testing.T) {
+	repo := git.Init(t.TempDir()).
+		CommitFS("init", git.NewFS().
+			File(".hydra-ci.yaml", configYAML("dev, stage", "")).
+			Add("apps/demo/service-ui/dev",
+				git.NewChart("service-ui").
+					Version("1.200.9-dev").
+					Dep("service-ui", "1.200.9", "oci://registry/helm").
+					Values("replicaCount: 2\n"),
+			).
+			Add("apps/demo/service-ui/stage",
+				git.NewChart("service-ui").
+					Version("1.198.3-stage").
+					Dep("service-ui", "1.198.3", "oci://registry/helm").
+					Values("replicaCount: 1\n"),
+			),
+		)
+	require.NoError(t, repo.Err)
+
+	_ = addOriginBareRemote(t, repo)
+	stubEnsurePromoteMergeRequest(t, func(_ *git.Repo, _ PromotionEntry, _ *Config) error {
+		return nil
+	})
+
+	devChartPath := filepath.Join(repo.Path(), "apps/demo/service-ui/dev/Chart.yaml")
+	devChartRaw, err := os.ReadFile(devChartPath)
+	require.NoError(t, err)
+	updatedChart := strings.Replace(string(devChartRaw), "version: 1.200.9", "version: 1.201.0", 1)
+	require.NotEqual(t, string(devChartRaw), updatedChart)
+	require.NoError(t, os.WriteFile(devChartPath, []byte(updatedChart), 0o644))
+
+	actions := &ciPromoteActions{}
+	logs := captureCILogs(t, func() {
+		_, err = RunPromote(configPath(repo), ModeCI, actions, "", "")
+	})
+	require.NoError(t, err)
+	assert.Contains(t, logs, "staged tracked changes before promote branch checkout")
 }
 
 func TestPromote_CI_ExistingRemoteBranch_PreservesVersionAndPushesChanges(t *testing.T) {
@@ -757,11 +870,19 @@ func TestPromote_CI_ExistingRemoteBranch_PreservesVersionAndPushesChanges(t *tes
 	require.NoError(t, err, string(beforeRaw))
 	before := strings.TrimSpace(string(beforeRaw))
 
+	var mrCalls []PromotionEntry
+	stubEnsurePromoteMergeRequest(t, func(_ *git.Repo, entry PromotionEntry, _ *Config) error {
+		mrCalls = append(mrCalls, entry)
+		return nil
+	})
+
 	actions := &ciPromoteActions{}
 	result, err := RunPromote(configPath(repo), ModeCI, actions, "", "")
 	require.NoError(t, err)
 	require.Len(t, result.Promotions, 1)
 	assert.False(t, result.Promotions[0].Skipped)
+	require.Len(t, mrCalls, 1)
+	assert.Equal(t, branch, mrCalls[0].Branch)
 
 	afterRaw, err := exec.Command("git", "--git-dir", remoteDir, "rev-parse", "refs/heads/"+branch).CombinedOutput()
 	require.NoError(t, err, string(afterRaw))
@@ -821,11 +942,20 @@ func TestPromote_CI_ExistingRemoteBranch_NoChanges_SkipsCommitAndPush(t *testing
 	require.NoError(t, err, string(beforeRaw))
 	before := strings.TrimSpace(string(beforeRaw))
 
+	var mrCalls []PromotionEntry
+	stubEnsurePromoteMergeRequest(t, func(_ *git.Repo, entry PromotionEntry, _ *Config) error {
+		mrCalls = append(mrCalls, entry)
+		return nil
+	})
+
 	actions := &ciPromoteActions{}
 	result, err := RunPromote(configPath(repo), ModeCI, actions, "", "")
 	require.NoError(t, err)
 	require.Len(t, result.Promotions, 1)
-	assert.False(t, result.Promotions[0].Skipped)
+	assert.True(t, result.Promotions[0].Skipped)
+	assert.Equal(t, "no differences", result.Promotions[0].SkipReason)
+	require.Len(t, mrCalls, 1)
+	assert.Equal(t, branch, mrCalls[0].Branch)
 
 	afterRaw, err := exec.Command("git", "--git-dir", remoteDir, "rev-parse", "refs/heads/"+branch).CombinedOutput()
 	require.NoError(t, err, string(afterRaw))
@@ -837,6 +967,44 @@ func TestPromote_CI_ExistingRemoteBranch_NoChanges_SkipsCommitAndPush(t *testing
 	promoted, err := repo.LoadChart("apps/demo/service-ui/stage")
 	require.NoError(t, err)
 	assert.Equal(t, "9.9.9-stage", promoted.GetVersion(), "existing remote chart version must stay unchanged")
+}
+
+func TestPromote_CI_NewRemoteBranch_CreatesMergeRequest(t *testing.T) {
+	const branch = "hydra/promote/to-stage/demo/service-ui"
+
+	repo := git.Init(t.TempDir()).
+		CommitFS("init", git.NewFS().
+			File(".hydra-ci.yaml", configYAML("dev, stage", "")).
+			Add("apps/demo/service-ui/dev",
+				git.NewChart("service-ui").
+					Version("1.200.9-dev").
+					Dep("service-ui", "1.200.9", "oci://registry/helm"),
+			).
+			Add("apps/demo/service-ui/stage",
+				git.NewChart("service-ui").
+					Version("1.198.3-stage").
+					Dep("service-ui", "1.198.3", "oci://registry/helm"),
+			),
+		)
+	require.NoError(t, repo.Err)
+
+	remoteDir := addOriginBareRemote(t, repo)
+	var mrCalls []PromotionEntry
+	stubEnsurePromoteMergeRequest(t, func(_ *git.Repo, entry PromotionEntry, _ *Config) error {
+		mrCalls = append(mrCalls, entry)
+		return nil
+	})
+
+	actions := &ciPromoteActions{}
+	result, err := RunPromote(configPath(repo), ModeCI, actions, "", "")
+	require.NoError(t, err)
+	require.Len(t, result.Promotions, 1)
+	require.Len(t, mrCalls, 1)
+	assert.Equal(t, branch, mrCalls[0].Branch)
+
+	remoteRefRaw, err := exec.Command("git", "--git-dir", remoteDir, "rev-parse", "refs/heads/"+branch).CombinedOutput()
+	require.NoError(t, err, string(remoteRefRaw))
+	assert.NotEmpty(t, strings.TrimSpace(string(remoteRefRaw)))
 }
 
 func TestPromote_CI_ExistingRemoteBranch_NoChanges_LogsSkipped(t *testing.T) {
@@ -861,6 +1029,9 @@ func TestPromote_CI_ExistingRemoteBranch_NoChanges_LogsSkipped(t *testing.T) {
 	require.NoError(t, repo.Err)
 
 	_ = addOriginBareRemote(t, repo)
+	stubEnsurePromoteMergeRequest(t, func(_ *git.Repo, _ PromotionEntry, _ *Config) error {
+		return nil
+	})
 
 	repo.Branch(branch).
 		CommitFS("seed remote promote branch", git.NewFS().
@@ -885,6 +1056,8 @@ func TestPromote_CI_ExistingRemoteBranch_NoChanges_LogsSkipped(t *testing.T) {
 	})
 	require.NoError(t, runErr)
 	require.Len(t, result.Promotions, 1)
+	assert.True(t, result.Promotions[0].Skipped)
+	assert.Equal(t, "no differences", result.Promotions[0].SkipReason)
 
 	assert.Contains(t, logs, "promote skipped:")
 	assert.Contains(t, logs, "service-ui")

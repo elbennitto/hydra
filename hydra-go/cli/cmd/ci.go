@@ -98,7 +98,7 @@ webhook).
 Use --local to commit changes without pushing, creating MRs, uploading to the
 registry, or sending notifications. Use --dry-run to simulate the entire flow
 without making any changes.`,
-		Example: `  # Download dependencies for changed charts
+		Example: `  # Download dependencies for all charts
   hydra ci run download .hydra-ci.yaml
 
   # Run the test pipeline in CI mode
@@ -115,13 +115,13 @@ without making any changes.`,
 	}
 
 	runCmd.AddCommand(newCiSubcommand("download",
-		"Download dependencies for changed charts",
-		"Detect changed charts via build-tag based change detection and run\nhelm dependency update for each changed chart, even if dependency\nartifacts already exist locally.",
+		"Download dependencies for all charts",
+		"List all charts in configured environments and run\nhelm dependency update for each chart, even if dependency\nartifacts already exist locally.",
 		params.CiDownload, ciFlags))
 
 	runCmd.AddCommand(newCiSubcommand("test",
-		"Validate changed charts (lint, template)",
-		"Detect changed charts via build-tag based change detection, verify\nthat dependencies are already present locally, and run helm lint\nand helm template on each chart. Fails if a dependency is missing.",
+		"Validate all charts (lint, template)",
+		"List all charts in configured environments, verify\nthat dependencies are already present locally, and run helm lint\nand helm template on each chart. Fails if a dependency is missing.",
 		params.CiTest, ciFlags))
 
 	runCmd.AddCommand(newCiSubcommand("release",

@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing/object"
 )
 
@@ -123,6 +124,45 @@ func (r *Repo) LastBuildTag(path string) (string, error) {
 	}
 
 	return "", fmt.Errorf("no build tag found that includes %s", path)
+}
+
+// FirstCommitAffectingPath returns the oldest commit reachable from HEAD that
+// changed the given path. This is used as the baseline for unreleased, newly
+// introduced charts so their initial checked-in version does not immediately
+// trigger an extra wrapper bump on the first release.
+func (r *Repo) FirstCommitAffectingPath(path string) (string, error) {
+	head, err := r.repo.Head()
+	if err != nil {
+		return "", fmt.Errorf("get HEAD: %w", err)
+	}
+
+	iter, err := r.repo.Log(&gogit.LogOptions{From: head.Hash()})
+	if err != nil {
+		return "", fmt.Errorf("commit log: %w", err)
+	}
+
+	var commits []*object.Commit
+	if err := iter.ForEach(func(commit *object.Commit) error {
+		commits = append(commits, commit)
+		return nil
+	}); err != nil {
+		return "", fmt.Errorf("iterate commits: %w", err)
+	}
+
+	dir := strings.TrimSuffix(path, "/")
+	for i := len(commits) - 1; i >= 0; i-- {
+		paths, err := commitChangedPaths(commits[i])
+		if err != nil {
+			return "", err
+		}
+		for _, p := range paths {
+			if strings.HasPrefix(p, dir+"/") || p == dir {
+				return commits[i].Hash.String(), nil
+			}
+		}
+	}
+
+	return "", fmt.Errorf("no commit found that includes %s", path)
 }
 
 // commitChangedPaths returns the file paths changed in a single commit

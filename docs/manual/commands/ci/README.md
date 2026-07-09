@@ -60,6 +60,20 @@ secrets:
 - Missing read tokens and missing write tokens produce extended error reports
   with the expected secret field and a minimal example snippet.
 
+### GitLab Token For Promote MRs
+
+`hydra ci run promote` can read the GitLab API token from the encrypted CI
+secrets file via `secrets.publish.gitlabToken`.
+
+```yaml
+secrets:
+  publish:
+    gitlabToken: <gitlab-api-token>
+```
+
+For MR creation Hydra requires this value in the secrets file; environment
+variables are not used as fallback.
+
 ## Persistent Flags
 
 These flags apply to `hydra ci run ...` subcommands, and are also accepted on `hydra ci` so they can flow into `run`. `--dry-run` and `--local` are mutually exclusive:
@@ -193,8 +207,8 @@ then update the matching
 `apps/<group>/root/<env>/` chart, then create a single commit and lightweight
 tags (`<group>-<app>-<version>`, `<group>-root-<version>`, `build-<UTC time>`)
 when using `--local`. `--dry-run` prints the plan without writing files.
-Default **CI** mode (no `--dry-run` / `--local`) is not yet connected to remote
-operations.
+Default **CI** mode (no `--dry-run` / `--local`) applies the release and pushes
+the commit plus release tags to `origin`.
 
 ```text
 hydra ci run release <config-path>

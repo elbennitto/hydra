@@ -312,7 +312,6 @@ func loadChartFromDir(absDir, repoRoot, relDir string) (*Chart, error) {
 			Repo:    d.Repository,
 		})
 	}
-
 	valuesPath := filepath.Join(absDir, "values.yaml")
 	if valData, err := os.ReadFile(valuesPath); err == nil {
 		s := string(valData)
@@ -320,6 +319,12 @@ func loadChartFromDir(absDir, repoRoot, relDir string) (*Chart, error) {
 	}
 
 	return c, nil
+}
+
+// RewriteChartYAMLVersion rewrites only the top-level version field in a raw
+// Chart.yaml document while preserving formatting.
+func RewriteChartYAMLVersion(raw []byte, newVersion string) (string, error) {
+	return rewriteChartYAMLVersion(raw, newVersion)
 }
 
 func setNestedValue(m map[string]any, keys []string, value string) {

@@ -26,7 +26,7 @@ var downloadChartDependenciesSleep = time.Sleep
 const dependencyDownloadRetryAttempts = 3
 const dependencyDownloadRetryDelay = 3 * time.Second
 
-func DownloadChartDependencies(l log.Logger, chartPath string, c *v2chart.Chart, registryConfigPath string) (err error) {
+func DownloadChartDependencies(l log.Logger, chartPath string, c *v2chart.Chart) (err error) {
 	l.Info(logIdHelm, "fetching missing dependencies of chart with path '{path}'",
 		log.String("path", chartPath))
 
@@ -76,26 +76,31 @@ func DownloadChartDependencies(l log.Logger, chartPath string, c *v2chart.Chart,
 
 	// Create a downloader manager
 	settings := cli.New()
-	if strings.TrimSpace(registryConfigPath) != "" {
-		settings.RegistryConfig = registryConfigPath
+	dependencyRepositories := chartDependencyRepositories(c)
+	registryConfigPath := strings.TrimSpace(settings.RegistryConfig)
+	if override := strings.TrimSpace(os.Getenv("HELM_REGISTRY_CONFIG")); override != "" {
+		registryConfigPath = override
 	}
 
 	// Initialize OCI registry client
-	registryClient, err := registry.NewClient(
-		registry.ClientOptCredentialsFile(settings.RegistryConfig),
+	registryClientOpts := []registry.ClientOption{
 		registry.ClientOptDebug(false),
 		registry.ClientOptEnableCache(true),
-	)
+	}
+	if registryConfigPath != "" {
+		registryClientOpts = append(registryClientOpts, registry.ClientOptCredentialsFile(registryConfigPath))
+	}
+
+	registryClient, err := registry.NewClient(registryClientOpts...)
 	if err != nil {
 		l.Error(logIdHelm, "failed to create registry client", log.Err(err))
 		return err
 	}
 
 	man := &downloader.Manager{
-		Out:       log.NewSlogWriter("helm: ", log.LevelDebug),
-		ChartPath: chartPath,
-		// Always refresh repositories before dependency download.
-		SkipUpdate:       false,
+		Out:              log.NewSlogWriter("helm: ", log.LevelDebug),
+		ChartPath:        chartPath,
+		SkipUpdate:       defaultHelmRepoUpdateGate.shouldSkipRepoUpdate(dependencyRepositories),
 		Getters:          getter.All(settings),
 		RepositoryConfig: settings.RepositoryConfig,
 		RepositoryCache:  settings.RepositoryCache,
@@ -112,6 +117,7 @@ func DownloadChartDependencies(l log.Logger, chartPath string, c *v2chart.Chart,
 		l.Error(logIdHelm, "failed to download chart dependencies", log.String("path", chartPath), log.Err(err))
 		return err
 	}
+	defaultHelmRepoUpdateGate.markRepoUpdated(dependencyRepositories)
 
 	// Remove Chart.lock file created by Update()
 	lockFilePath := filepath.Join(chartPath, "Chart.lock")
@@ -190,6 +196,17 @@ func shouldRetryDependencyDownload(err error) bool {
 	}
 
 	return false
+}
+
+func chartDependencyRepositories(c *v2chart.Chart) []string {
+	if c == nil || c.Metadata == nil || len(c.Metadata.Dependencies) == 0 {
+		return nil
+	}
+	repositories := make([]string, 0, len(c.Metadata.Dependencies))
+	for _, dep := range c.Metadata.Dependencies {
+		repositories = append(repositories, dep.Repository)
+	}
+	return repositories
 }
 
 func resolveWildcardFileDependencyVersions(chartPath string) (func() error, error) {

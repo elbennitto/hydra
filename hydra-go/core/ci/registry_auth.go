@@ -189,3 +189,23 @@ func missingDownloadTokenError(configPath, registryHost string) error {
 		registryHost,
 	)
 }
+
+func withHelmRegistryConfig(registryConfigPath string, fn func() error) error {
+	if strings.TrimSpace(registryConfigPath) == "" {
+		return fn()
+	}
+
+	oldValue, hadOldValue := os.LookupEnv("HELM_REGISTRY_CONFIG")
+	if err := os.Setenv("HELM_REGISTRY_CONFIG", registryConfigPath); err != nil {
+		return fmt.Errorf("set HELM_REGISTRY_CONFIG: %w", err)
+	}
+	defer func() {
+		if hadOldValue {
+			_ = os.Setenv("HELM_REGISTRY_CONFIG", oldValue)
+			return
+		}
+		_ = os.Unsetenv("HELM_REGISTRY_CONFIG")
+	}()
+
+	return fn()
+}
