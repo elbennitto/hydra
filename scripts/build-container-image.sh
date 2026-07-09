@@ -6,10 +6,27 @@ repo_root="$(cd "${script_dir}/.." && pwd)"
 
 image_name="${1:-}"
 image_tag="${2:-}"
+push_image=false
+
+if [[ "${3:-}" == "--push" ]]; then
+  push_image=true
+elif [[ -n "${3:-}" ]]; then
+  echo "Unsupported argument: ${3}" >&2
+  echo "Usage: $0 <hydra|hydra-ci> <registry/image-name:version-tag> [--push]" >&2
+  exit 1
+fi
+
+if [[ -n "${4:-}" ]]; then
+  echo "Too many arguments" >&2
+  echo "Usage: $0 <hydra|hydra-ci> <registry/image-name:version-tag> [--push]" >&2
+  exit 1
+fi
+
 if [[ -z "${image_name}" || -z "${image_tag}" ]]; then
-  echo "Usage: $0 <hydra|hydra-ci> <registry/image-name:version-tag>" >&2
+  echo "Usage: $0 <hydra|hydra-ci> <registry/image-name:version-tag> [--push]" >&2
   echo "Example: $0 hydra-ci ghcr.io/hydra-gitops/hydra-ci:v1.2.3" >&2
   echo "Example: $0 hydra ghcr.io/hydra-gitops/hydra:v1.2.3" >&2
+  echo "Example: $0 hydra ghcr.io/hydra-gitops/hydra:v1.2.3 --push" >&2
   exit 1
 fi
 
@@ -109,3 +126,9 @@ container_id="$(docker create "${image_tag}")"
 echo
 echo "Contents of ${image_tag}:"
 docker export "${container_id}" | tar -tvf -
+
+if [[ "${push_image}" == "true" ]]; then
+  echo
+  echo "Pushing ${image_tag}..."
+  docker push "${image_tag}"
+fi
