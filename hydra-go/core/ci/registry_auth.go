@@ -5,12 +5,17 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"helm.sh/helm/v4/pkg/registry"
 	"hydra-gitops.org/hydra/hydra-go/base/log"
 )
 
 var prepareRegistryAuthHook func(configPath string) (string, func(), error)
+var registryLoginSleep = time.Sleep
+
+const registryLoginRetryAttempts = 3
+const registryLoginRetryDelay = 3 * time.Second
 
 func prepareRegistryAuth(configPath string) (string, func(), error) {
 	return prepareRegistryAuthWithOptions(configPath, false)
@@ -62,7 +67,7 @@ func prepareRegistryAuthWithOptions(configPath string, requireUpload bool) (stri
 	l := log.Default()
 	for _, token := range tokens {
 		host := normalizeRegistryHost(token.Registry)
-		if err := client.Login(host, registry.LoginOptBasicAuth(token.Username, token.Token)); err != nil {
+		if err := loginWithRetry(l, client, host, token.Username, token.Token); err != nil {
 			cleanup()
 			return "", nil, fmt.Errorf("login to OCI registry %q: %w", host, err)
 		}
@@ -71,6 +76,43 @@ func prepareRegistryAuthWithOptions(configPath string, requireUpload bool) (stri
 	}
 
 	return registryConfig, cleanup, nil
+}
+
+func loginWithRetry(l log.Logger, client *registry.Client, host, username, token string) error {
+	var lastErr error
+	for attempt := 1; attempt <= registryLoginRetryAttempts; attempt++ {
+		err := client.Login(host, registry.LoginOptBasicAuth(username, token))
+		if err == nil {
+			if attempt > 1 {
+				l.Info(logIdCI, "registry login retry succeeded for host {host} on attempt {attempt}",
+					log.String("host", host),
+					log.Int("attempt", attempt))
+			}
+			return nil
+		}
+
+		lastErr = err
+		if attempt == registryLoginRetryAttempts || !shouldRetryRegistryLogin(err) {
+			break
+		}
+
+		l.Warn(logIdCI, "registry login attempt {attempt}/{maxAttempts} failed for host {host}; retrying in {delay}: {error}",
+			log.Int("attempt", attempt),
+			log.Int("maxAttempts", registryLoginRetryAttempts),
+			log.String("host", host),
+			log.String("delay", registryLoginRetryDelay.String()),
+			log.String("error", err.Error()))
+		registryLoginSleep(registryLoginRetryDelay)
+	}
+	return lastErr
+}
+
+func shouldRetryRegistryLogin(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "401") || strings.Contains(msg, "unauthorized")
 }
 
 func loadRegistryTokens(configPath string, requireUpload bool) ([]RegistryTokenRef, error) {
