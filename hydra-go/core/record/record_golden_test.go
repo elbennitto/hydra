@@ -61,12 +61,12 @@ func TestRecordFileGolden(t *testing.T) {
 			expectedPath := filepath.Join(goldenRoot, caseName+".expected.cast")
 			if *updateRecordFileGolden {
 				require.NoError(t, os.MkdirAll(filepath.Dir(expectedPath), 0o755))
-				require.NoError(t, os.WriteFile(expectedPath, normalizeCastHeaderCommand(gotBytes), 0o644))
+				require.NoError(t, os.WriteFile(expectedPath, normalizeCastHeaderCommand(gotBytes, caseName), 0o644))
 			}
 
 			expectedBytes, err := os.ReadFile(expectedPath)
 			require.NoError(t, err, "missing golden file; run: go test ./core/record -run TestRecordFileGolden -update")
-			require.Equal(t, string(normalizeCastHeaderCommand(expectedBytes)), string(normalizeCastHeaderCommand(gotBytes)))
+			require.Equal(t, string(normalizeCastHeaderCommand(expectedBytes, caseName)), string(normalizeCastHeaderCommand(gotBytes, caseName)))
 
 			combinedOut, runErr := captureCombinedOutput(func() error {
 				return RecordOne(specPath, RecordOptions{
@@ -183,7 +183,7 @@ func captureCombinedOutput(run func() error) ([]byte, error) {
 	return out, runErr
 }
 
-func normalizeCastHeaderCommand(cast []byte) []byte {
+func normalizeCastHeaderCommand(cast []byte, caseName string) []byte {
 	lines := bytes.Split(cast, []byte("\n"))
 	if len(lines) == 0 || len(lines[0]) == 0 {
 		return cast
@@ -193,7 +193,7 @@ func normalizeCastHeaderCommand(cast []byte) []byte {
 	if err := json.Unmarshal(lines[0], &header); err != nil {
 		return cast
 	}
-	header["command"] = "hydra record file <case>"
+	header["command"] = "hydra record file " + caseName
 	normalizedHeader, err := json.Marshal(header)
 	if err != nil {
 		return cast
