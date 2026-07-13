@@ -71,9 +71,11 @@ func TestUpdateChartDependenciesWithRetry_RetriesUnauthorizedFailure(t *testing.
 	require.Equal(t, 2, sleepCalls)
 }
 
-func TestShouldRetryDependencyDownload_OnlyUnauthorized(t *testing.T) {
+func TestShouldRetryDependencyDownload_TransientErrors(t *testing.T) {
 	require.True(t, shouldRetryDependencyDownload(errors.New("response status code 401: unauthorized")))
 	require.True(t, shouldRetryDependencyDownload(errors.New("UNAUTHORIZED to access repository")))
+	require.True(t, shouldRetryDependencyDownload(errors.New("Get \"https://github.com\": read tcp 10.0.0.5:39246->140.82.121.4:443: read: connection reset by peer")))
+	require.True(t, shouldRetryDependencyDownload(errors.New("Get \"https://github.com\": dial tcp: i/o timeout")))
 	require.False(t, shouldRetryDependencyDownload(errors.New("invalid chart metadata")))
 	require.False(t, shouldRetryDependencyDownload(nil))
 }

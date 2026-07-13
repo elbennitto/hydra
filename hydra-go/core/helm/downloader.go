@@ -168,7 +168,28 @@ func shouldRetryDependencyDownload(err error) bool {
 		return false
 	}
 	msg := strings.ToLower(err.Error())
-	return strings.Contains(msg, "401") || strings.Contains(msg, "unauthorized")
+
+	if strings.Contains(msg, "401") || strings.Contains(msg, "unauthorized") {
+		return true
+	}
+
+	retryMarkers := []string{
+		"connection reset by peer",
+		"connection refused",
+		"connection lost",
+		"timeout",
+		"temporary failure in name resolution",
+		"no such host",
+		"eof",
+	}
+
+	for _, marker := range retryMarkers {
+		if strings.Contains(msg, marker) {
+			return true
+		}
+	}
+
+	return false
 }
 
 func resolveWildcardFileDependencyVersions(chartPath string) (func() error, error) {
