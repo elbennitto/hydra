@@ -3,6 +3,7 @@ package ci
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"hydra-gitops.org/hydra/hydra-go/core/git"
 )
@@ -171,10 +172,60 @@ func RunRelease(configPath string, mode Mode, targetBranch string) (ReleaseResul
 		tags = append(tags, BuildTagPrefix+releaseTagTime().UTC().Format("200601021504"))
 	} else if len(initialPublishTags) > 0 {
 		tags = mergeUniqueReleaseTags(initialPublishTags, releaseTags(plan, roots))
+	} else if len(plan) > 0 || len(roots) > 0 {
+		tags = releaseTags(plan, roots)
+	}
+
+	if tags != nil {
+		filtered, err := filterReleaseTagsToCreate(repo, tags)
+		if err != nil {
+			return ReleaseResult{}, err
+		}
+		tags = filtered
+	}
+
+	if len(tags) == 0 && len(plan) == 0 && len(roots) == 0 {
+		return ReleaseResult{}, nil
 	}
 
 	exec := NewReleaseExecutor(mode, targetBranch)
 	return exec.run(repo, cfg, plan, roots, tags)
+}
+
+func filterReleaseTagsToCreate(repo *git.Repo, tags []string) ([]string, error) {
+	if len(tags) == 0 {
+		return []string{}, nil
+	}
+	existing, err := repo.Tags("*")
+	if err != nil {
+		return nil, fmt.Errorf("list existing tags: %w", err)
+	}
+	existingSet := make(map[string]struct{}, len(existing))
+	for _, t := range existing {
+		existingSet[t] = struct{}{}
+	}
+
+	seen := make(map[string]struct{}, len(tags))
+	filtered := make([]string, 0, len(tags))
+	hasNonBuild := false
+	for _, t := range tags {
+		if _, ok := seen[t]; ok {
+			continue
+		}
+		seen[t] = struct{}{}
+		if _, exists := existingSet[t]; exists {
+			continue
+		}
+		filtered = append(filtered, t)
+		if !strings.HasPrefix(t, BuildTagPrefix) {
+			hasNonBuild = true
+		}
+	}
+
+	if !hasNonBuild {
+		return []string{}, nil
+	}
+	return filtered, nil
 }
 
 func mergeUniqueReleaseTags(a, b []string) []string {

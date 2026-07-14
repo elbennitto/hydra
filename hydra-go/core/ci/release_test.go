@@ -336,6 +336,40 @@ func TestRunRelease_ExistingRepo_NewChartWithVersionGetsInitialPublishTag(t *tes
 	assert.Contains(t, buildTags, "build-202603051555")
 }
 
+func TestRunRelease_ExistingRepo_NewChartWithVersion_SkipsExistingTagAndBuildWhenNothingLeft(t *testing.T) {
+	oldClock := releaseTagTime
+	releaseTagTime = func() time.Time { return time.Date(2026, 3, 5, 15, 55, 0, 0, time.UTC) }
+	t.Cleanup(func() { releaseTagTime = oldClock })
+
+	repo := git.Init(t.TempDir()).
+		CommitFS("init", git.NewFS().
+			File(".hydra-ci.yaml", configYAML("dev, stage", "")).
+			Add("apps/demo/existing/dev",
+				git.NewChart("existing").
+					Version("1.0.0-dev").
+					Dep("existing", "1.0.0", "oci://registry/helm"),
+			),
+		).
+		Tag("build-001").
+		CommitFS("add new chart", git.NewFS().
+			Add("apps/demo/service-ui/stage",
+				git.NewChart("service-ui").
+					Version("1.0.0-stage").
+					Dep("service-ui", "1.0.0", "oci://registry/helm"),
+			),
+		).
+		Tag("demo-service-ui-1.0.0-stage")
+	require.NoError(t, repo.Err)
+
+	res, err := RunRelease(configPath(repo), ModeLocal, "")
+	require.NoError(t, err)
+	assert.Empty(t, res.Children)
+
+	buildTags, err := repo.Tags("build-*")
+	require.NoError(t, err)
+	assert.NotContains(t, buildTags, "build-202603051555")
+}
+
 func TestRunRelease_Local_ExtraVersionAndRoot(t *testing.T) {
 	oldClock := releaseTagTime
 	releaseTagTime = func() time.Time { return time.Date(2026, 3, 5, 15, 55, 0, 0, time.UTC) }

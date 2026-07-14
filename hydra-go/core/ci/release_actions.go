@@ -41,7 +41,7 @@ func (a dryRunReleaseExecutor) run(_ *git.Repo, _ *Config, plan []ReleaseChildEn
 	if a.targetBranch != "" {
 		l.Info(logIdCI, "release dry-run: target branch {branch}", log.String("branch", a.targetBranch))
 	}
-	if len(tags) == 0 {
+	if tags == nil {
 		tags = releaseTags(plan, roots)
 	}
 	for _, e := range plan {
@@ -83,7 +83,7 @@ func (a localReleaseExecutor) run(repo *git.Repo, cfg *Config, plan []ReleaseChi
 	if repo.Err != nil {
 		return ReleaseResult{}, repo.Err
 	}
-	if len(tags) == 0 {
+	if tags == nil {
 		tags = releaseTags(plan, roots)
 	}
 	if len(plan) == 0 && len(roots) == 0 {
@@ -170,7 +170,7 @@ func (a ciReleaseExecutor) run(repo *git.Repo, cfg *Config, plan []ReleaseChildE
 	if repo.Err != nil {
 		return ReleaseResult{}, repo.Err
 	}
-	if len(tags) == 0 {
+	if tags == nil {
 		tags = releaseTags(plan, roots)
 	}
 	if len(plan) == 0 && len(roots) == 0 {
