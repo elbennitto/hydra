@@ -253,6 +253,89 @@ func TestRunRelease_FirstRelease_OnlySuffixDiffCountsAsSameVersion(t *testing.T)
 	assert.Equal(t, "1.2.3-4-stage", child.GetVersion())
 }
 
+func TestRunRelease_ExistingRepo_NewChart_DefaultVersionAlwaysReleases(t *testing.T) {
+	oldClock := releaseTagTime
+	releaseTagTime = func() time.Time { return time.Date(2026, 3, 5, 15, 55, 0, 0, time.UTC) }
+	t.Cleanup(func() { releaseTagTime = oldClock })
+
+	repo := git.Init(t.TempDir()).
+		CommitFS("init", git.NewFS().
+			File(".hydra-ci.yaml", configYAML("dev, stage", "")).
+			Add("apps/demo/existing/dev",
+				git.NewChart("existing").
+					Version("1.0.0-dev").
+					Dep("existing", "1.0.0", "oci://registry/helm"),
+			),
+		).
+		Tag("build-001").
+		CommitFS("add new chart", git.NewFS().
+			Add("apps/demo/service-ui/dev",
+				git.NewChart("service-ui").
+					Version("0.0.0").
+					Dep("service-ui", "1.0.0", "oci://registry/helm"),
+			),
+		)
+	require.NoError(t, repo.Err)
+
+	res, err := RunRelease(configPath(repo), ModeLocal, "")
+	require.NoError(t, err)
+	require.Len(t, res.Children, 1)
+	assert.Equal(t, "1.0.0-dev", res.Children[0].NewVersion)
+
+	child, err := repo.LoadChart("apps/demo/service-ui/dev")
+	require.NoError(t, err)
+	assert.Equal(t, "1.0.0-dev", child.GetVersion())
+
+	tags, err := repo.Tags("demo-service-ui-*")
+	require.NoError(t, err)
+	assert.Contains(t, tags, "demo-service-ui-1.0.0-dev")
+
+	buildTags, err := repo.Tags("build-*")
+	require.NoError(t, err)
+	assert.Contains(t, buildTags, "build-202603051555")
+}
+
+func TestRunRelease_ExistingRepo_NewChartWithVersionGetsInitialPublishTag(t *testing.T) {
+	oldClock := releaseTagTime
+	releaseTagTime = func() time.Time { return time.Date(2026, 3, 5, 15, 55, 0, 0, time.UTC) }
+	t.Cleanup(func() { releaseTagTime = oldClock })
+
+	repo := git.Init(t.TempDir()).
+		CommitFS("init", git.NewFS().
+			File(".hydra-ci.yaml", configYAML("dev, stage", "")).
+			Add("apps/demo/existing/dev",
+				git.NewChart("existing").
+					Version("1.0.0-dev").
+					Dep("existing", "1.0.0", "oci://registry/helm"),
+			),
+		).
+		Tag("build-001").
+		CommitFS("add new chart", git.NewFS().
+			Add("apps/demo/service-ui/stage",
+				git.NewChart("service-ui").
+					Version("1.0.0-stage").
+					Dep("service-ui", "1.0.0", "oci://registry/helm"),
+			),
+		)
+	require.NoError(t, repo.Err)
+
+	res, err := RunRelease(configPath(repo), ModeLocal, "")
+	require.NoError(t, err)
+	assert.Empty(t, res.Children)
+
+	child, err := repo.LoadChart("apps/demo/service-ui/stage")
+	require.NoError(t, err)
+	assert.Equal(t, "1.0.0-stage", child.GetVersion())
+
+	tags, err := repo.Tags("demo-service-ui-*")
+	require.NoError(t, err)
+	assert.Contains(t, tags, "demo-service-ui-1.0.0-stage")
+
+	buildTags, err := repo.Tags("build-*")
+	require.NoError(t, err)
+	assert.Contains(t, buildTags, "build-202603051555")
+}
+
 func TestRunRelease_Local_ExtraVersionAndRoot(t *testing.T) {
 	oldClock := releaseTagTime
 	releaseTagTime = func() time.Time { return time.Date(2026, 3, 5, 15, 55, 0, 0, time.UTC) }

@@ -56,6 +56,7 @@ func RunRelease(configPath string, mode Mode, targetBranch string) (ReleaseResul
 	}
 
 	var plan []ReleaseChildEntry
+	var initialPublishTags []string
 	allChartTags, err := currentReleaseTagsForAllCharts(repo, cfg, matches)
 	if err != nil {
 		return ReleaseResult{}, err
@@ -95,6 +96,24 @@ func RunRelease(configPath string, mode Mode, targetBranch string) (ReleaseResul
 			return ReleaseResult{}, errDep
 		}
 		if releaseState.FirstRelease && !releaseState.ChangedSinceBaseline {
+			if isDefaultChartVersion(oldVer) {
+				newVer, errN := NextChildChartWrapperVersion(dep, env, oldVer)
+				if errN != nil {
+					return ReleaseResult{}, fmt.Errorf("chart %s: %w", relPath, errN)
+				}
+				plan = append(plan, ReleaseChildEntry{
+					Group:      group,
+					App:        app,
+					Env:        env,
+					Path:       relPath,
+					OldVersion: oldVer,
+					NewVersion: newVer,
+				})
+				continue
+			}
+
+			initialPublishTags = append(initialPublishTags, AppTag(group, app, oldVer))
+
 			newVer, errN := ComputeWrapperVersion(dep, env, -1)
 			if errN != nil {
 				return ReleaseResult{}, fmt.Errorf("chart %s: %w", relPath, errN)
@@ -137,7 +156,7 @@ func RunRelease(configPath string, mode Mode, targetBranch string) (ReleaseResul
 		}
 	}
 
-	if len(plan) == 0 && !firstReleaseRepo {
+	if len(plan) == 0 && !firstReleaseRepo && len(initialPublishTags) == 0 {
 		return ReleaseResult{}, nil
 	}
 
@@ -150,10 +169,40 @@ func RunRelease(configPath string, mode Mode, targetBranch string) (ReleaseResul
 	if firstReleaseRepo {
 		tags = applyFirstReleaseTagOverrides(allChartTags, plan, roots)
 		tags = append(tags, BuildTagPrefix+releaseTagTime().UTC().Format("200601021504"))
+	} else if len(initialPublishTags) > 0 {
+		tags = mergeUniqueReleaseTags(initialPublishTags, releaseTags(plan, roots))
 	}
 
 	exec := NewReleaseExecutor(mode, targetBranch)
 	return exec.run(repo, cfg, plan, roots, tags)
+}
+
+func mergeUniqueReleaseTags(a, b []string) []string {
+	seen := make(map[string]struct{}, len(a)+len(b))
+	out := make([]string, 0, len(a)+len(b))
+	for _, t := range a {
+		if _, ok := seen[t]; ok {
+			continue
+		}
+		seen[t] = struct{}{}
+		out = append(out, t)
+	}
+	for _, t := range b {
+		if _, ok := seen[t]; ok {
+			continue
+		}
+		seen[t] = struct{}{}
+		out = append(out, t)
+	}
+	return out
+}
+
+func isDefaultChartVersion(v string) bool {
+	cv, err := ParseChartVersion(v)
+	if err != nil {
+		return false
+	}
+	return cv.Major == 0 && cv.Minor == 0 && cv.Patch == 0 && cv.PreRelease == "" && cv.Extra == -1
 }
 
 func currentReleaseTagsForAllCharts(repo *git.Repo, cfg *Config, matches []string) ([]string, error) {
