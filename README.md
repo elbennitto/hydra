@@ -1,13 +1,13 @@
 <!-- AI note: README.md is generated from README.md.gotpl. Update README.md.gotpl and run ./scripts/generate-readme.sh to regenerate this file. -->
 # Hydra
 
-[![Latest release](https://img.shields.io/github/v/release/hydra-gitops/hydra?sort=semver)](https://github.com/hydra-gitops/hydra/releases/tag/v1.2.3)
+[![Latest release](https://img.shields.io/github/v/release/hydra-gitops/hydra?sort=semver)](https://github.com/hydra-gitops/hydra/releases/tag/v1.2.4)
 [![release](https://github.com/hydra-gitops/hydra/actions/workflows/release.yml/badge.svg)](https://github.com/hydra-gitops/hydra/actions/workflows/release.yml)
 ![Container image](https://img.shields.io/badge/container-ghcr.io-blue)
 
 Hydra provides a standardized GitOps workflow for Helm and Argo CD with a CLI-first toolchain and reproducible release pipelines.
 
-Latest signed release: [v1.2.3](https://github.com/hydra-gitops/hydra/releases/tag/v1.2.3)
+Latest signed release: [v1.2.4](https://github.com/hydra-gitops/hydra/releases/tag/v1.2.4)
 
 ## Install
 
@@ -78,12 +78,12 @@ Stable releases also publish `vX.Y.Z`, `vX.Y`, `vX`, and `latest` tags.
 
 Release assets are published on each signed version tag:
 
-- https://github.com/hydra-gitops/hydra/releases/tag/v1.2.3
+- https://github.com/hydra-gitops/hydra/releases/tag/v1.2.4
 
 Verify downloaded archives with the published checksum file:
 
 ```bash
-curl -LO https://github.com/hydra-gitops/hydra/releases/download/v1.2.3/checksums.txt
+curl -LO https://github.com/hydra-gitops/hydra/releases/download/v1.2.4/checksums.txt
 shasum -a 256 --check checksums.txt
 ```
 
