@@ -154,114 +154,180 @@ func RunPublish(configPath string, mode Mode, selectedCharts []string, forceRun 
 
 	return withHelmRegistryConfig(registryConfigPath, func() error {
 		for _, rel := range chartRelPaths {
-			absDir := filepath.Join(repo.Path(), filepath.FromSlash(rel))
-			ch, err := repo.LoadChart(rel)
-			if err != nil {
-				return fmt.Errorf("load chart %s: %w", rel, err)
-			}
-			name := ch.GetName()
-			ver := ch.GetVersion()
-			ociChartName, err := buildOCIChartName(rel, name)
-			if err != nil {
-				return fmt.Errorf("chart %s: resolve OCI chart name: %w", rel, err)
-			}
-			if mode == ModeDryRun {
-				l.Info(logIdCI, "publish dry-run: would run helm dependency update and helm package for {chart} at {path} version {version}",
-					log.String("chart", name), log.String("path", rel), log.String("version", ver))
-				if registry != "" {
-					if skipSigning {
-						l.Warn(logIdCI, "publish dry-run: would push unsigned chart {artifact} to {registry}",
-							log.String("artifact", name+"-"+ver+".tgz"), log.String("registry", registry))
+			if err := func() error {
+				absDir := filepath.Join(repo.Path(), filepath.FromSlash(rel))
+				ch, err := repo.LoadChart(rel)
+				if err != nil {
+					return fmt.Errorf("load chart %s: %w", rel, err)
+				}
+				name := ch.GetName()
+				ver := ch.GetVersion()
+				ociChartName, err := buildOCIChartName(rel, name)
+				if err != nil {
+					return fmt.Errorf("chart %s: resolve OCI chart name: %w", rel, err)
+				}
+				if mode == ModeDryRun {
+					l.Info(logIdCI, "publish dry-run: would run helm dependency update and helm package for {chart} at {path} version {version}",
+						log.String("chart", name), log.String("path", rel), log.String("version", ver))
+					if registry != "" {
+						if skipSigning {
+							l.Warn(logIdCI, "publish dry-run: would push unsigned chart {artifact} to {registry}",
+								log.String("artifact", name+"-"+ver+".tgz"), log.String("registry", registry))
+						} else {
+							switch {
+							case signing != nil && cosignSigning != nil:
+								l.Info(logIdCI, "publish dry-run: would push {artifact} with Helm provenance and Cosign signature to {registry}",
+									log.String("artifact", name+"-"+ver+".tgz"), log.String("registry", registry))
+							case signing != nil:
+								l.Info(logIdCI, "publish dry-run: would sign {artifact} with Helm provenance and push it to {registry}",
+									log.String("artifact", name+"-"+ver+".tgz"), log.String("registry", registry))
+							case cosignSigning != nil:
+								l.Info(logIdCI, "publish dry-run: would push {artifact} and attach a Cosign signature in {registry}",
+									log.String("artifact", name+"-"+ver+".tgz"), log.String("registry", registry))
+							}
+						}
 					} else {
-						switch {
-						case signing != nil && cosignSigning != nil:
-							l.Info(logIdCI, "publish dry-run: would push {artifact} with Helm provenance and Cosign signature to {registry}",
-								log.String("artifact", name+"-"+ver+".tgz"), log.String("registry", registry))
-						case signing != nil:
-							l.Info(logIdCI, "publish dry-run: would sign {artifact} with Helm provenance and push it to {registry}",
-								log.String("artifact", name+"-"+ver+".tgz"), log.String("registry", registry))
-						case cosignSigning != nil:
-							l.Info(logIdCI, "publish dry-run: would push {artifact} and attach a Cosign signature in {registry}",
-								log.String("artifact", name+"-"+ver+".tgz"), log.String("registry", registry))
+						if skipSigning {
+							l.Warn(logIdCI, "publish dry-run: would package chart locally without signing (no ci.registry configured)")
+						} else {
+							l.Info(logIdCI, "publish dry-run: would package the chart locally using the configured signing settings (no ci.registry push)")
 						}
 					}
-				} else {
-					if skipSigning {
-						l.Warn(logIdCI, "publish dry-run: would package chart locally without signing (no ci.registry configured)")
-					} else {
-						l.Info(logIdCI, "publish dry-run: would package the chart locally using the configured signing settings (no ci.registry push)")
+					return nil
+				}
+				if mode == ModeCI {
+					remoteRef := buildOCIChartRef(registry, ociChartName, ver)
+					exists, err := remoteChartExists(registry, ociChartName, ver, registryConfigPath)
+					if err != nil {
+						return fmt.Errorf("chart %s: check remote chart: %w", rel, err)
 					}
-				}
-				continue
-			}
-			if mode == ModeCI {
-				remoteRef := buildOCIChartRef(registry, ociChartName, ver)
-				exists, err := remoteChartExists(registry, ociChartName, ver, registryConfigPath)
-				if err != nil {
-					return fmt.Errorf("chart %s: check remote chart: %w", rel, err)
-				}
-				if exists {
-					if !forcePublishUpload {
-						l.Warn(logIdCI, "remote chart already exists; skipping publish for {chart} version {version} at {ref}",
+					if exists {
+						if !forcePublishUpload {
+							l.Warn(logIdCI, "remote chart already exists; skipping publish for {chart} version {version} at {ref}",
+								log.String("chart", name),
+								log.String("version", ver),
+								log.String("ref", remoteRef))
+							return nil
+						}
+						l.Warn(logIdCI, "remote chart already exists; forcing upload for {chart} version {version} at {ref}",
 							log.String("chart", name),
 							log.String("version", ver),
 							log.String("ref", remoteRef))
-						continue
 					}
-					l.Warn(logIdCI, "remote chart already exists; forcing upload for {chart} version {version} at {ref}",
+				}
+
+				cleanupGeneratedDependencyArchives := func() error { return nil }
+				if skipDependencyDownload {
+					l.Info(logIdCI, "publish: skipping dependency download for {chart} at {path}",
 						log.String("chart", name),
-						log.String("version", ver),
-						log.String("ref", remoteRef))
-				}
-			}
-
-			if skipDependencyDownload {
-				l.Info(logIdCI, "publish: skipping dependency download for {chart} at {path}",
-					log.String("chart", name),
-					log.String("path", rel),
-				)
-			} else {
-				if err := downloadChartDependencies(l, absDir, nil); err != nil {
-					return fmt.Errorf("chart %s: dependency update: %w", rel, err)
-				}
-			}
-
-			stageName := strings.ReplaceAll(rel, "/", "_")
-			stageDir := filepath.Join(tmpDir, stageName)
-			if err := os.MkdirAll(stageDir, 0o755); err != nil {
-				return fmt.Errorf("mkdir stage: %w", err)
-			}
-
-			packaged, err := packagePreparedChart(absDir, stageDir, signing)
-			if err != nil {
-				return fmt.Errorf("chart %s: helm package: %w", rel, err)
-			}
-
-			if mode == ModeCI {
-				artifact := packageArtifact{TGZPath: packaged.TGZPath, ProvPath: packaged.ProvPath}
-				if cosignSigning == nil {
-					if err := pushChartArchive(artifact, registry, ociChartName, ver, registryConfigPath); err != nil {
-						return fmt.Errorf("chart %s: helm push: %w", rel, err)
-					}
+						log.String("path", rel),
+					)
 				} else {
-					digestRef, err := uploadChartWithoutTag(artifact, registry, ociChartName, ver, registryConfigPath)
+					cleanupGeneratedDependencyArchives, err = trackGeneratedDependencyArchives(absDir)
 					if err != nil {
-						return fmt.Errorf("chart %s: helm push: %w", rel, err)
+						return fmt.Errorf("chart %s: snapshot dependency archives: %w", rel, err)
 					}
-					if err := signOCIRef(digestRef, cosignSigning); err != nil {
-						return fmt.Errorf("chart %s: cosign sign: %w", rel, err)
-					}
-					if err := tagOCIChart(registry, ociChartName, ver, digestRef, registryConfigPath); err != nil {
-						return fmt.Errorf("chart %s: helm push tag: %w", rel, err)
+					defer func() {
+						if cleanupErr := cleanupGeneratedDependencyArchives(); cleanupErr != nil {
+							l.Warn(logIdCI, "publish: failed to clean generated dependency archives for {path}: {err}",
+								log.String("path", rel),
+								log.Err(cleanupErr),
+							)
+						}
+					}()
+					if err := downloadChartDependencies(l, absDir, nil); err != nil {
+						return fmt.Errorf("chart %s: dependency update: %w", rel, err)
 					}
 				}
-				l.Info(logIdCI, "published {chart} version {version}", log.String("chart", name), log.String("version", ver))
-			} else {
-				l.Info(logIdCI, "publish local: packaged {chart} to {path}", log.String("chart", name), log.String("path", packaged.TGZPath))
+
+				stageName := strings.ReplaceAll(rel, "/", "_")
+				stageDir := filepath.Join(tmpDir, stageName)
+				if err := os.MkdirAll(stageDir, 0o755); err != nil {
+					return fmt.Errorf("mkdir stage: %w", err)
+				}
+
+				packaged, err := packagePreparedChart(absDir, stageDir, signing)
+				if err != nil {
+					return fmt.Errorf("chart %s: helm package: %w", rel, err)
+				}
+
+				if mode == ModeCI {
+					artifact := packageArtifact{TGZPath: packaged.TGZPath, ProvPath: packaged.ProvPath}
+					if cosignSigning == nil {
+						if err := pushChartArchive(artifact, registry, ociChartName, ver, registryConfigPath); err != nil {
+							return fmt.Errorf("chart %s: helm push: %w", rel, err)
+						}
+					} else {
+						digestRef, err := uploadChartWithoutTag(artifact, registry, ociChartName, ver, registryConfigPath)
+						if err != nil {
+							return fmt.Errorf("chart %s: helm push: %w", rel, err)
+						}
+						if err := signOCIRef(digestRef, cosignSigning); err != nil {
+							return fmt.Errorf("chart %s: cosign sign: %w", rel, err)
+						}
+						if err := tagOCIChart(registry, ociChartName, ver, digestRef, registryConfigPath); err != nil {
+							return fmt.Errorf("chart %s: helm push tag: %w", rel, err)
+						}
+					}
+					l.Info(logIdCI, "published {chart} version {version}", log.String("chart", name), log.String("version", ver))
+				} else {
+					l.Info(logIdCI, "publish local: packaged {chart} to {path}", log.String("chart", name), log.String("path", packaged.TGZPath))
+				}
+				return nil
+			}(); err != nil {
+				return err
 			}
 		}
 		return nil
 	})
+}
+
+func trackGeneratedDependencyArchives(chartDir string) (func() error, error) {
+	chartsDir := filepath.Join(chartDir, "charts")
+	existing := map[string]struct{}{}
+
+	entries, err := os.ReadDir(chartsDir)
+	if err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			return nil, err
+		}
+	} else {
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
+			}
+			name := entry.Name()
+			if strings.HasSuffix(name, ".tgz") {
+				existing[name] = struct{}{}
+			}
+		}
+	}
+
+	return func() error {
+		entries, err := os.ReadDir(chartsDir)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				return nil
+			}
+			return err
+		}
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
+			}
+			name := entry.Name()
+			if !strings.HasSuffix(name, ".tgz") {
+				continue
+			}
+			if _, ok := existing[name]; ok {
+				continue
+			}
+			if err := os.Remove(filepath.Join(chartsDir, name)); err != nil && !errors.Is(err, os.ErrNotExist) {
+				return err
+			}
+		}
+		return nil
+	}, nil
 }
 
 func RunLocalPackage(chartDir string, destinationDir string) (PackagedChart, error) {

@@ -458,6 +458,52 @@ func TestRunPublish_Local_SkipDependencyDownload_DoesNotCallDependencyUpdate(t *
 	assert.True(t, packaged)
 }
 
+func TestRunPublish_Local_CleansGeneratedDependencyArchives(t *testing.T) {
+	dir := t.TempDir()
+	fs := git.NewFS().
+		File(ConfigFileName, `ci:
+  rootAppsPath: apps
+  environments: [dev, stage, prod]
+  registry: oci://registry/helm
+  appGroups:
+    - name: demo
+      path: apps/demo
+`).
+		Add("apps/demo/service-ui/dev", git.NewChart("service-ui").Version("1.0.0-dev")).
+		File("apps/demo/service-ui/dev/charts/kept-0.1.0.tgz", "already here")
+	repo := git.Init(dir).CommitFS("init", fs)
+	require.NoError(t, repo.Err)
+	repo.Tag("build-202601011200").Tag("demo-service-ui-1.0.0-dev")
+	require.NoError(t, repo.Err)
+
+	oldDownload := downloadChartDependencies
+	oldPackage := packageChartArchiveHook
+	oldPush := pushChartArchiveHook
+	var generatedArchivePath string
+	downloadChartDependencies = func(_ log.Logger, chartPath string, _ *v2chart.Chart) error {
+		generatedArchivePath = filepath.Join(chartPath, "charts", "upstream-1.2.3.tgz")
+		require.NoError(t, os.MkdirAll(filepath.Dir(generatedArchivePath), 0o755))
+		return os.WriteFile(generatedArchivePath, []byte("generated"), 0o644)
+	}
+	packageChartArchiveHook = func(chartDir, stageDir string, signing *packageSigningConfig) (packageArtifact, error) {
+		assert.FileExists(t, generatedArchivePath)
+		assert.Nil(t, signing)
+		return packageArtifact{TGZPath: filepath.Join(stageDir, "service-ui-1.0.0-dev.tgz")}, nil
+	}
+	pushChartArchiveHook = func(artifact packageArtifact, registryURL, chartName, version string, registryConfigPath string) error {
+		return fmt.Errorf("push must not run in local mode")
+	}
+	t.Cleanup(func() {
+		downloadChartDependencies = oldDownload
+		packageChartArchiveHook = oldPackage
+		pushChartArchiveHook = oldPush
+	})
+
+	require.NoError(t, RunPublish(filepath.Join(dir, ConfigFileName), ModeLocal, nil, false, false, true, false))
+	assert.NoFileExists(t, generatedArchivePath)
+	assert.FileExists(t, filepath.Join(dir, "apps/demo/service-ui/dev/charts/kept-0.1.0.tgz"))
+}
+
 func TestRunPublish_CI_FailsWithoutUploadRegistryToken(t *testing.T) {
 	stubPackageSigningSecrets(t)
 	dir := t.TempDir()
