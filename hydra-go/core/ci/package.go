@@ -161,6 +161,10 @@ func RunPublish(configPath string, mode Mode, selectedCharts []string, forceRun 
 			}
 			name := ch.GetName()
 			ver := ch.GetVersion()
+			ociChartName, err := buildOCIChartName(rel, name)
+			if err != nil {
+				return fmt.Errorf("chart %s: resolve OCI chart name: %w", rel, err)
+			}
 			if mode == ModeDryRun {
 				l.Info(logIdCI, "publish dry-run: would run helm dependency update and helm package for {chart} at {path} version {version}",
 					log.String("chart", name), log.String("path", rel), log.String("version", ver))
@@ -191,8 +195,8 @@ func RunPublish(configPath string, mode Mode, selectedCharts []string, forceRun 
 				continue
 			}
 			if mode == ModeCI {
-				remoteRef := buildOCIChartRef(registry, name, ver)
-				exists, err := remoteChartExists(registry, name, ver, registryConfigPath)
+				remoteRef := buildOCIChartRef(registry, ociChartName, ver)
+				exists, err := remoteChartExists(registry, ociChartName, ver, registryConfigPath)
 				if err != nil {
 					return fmt.Errorf("chart %s: check remote chart: %w", rel, err)
 				}
@@ -236,18 +240,18 @@ func RunPublish(configPath string, mode Mode, selectedCharts []string, forceRun 
 			if mode == ModeCI {
 				artifact := packageArtifact{TGZPath: packaged.TGZPath, ProvPath: packaged.ProvPath}
 				if cosignSigning == nil {
-					if err := pushChartArchive(artifact, registry, name, ver, registryConfigPath); err != nil {
+					if err := pushChartArchive(artifact, registry, ociChartName, ver, registryConfigPath); err != nil {
 						return fmt.Errorf("chart %s: helm push: %w", rel, err)
 					}
 				} else {
-					digestRef, err := uploadChartWithoutTag(artifact, registry, name, ver, registryConfigPath)
+					digestRef, err := uploadChartWithoutTag(artifact, registry, ociChartName, ver, registryConfigPath)
 					if err != nil {
 						return fmt.Errorf("chart %s: helm push: %w", rel, err)
 					}
 					if err := signOCIRef(digestRef, cosignSigning); err != nil {
 						return fmt.Errorf("chart %s: cosign sign: %w", rel, err)
 					}
-					if err := tagOCIChart(registry, name, ver, digestRef, registryConfigPath); err != nil {
+					if err := tagOCIChart(registry, ociChartName, ver, digestRef, registryConfigPath); err != nil {
 						return fmt.Errorf("chart %s: helm push tag: %w", rel, err)
 					}
 				}
@@ -774,6 +778,20 @@ func remoteChartExists(registryURL, chartName, version string, registryConfigPat
 func buildOCIChartRef(registryURL, chartName, version string) string {
 	base := strings.TrimSpace(strings.TrimSuffix(registryURL, "/"))
 	return fmt.Sprintf("%s/%s:%s", base, chartName, version)
+}
+
+func buildOCIChartName(chartPath, chartName string) (string, error) {
+	group, _, _, err := ParseChartPath(chartPath)
+	if err != nil {
+		return "", err
+	}
+	if group == "" {
+		return "", fmt.Errorf("invalid chart path: %s (empty group)", chartPath)
+	}
+	if strings.HasPrefix(chartName, group+".") {
+		return chartName, nil
+	}
+	return group + "." + chartName, nil
 }
 
 func buildOCIResolveRef(registryURL, chartName, version string) string {

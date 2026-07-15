@@ -159,7 +159,11 @@ func RunValidate(configPath string, mode Mode, selectedCharts []string, buildTag
 			if err != nil {
 				return fmt.Errorf("load chart %s: %w", rel, err)
 			}
-			ref := buildOCIChartRef(registryURL, ch.GetName(), ch.GetVersion())
+			ociChartName, err := buildOCIChartName(rel, ch.GetName())
+			if err != nil {
+				return fmt.Errorf("chart %s: resolve OCI chart name: %w", rel, err)
+			}
+			ref := buildOCIChartRef(registryURL, ociChartName, ch.GetVersion())
 			l.Info(logIdCI, "verify dry-run: would verify configured signatures for {chart} version {version} at {ref} resolved from {source}",
 				log.String("chart", ch.GetName()),
 				log.String("version", ch.GetVersion()),
@@ -212,7 +216,17 @@ func RunValidate(configPath string, mode Mode, selectedCharts []string, buildTag
 
 		name := ch.GetName()
 		version := ch.GetVersion()
-		ref := buildOCIChartRef(registryURL, name, version)
+		ociChartName, err := buildOCIChartName(rel, name)
+		if err != nil {
+			failed = append(failed, validationOutcome{
+				ChartPath: rel,
+				ChartName: name,
+				Version:   version,
+				HelmErr:   fmt.Sprintf("resolve OCI chart name failed: %v", err),
+			})
+			continue
+		}
+		ref := buildOCIChartRef(registryURL, ociChartName, version)
 		outcome := validationOutcome{
 			ChartPath: rel,
 			ChartName: name,
@@ -222,7 +236,7 @@ func RunValidate(configPath string, mode Mode, selectedCharts []string, buildTag
 
 		var artifact pulledOCIChart
 		if verifyCfg.helm {
-			artifact, err = pullOCIChartWithRetry(l, registryURL, name, version)
+			artifact, err = pullOCIChartWithRetry(l, registryURL, ociChartName, version)
 			if err != nil {
 				outcome.HelmErr = classifyValidatePullError(err)
 			} else if len(artifact.ProvData) == 0 {
@@ -245,7 +259,7 @@ func RunValidate(configPath string, mode Mode, selectedCharts []string, buildTag
 		}
 
 		if verifyCfg.cosign {
-			digestRef, err := resolveOCIChartDigestRef(registryURL, name, version, "")
+			digestRef, err := resolveOCIChartDigestRef(registryURL, ociChartName, version, "")
 			if err != nil {
 				outcome.CosignErr = fmt.Sprintf("cosign resolve failed: %v", err)
 			} else if err := verifyOCIChart(digestRef, cosignVerifierCfg); err != nil {

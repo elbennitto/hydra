@@ -118,7 +118,7 @@ func TestRunValidate_SucceedsWhenCosignSignatureMatches(t *testing.T) {
 		return nil
 	}
 	resolveOCIChartDigestRefHook = func(registryURL, chartName, version string, registryConfigPath string) (string, error) {
-		return "registry/helm/service-ui@sha256:deadbeef", nil
+		return "registry/helm/demo.service-ui@sha256:deadbeef", nil
 	}
 	t.Cleanup(func() {
 		verifyOCIChartHook = oldVerify
@@ -129,7 +129,7 @@ func TestRunValidate_SucceedsWhenCosignSignatureMatches(t *testing.T) {
 		require.NoError(t, RunValidate(filepath.Join(dir, ConfigFileName), ModeLocal, nil, "", false))
 	})
 
-	assert.Contains(t, verifiedRef, "registry/helm/service-ui@")
+	assert.Contains(t, verifiedRef, "registry/helm/demo.service-ui@")
 	assert.Contains(t, logs, "verified Cosign signature")
 	assert.Contains(t, logs, "1 succeeded, 0 partially ok, 0 failed")
 }
@@ -302,7 +302,7 @@ func TestRunValidate_PartiallyOkWhenHelmFailsButCosignSucceeds(t *testing.T) {
 		return nil
 	}
 	resolveOCIChartDigestRefHook = func(registryURL, chartName, version string, registryConfigPath string) (string, error) {
-		return "registry/helm/service-ui@sha256:deadbeef", nil
+		return "registry/helm/demo.service-ui@sha256:deadbeef", nil
 	}
 	t.Cleanup(func() {
 		pullOCIChartHook = oldPull

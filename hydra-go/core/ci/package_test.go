@@ -305,7 +305,7 @@ func TestRunPublish_CI_PushWithMockHelm(t *testing.T) {
 	require.Len(t, packageCalls, 1)
 	require.Len(t, pushCalls, 1)
 	assert.Contains(t, pushCalls[0], "oci://registry/helm")
-	assert.Contains(t, pushCalls[0], "service-ui")
+	assert.Contains(t, pushCalls[0], "|demo.service-ui|")
 	assert.Contains(t, pushCalls[0], "1.0.0-dev")
 }
 
@@ -545,7 +545,7 @@ func TestRunPublish_CI_SkipsWhenRemoteChartAlreadyExists(t *testing.T) {
 	})
 	assert.Contains(t, logs, "remote chart already exists")
 	assert.Contains(t, logs, "skipping publish")
-	assert.Contains(t, logs, "oci://registry/helm/service-ui:1.0.0-dev")
+	assert.Contains(t, logs, "oci://registry/helm/demo.service-ui:1.0.0-dev")
 	assert.Contains(t, logs, "level=WARN")
 }
 
@@ -600,10 +600,10 @@ func TestRunPublish_CI_CosignOnlySignsRemoteArtifact(t *testing.T) {
 	}
 	uploadChartWithoutTagHook = func(artifact packageArtifact, registryURL, chartName, version string, registryConfigPath string) (string, error) {
 		callOrder = append(callOrder, "upload")
-		return "registry/helm/service-ui@sha256:deadbeef", nil
+		return "registry/helm/demo.service-ui@sha256:deadbeef", nil
 	}
 	tagOCIChartHook = func(registryURL, chartName, version, digestRef, registryConfigPath string) error {
-		assert.Equal(t, "registry/helm/service-ui@sha256:deadbeef", digestRef)
+		assert.Equal(t, "registry/helm/demo.service-ui@sha256:deadbeef", digestRef)
 		callOrder = append(callOrder, "tag")
 		return nil
 	}
@@ -629,7 +629,7 @@ func TestRunPublish_CI_CosignOnlySignsRemoteArtifact(t *testing.T) {
 
 	require.NoError(t, RunPublish(filepath.Join(dir, ConfigFileName), ModeCI, nil, false, false, false, false))
 	assert.Equal(t, []string{"upload", "sign", "tag"}, callOrder)
-	assert.Contains(t, signedRef, "registry/helm/service-ui@")
+	assert.Contains(t, signedRef, "registry/helm/demo.service-ui@")
 }
 
 func TestRunPublish_CI_RemoteChartExistsCheckError(t *testing.T) {
