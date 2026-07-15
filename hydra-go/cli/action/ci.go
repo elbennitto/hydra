@@ -108,8 +108,14 @@ func CiDownload(f CiFlags) error {
 func CiRelease(f CiFlags) error {
 	l := log.Default()
 	l.Info(logIdAction, "Running CI release pipeline in '{mode}' mode", log.String("mode", string(f.Mode())))
-	_, err := ci.RunRelease(f.ConfigPath, f.Mode(), f.TargetBranch)
-	return err
+	res, err := ci.RunRelease(f.ConfigPath, f.Mode(), f.TargetBranch)
+	if err != nil {
+		return err
+	}
+	if res.NoOp {
+		l.Info(logIdAction, "CI release: nothing to do (no chart updates or new release tags)")
+	}
+	return nil
 }
 
 func CiAuto(f CiFlags) error {

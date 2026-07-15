@@ -17,6 +17,7 @@ type ReleaseChildEntry struct {
 // ReleaseResult summarizes a release run.
 type ReleaseResult struct {
 	Children []ReleaseChildEntry
+	NoOp     bool
 }
 
 // RunRelease detects changed child charts, bumps wrapper and root versions,
@@ -158,7 +159,7 @@ func RunRelease(configPath string, mode Mode, targetBranch string) (ReleaseResul
 	}
 
 	if len(plan) == 0 && !firstReleaseRepo && len(initialPublishTags) == 0 {
-		return ReleaseResult{}, nil
+		return ReleaseResult{NoOp: true}, nil
 	}
 
 	roots, errR := buildRootChartUpdates(repo, cfg, plan)
@@ -185,7 +186,7 @@ func RunRelease(configPath string, mode Mode, targetBranch string) (ReleaseResul
 	}
 
 	if len(tags) == 0 && len(plan) == 0 && len(roots) == 0 {
-		return ReleaseResult{}, nil
+		return ReleaseResult{NoOp: true}, nil
 	}
 
 	exec := NewReleaseExecutor(mode, targetBranch)

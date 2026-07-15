@@ -29,6 +29,7 @@ func TestRunRelease_NoChanges(t *testing.T) {
 	res, err := RunRelease(configPath(repo), ModeLocal, "")
 	require.NoError(t, err)
 	assert.Empty(t, res.Children)
+	assert.True(t, res.NoOp)
 }
 
 func TestChartDirChangedSinceLastRelease_IgnoresVersionOnlyChartYamlChanges(t *testing.T) {
@@ -72,6 +73,7 @@ func TestRunRelease_FirstRelease_KeepsExistingNonDefaultVersionWithoutFollowupCh
 	res, err := RunRelease(configPath(repo), ModeLocal, "")
 	require.NoError(t, err)
 	assert.Empty(t, res.Children)
+	assert.False(t, res.NoOp)
 
 	child, err := repo.LoadChart("apps/demo/service-ui/dev")
 	require.NoError(t, err)
