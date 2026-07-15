@@ -104,23 +104,22 @@ func RunRelease(configPath string, mode Mode, targetBranch string) (ReleaseResul
 		if errDep != nil {
 			return ReleaseResult{}, errDep
 		}
-		if initialRelease && !releaseState.ChangedSinceBaseline {
-			if isDefaultChartVersion(oldVer) {
-				newVer, errN := NextChildChartWrapperVersion(dep, env, oldVer)
-				if errN != nil {
-					return ReleaseResult{}, fmt.Errorf("chart %s: %w", relPath, errN)
-				}
-				plan = append(plan, ReleaseChildEntry{
-					Group:      group,
-					App:        app,
-					Env:        env,
-					Path:       relPath,
-					OldVersion: oldVer,
-					NewVersion: newVer,
-				})
-				continue
+		if initialRelease && isDefaultChartVersion(oldVer) {
+			newVer, errN := NextChildChartWrapperVersion(dep, env, oldVer)
+			if errN != nil {
+				return ReleaseResult{}, fmt.Errorf("chart %s: %w", relPath, errN)
 			}
-
+			plan = append(plan, ReleaseChildEntry{
+				Group:      group,
+				App:        app,
+				Env:        env,
+				Path:       relPath,
+				OldVersion: oldVer,
+				NewVersion: newVer,
+			})
+			continue
+		}
+		if initialRelease && !releaseState.ChangedSinceBaseline {
 			initialPublishTags = append(initialPublishTags, AppTag(group, app, oldVer))
 
 			newVer, errN := ComputeWrapperVersion(dep, env, -1)
