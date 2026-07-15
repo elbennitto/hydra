@@ -274,23 +274,41 @@ func pushReleaseTags(repo *git.Repo, remote string, tags []string) error {
 		}
 	}
 
-	args := []string{"-C", repo.Path(), "push", pushRemote}
-	args = append(args, tags...)
-	out, err := exec.Command("git", args...).CombinedOutput()
-	if err != nil {
-		msg := strings.TrimSpace(string(out))
-		if pushToken != "" {
-			msg = strings.ReplaceAll(msg, pushToken, "***")
-			escapedToken := url.QueryEscape(pushToken)
-			if escapedToken != pushToken {
-				msg = strings.ReplaceAll(msg, escapedToken, "***")
+	nonBuildTags, buildTags := splitBuildAndNonBuildTags(tags)
+
+	pushTagBatch := func(batch []string) error {
+		if len(batch) == 0 {
+			return nil
+		}
+		args := []string{"-C", repo.Path(), "push", pushRemote}
+		args = append(args, batch...)
+		out, err := exec.Command("git", args...).CombinedOutput()
+		if err != nil {
+			msg := strings.TrimSpace(string(out))
+			if pushToken != "" {
+				msg = strings.ReplaceAll(msg, pushToken, "***")
+				escapedToken := url.QueryEscape(pushToken)
+				if escapedToken != pushToken {
+					msg = strings.ReplaceAll(msg, escapedToken, "***")
+				}
 			}
+			if msg == "" {
+				return fmt.Errorf("git push %s <tags>: %w", remote, err)
+			}
+			return fmt.Errorf("git push %s <tags>: %w\n%s", remote, err, msg)
 		}
-		if msg == "" {
-			return fmt.Errorf("git push %s <tags>: %w", remote, err)
-		}
-		return fmt.Errorf("git push %s <tags>: %w\n%s", remote, err, msg)
+		return nil
 	}
+
+	if err := pushTagBatch(nonBuildTags); err != nil {
+		return err
+	}
+	for _, buildTag := range buildTags {
+		if err := pushTagBatch([]string{buildTag}); err != nil {
+			return err
+		}
+	}
+
 	authMode := "remote-auth"
 	if usedTokenAuth {
 		authMode = "secrets.publish.gitlabToken"
@@ -301,7 +319,25 @@ func pushReleaseTags(repo *git.Repo, remote string, tags []string) error {
 		log.String("auth", authMode),
 		log.String("tags", strings.Join(tags, ", ")),
 	)
+	if len(buildTags) > 0 {
+		l.Info(logIdCI, "release ci: pushed build tag(s) in dedicated push event(s) to trigger tag pipeline: {tags}",
+			log.String("tags", strings.Join(buildTags, ", ")),
+		)
+	}
 	return nil
+}
+
+func splitBuildAndNonBuildTags(tags []string) ([]string, []string) {
+	nonBuild := make([]string, 0, len(tags))
+	build := make([]string, 0, len(tags))
+	for _, tag := range tags {
+		if strings.HasPrefix(tag, BuildTagPrefix) {
+			build = append(build, tag)
+			continue
+		}
+		nonBuild = append(nonBuild, tag)
+	}
+	return nonBuild, build
 }
 
 func gitLabTokenPushRemote(remoteURL, token string) (string, error) {

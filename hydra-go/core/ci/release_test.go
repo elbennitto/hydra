@@ -843,6 +843,20 @@ func TestGitLabTokenPushRemote(t *testing.T) {
 	}
 }
 
+func TestSplitBuildAndNonBuildTags(t *testing.T) {
+	tags := []string{
+		"demo-service-ui-1.2.3-dev",
+		"build-202607151608",
+		"cluster-infra-root-0.2.0-dev",
+		"build-202607151609",
+	}
+
+	nonBuild, build := splitBuildAndNonBuildTags(tags)
+
+	assert.Equal(t, []string{"demo-service-ui-1.2.3-dev", "cluster-infra-root-0.2.0-dev"}, nonBuild)
+	assert.Equal(t, []string{"build-202607151608", "build-202607151609"}, build)
+}
+
 func TestRunRelease_Local_NoChartYAMLDependencies(t *testing.T) {
 	oldClock := releaseTagTime
 	releaseTagTime = func() time.Time { return time.Date(2026, 3, 5, 15, 55, 0, 0, time.UTC) }
