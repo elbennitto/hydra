@@ -84,20 +84,27 @@ func RunRelease(configPath string, mode Mode, targetBranch string) (ReleaseResul
 		if errCh != nil {
 			return ReleaseResult{}, errCh
 		}
-		if !releaseState.ChangedSinceBaseline && !releaseState.FirstRelease {
-			continue
-		}
 
 		ch, errL := repo.LoadChart(relPath)
 		if errL != nil {
 			return ReleaseResult{}, fmt.Errorf("load chart %s: %w", relPath, errL)
 		}
 		oldVer := ch.GetVersion()
+		hasCurrentReleaseTag, errTag := hasExactTag(repo, AppTag(group, app, oldVer))
+		if errTag != nil {
+			return ReleaseResult{}, errTag
+		}
+		needsInitialRelease := !hasCurrentReleaseTag && isDefaultChartVersion(oldVer)
+		if !releaseState.ChangedSinceBaseline && !releaseState.FirstRelease && !needsInitialRelease {
+			continue
+		}
+		initialRelease := releaseState.FirstRelease || needsInitialRelease
+
 		dep, errDep := dependencyVersionForWrapperRelease(ch, oldVer, relPath)
 		if errDep != nil {
 			return ReleaseResult{}, errDep
 		}
-		if releaseState.FirstRelease && !releaseState.ChangedSinceBaseline {
+		if initialRelease && !releaseState.ChangedSinceBaseline {
 			if isDefaultChartVersion(oldVer) {
 				newVer, errN := NextChildChartWrapperVersion(dep, env, oldVer)
 				if errN != nil {
@@ -125,7 +132,7 @@ func RunRelease(configPath string, mode Mode, targetBranch string) (ReleaseResul
 				continue
 			}
 		}
-		if releaseState.FirstRelease {
+		if initialRelease {
 			newVer, errN := ComputeWrapperVersion(dep, env, -1)
 			if errN != nil {
 				return ReleaseResult{}, fmt.Errorf("chart %s: %w", relPath, errN)
@@ -247,6 +254,14 @@ func mergeUniqueReleaseTags(a, b []string) []string {
 		out = append(out, t)
 	}
 	return out
+}
+
+func hasExactTag(repo *git.Repo, tag string) (bool, error) {
+	tags, err := repo.Tags(tag)
+	if err != nil {
+		return false, fmt.Errorf("list tag %q: %w", tag, err)
+	}
+	return len(tags) > 0, nil
 }
 
 func isDefaultChartVersion(v string) bool {
