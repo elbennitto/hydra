@@ -100,7 +100,7 @@ func RunRelease(configPath string, mode Mode, targetBranch string) (ReleaseResul
 		}
 		initialRelease := releaseState.FirstRelease || needsInitialRelease
 
-		dep, errDep := dependencyVersionForWrapperRelease(ch, oldVer, relPath)
+		dep, errDep := dependencyVersionForWrapperReleaseWithFallback(repo, cfg, ch, group, app, env, oldVer, relPath)
 		if errDep != nil {
 			return ReleaseResult{}, errDep
 		}
@@ -363,18 +363,65 @@ func sameVersionIgnoringEnv(a, b string) bool {
 
 // dependencyVersionForWrapperRelease selects the semver used to derive the next
 // child wrapper version. When Chart.yaml lists dependencies, the version of
-// the matching (or first) dependency is used. Otherwise the semver base is
-// taken from the chart's own version field (major.minor.patch plus any Helm
-// pre-release segment, without Hydra's environment suffix or extra counter) so
-// standalone charts still get correct -dev / -stage / prod suffixes from
-// NextChildChartWrapperVersion.
+// the matching (or first) dependency is used.
+//
+// For standalone charts without dependencies, the semver base is taken from the
+// chart's own version field (major.minor.patch plus any Helm pre-release
+// segment, without Hydra's environment suffix or extra counter). For newly
+// promoted CI charts that start at 0.0.0, a previous environment version of the
+// same chart (for example dev when releasing stage) is used as fallback so
+// release can derive a meaningful wrapper base instead of keeping 0.0.0-*.
 func dependencyVersionForWrapperRelease(ch *git.Chart, oldVer, relPath string) (string, error) {
+	return dependencyVersionForWrapperReleaseWithFallback(nil, nil, ch, "", "", "", oldVer, relPath)
+}
+
+func dependencyVersionForWrapperReleaseWithFallback(repo *git.Repo, cfg *Config, ch *git.Chart, group, app, env, oldVer, relPath string) (string, error) {
 	if v := ch.PrimaryDependencyVersion(); v != "" {
 		return v, nil
+	}
+	if repo != nil && cfg != nil && isDefaultChartVersion(oldVer) {
+		if v, ok, err := previousEnvChartBaseVersion(repo, cfg, group, app, env); err != nil {
+			return "", err
+		} else if ok {
+			return v, nil
+		}
 	}
 	parsed, err := ParseChartVersion(oldVer)
 	if err != nil {
 		return "", fmt.Errorf("chart %s: Chart.yaml has no dependencies; chart version must be a Hydra wrapper semver (e.g. 1.2.3-dev): %w", relPath, err)
 	}
 	return parsed.BaseVersion(), nil
+}
+
+func previousEnvChartBaseVersion(repo *git.Repo, cfg *Config, group, app, env string) (string, bool, error) {
+	idx := -1
+	for i, candidate := range cfg.CI.Environments {
+		if candidate == env {
+			idx = i
+			break
+		}
+	}
+	if idx <= 0 {
+		return "", false, nil
+	}
+
+	for i := idx - 1; i >= 0; i-- {
+		prevEnv := cfg.CI.Environments[i]
+		relPath := filepath.ToSlash(filepath.Join(cfg.CI.RootAppsPath, group, app, prevEnv))
+		ch, err := repo.LoadChart(relPath)
+		if err != nil {
+			continue
+		}
+		v := ch.GetVersion()
+		if v == "" {
+			continue
+		}
+		parsed, err := ParseChartVersion(v)
+		if err != nil {
+			return "", false, fmt.Errorf("chart %s: parse previous environment version %q: %w", relPath, v, err)
+		}
+		return parsed.BaseVersion(), true, nil
+	}
+
+	return "", false, nil
 }
