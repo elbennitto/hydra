@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/ProtonMail/go-crypto/openpgp"
 	"github.com/ProtonMail/go-crypto/openpgp/armor"
@@ -19,6 +20,7 @@ import (
 	"github.com/sigstore/cosign/v2/pkg/cosign"
 	cosignsigs "github.com/sigstore/cosign/v2/pkg/signature"
 	"gopkg.in/yaml.v3"
+	"hydra-gitops.org/hydra/hydra-go/base/log"
 	"hydra-gitops.org/hydra/hydra-go/core/sops"
 	"hydra-gitops.org/hydra/hydra-go/core/types"
 )
@@ -90,6 +92,7 @@ var generateCosignSecretsHook func() (GeneratedCosignSecrets, error)
 var loadSecretsConfigHook func(configPath string) (*SecretsConfig, error)
 var loadPublicSignConfigHook func(configPath string) (PublicSignConfig, error)
 var loadPublicCosignConfigHook func(configPath string) (PublicCosignConfig, error)
+var decryptedSecretsFileLogOnce sync.Once
 
 func DefaultSecretsConfig(signSecrets SignSecrets, cosignSecrets CosignSecrets) *SecretsConfig {
 	return &SecretsConfig{
@@ -382,10 +385,19 @@ func LoadSecretsConfig(configPath string) (*SecretsConfig, error) {
 		return loadSecretsConfigHook(configPath)
 	}
 
+	l := log.Default()
 	targetPath, data, err := ShowSecretsFile(configPath)
 	if err != nil {
+		l.Error(logIdCI, "ci secrets: could not decrypt secrets file: {err}",
+			log.String("err", err.Error()),
+		)
 		return nil, err
 	}
+	decryptedSecretsFileLogOnce.Do(func() {
+		l.Info(logIdCI, "ci secrets: decrypted secrets file {path}",
+			log.String("path", targetPath),
+		)
+	})
 
 	var cfg SecretsConfig
 	if err := yaml.Unmarshal([]byte(data), &cfg); err != nil {
