@@ -151,6 +151,8 @@ without making any changes.`,
 		"Upload chart versions even when the same version already exists in the OCI registry")
 	publishCmd.Flags().BoolVar(&ciFlags.SkipSigning, "skip-signing", false,
 		"Package and publish charts without provenance signing")
+	publishCmd.Flags().BoolVar(&ciFlags.SkipDependencyDownload, "skip-dependency-download", false,
+		"Skip helm dependency update during publish and package using existing local dependencies")
 	runCmd.AddCommand(publishCmd)
 
 	verifyCmd := newCiSubcommand("verify",

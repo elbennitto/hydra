@@ -80,7 +80,7 @@ func helmRun(ctx context.Context, dir string, args ...string) ([]byte, error) {
 // RunPublish packages charts listed by release tags on HEAD and pushes them to
 // ci.registry when mode is CI. Requires a build-* tag on HEAD plus documentation
 // tags that map to existing chart directories unless forceRun is set.
-func RunPublish(configPath string, mode Mode, selectedCharts []string, forceRun bool, forcePublishUpload bool, skipSigning bool) error {
+func RunPublish(configPath string, mode Mode, selectedCharts []string, forceRun bool, forcePublishUpload bool, skipSigning bool, skipDependencyDownload bool) error {
 	l := log.Default()
 	dir := filepath.Dir(configPath)
 	cfg, err := LoadConfig(dir)
@@ -211,8 +211,15 @@ func RunPublish(configPath string, mode Mode, selectedCharts []string, forceRun 
 				}
 			}
 
-			if err := downloadChartDependencies(l, absDir, nil); err != nil {
-				return fmt.Errorf("chart %s: dependency update: %w", rel, err)
+			if skipDependencyDownload {
+				l.Info(logIdCI, "publish: skipping dependency download for {chart} at {path}",
+					log.String("chart", name),
+					log.String("path", rel),
+				)
+			} else {
+				if err := downloadChartDependencies(l, absDir, nil); err != nil {
+					return fmt.Errorf("chart %s: dependency update: %w", rel, err)
+				}
 			}
 
 			stageName := strings.ReplaceAll(rel, "/", "_")

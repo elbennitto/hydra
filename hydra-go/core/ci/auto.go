@@ -59,7 +59,7 @@ func runAutoStep(step, configPath string, mode Mode, targetBranch, promoteTo str
 		_, err := RunRelease(configPath, mode, targetBranch)
 		return err
 	case "publish":
-		return RunPublish(configPath, mode, nil, false, false, false)
+		return RunPublish(configPath, mode, nil, false, false, false, false)
 	case "promote":
 		actions := NewPromoteActions(mode, targetBranch)
 		var opts []func(PromotionEntry)

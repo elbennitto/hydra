@@ -12,18 +12,19 @@ import (
 // CiFlags holds the common flags for all CI pipeline subcommands.
 // --dry-run and --local are mutually exclusive.
 type CiFlags struct {
-	DryRun             bool
-	Local              bool
-	ConfigPath         string
-	TargetBranch       string
-	PromoteTo          string
-	Charts             []string
-	BuildTag           string
-	VersionsFile       string
-	SkipMissing        bool
-	ForceRun           bool
-	ForcePublishUpload bool
-	SkipSigning        bool
+	DryRun                 bool
+	Local                  bool
+	ConfigPath             string
+	TargetBranch           string
+	PromoteTo              string
+	Charts                 []string
+	BuildTag               string
+	VersionsFile           string
+	SkipMissing            bool
+	ForceRun               bool
+	ForcePublishUpload     bool
+	SkipSigning            bool
+	SkipDependencyDownload bool
 }
 
 func (f *CiFlags) Mode() ci.Mode {
@@ -131,7 +132,7 @@ func CiPromote(f CiFlags) error {
 func CiPublish(f CiFlags) error {
 	l := log.Default()
 	l.Info(logIdAction, "Running CI publish pipeline in '{mode}' mode", log.String("mode", string(f.Mode())))
-	return ci.RunPublish(f.ConfigPath, f.Mode(), f.Charts, f.ForceRun, f.ForcePublishUpload, f.SkipSigning)
+	return ci.RunPublish(f.ConfigPath, f.Mode(), f.Charts, f.ForceRun, f.ForcePublishUpload, f.SkipSigning, f.SkipDependencyDownload)
 }
 
 func CiValidate(f CiFlags) error {

@@ -206,6 +206,20 @@ func TestCiVerifyCommand_ParsesBuildTagAndCharts(t *testing.T) {
 	assert.Equal(t, []string{"demo/service-ui/dev", "apps/demo/service-auth/dev"}, captured.Charts)
 }
 
+func TestCiPublishCommand_ParsesSkipDependencyDownload(t *testing.T) {
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, ci.ConfigFileName)
+	require.NoError(t, os.WriteFile(filePath, []byte("ci: {}"), 0644))
+
+	params, captured := newCapturingCiParams()
+	cmd := NewCiCommand(params)
+	cmd.SetArgs([]string{"run", "publish", "--skip-dependency-download", filePath})
+	require.NoError(t, cmd.Execute())
+
+	assert.Equal(t, filePath, captured.ConfigPath)
+	assert.True(t, captured.SkipDependencyDownload)
+}
+
 func TestCiUpgradeCommand_ParsesVersionsFile(t *testing.T) {
 	dir := t.TempDir()
 	filePath := filepath.Join(dir, ci.ConfigFileName)

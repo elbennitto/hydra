@@ -80,7 +80,7 @@ func TestRunPublish_NoBuildTag(t *testing.T) {
 	require.NoError(t, repo.Err)
 
 	cfgPath := filepath.Join(dir, ConfigFileName)
-	err := RunPublish(cfgPath, ModeDryRun, nil, false, false, false)
+	err := RunPublish(cfgPath, ModeDryRun, nil, false, false, false, false)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "build-")
 	assert.Contains(t, err.Error(), "--force-run")
@@ -106,7 +106,7 @@ func TestRunPublish_NoBuildTag_ForcePublishOverrides(t *testing.T) {
 
 	cfgPath := filepath.Join(dir, ConfigFileName)
 	logs := capturePackageLogs(t, func() {
-		require.NoError(t, RunPublish(cfgPath, ModeDryRun, nil, true, false, false))
+		require.NoError(t, RunPublish(cfgPath, ModeDryRun, nil, true, false, false, false))
 	})
 	assert.Contains(t, logs, "build tag missing at HEAD")
 	assert.Contains(t, logs, "level=WARN")
@@ -135,7 +135,7 @@ func TestRunPublish_NoHeadTags_ForcePublishUsesLatestBuildTagInHistory(t *testin
 
 	cfgPath := filepath.Join(dir, ConfigFileName)
 	logs := capturePackageLogs(t, func() {
-		require.NoError(t, RunPublish(cfgPath, ModeDryRun, nil, true, false, false))
+		require.NoError(t, RunPublish(cfgPath, ModeDryRun, nil, true, false, false, false))
 	})
 	assert.Contains(t, logs, "build tag missing at HEAD")
 	assert.Contains(t, logs, "latest build-* tag in history")
@@ -174,7 +174,7 @@ func TestRunPublish_DryRun_Succeeds(t *testing.T) {
 	})
 
 	cfgPath := filepath.Join(dir, ConfigFileName)
-	require.NoError(t, RunPublish(cfgPath, ModeDryRun, nil, false, false, false))
+	require.NoError(t, RunPublish(cfgPath, ModeDryRun, nil, false, false, false, false))
 }
 
 func TestRunPublish_Local_PackagesWithMockHelm(t *testing.T) {
@@ -212,7 +212,7 @@ func TestRunPublish_Local_PackagesWithMockHelm(t *testing.T) {
 	})
 
 	cfgPath := filepath.Join(dir, ConfigFileName)
-	require.NoError(t, RunPublish(cfgPath, ModeLocal, nil, false, false, false))
+	require.NoError(t, RunPublish(cfgPath, ModeLocal, nil, false, false, false, false))
 	require.Len(t, packageCalls, 1)
 	assert.Equal(t, "dev", filepath.Base(packageCalls[0]))
 }
@@ -251,7 +251,7 @@ func TestRunPublish_Local_SkipSigningLogsWarningAndPackagesUnsigned(t *testing.T
 
 	cfgPath := filepath.Join(dir, ConfigFileName)
 	logs := capturePackageLogs(t, func() {
-		require.NoError(t, RunPublish(cfgPath, ModeLocal, nil, false, false, true))
+		require.NoError(t, RunPublish(cfgPath, ModeLocal, nil, false, false, true, false))
 	})
 	assert.Nil(t, receivedSigning)
 	assert.Contains(t, logs, "chart signing disabled")
@@ -301,7 +301,7 @@ func TestRunPublish_CI_PushWithMockHelm(t *testing.T) {
 	})
 
 	cfgPath := filepath.Join(dir, ConfigFileName)
-	require.NoError(t, RunPublish(cfgPath, ModeCI, nil, false, false, false))
+	require.NoError(t, RunPublish(cfgPath, ModeCI, nil, false, false, false, false))
 	require.Len(t, packageCalls, 1)
 	require.Len(t, pushCalls, 1)
 	assert.Contains(t, pushCalls[0], "oci://registry/helm")
@@ -355,7 +355,7 @@ func TestRunPublish_CI_UsesPreparedRegistryAuthForRemoteChecksAndPush(t *testing
 		remoteChartExistsHook = oldExists
 	})
 
-	require.NoError(t, RunPublish(filepath.Join(dir, ConfigFileName), ModeCI, nil, false, false, false))
+	require.NoError(t, RunPublish(filepath.Join(dir, ConfigFileName), ModeCI, nil, false, false, false, false))
 	assert.Equal(t, "/tmp/hydra-publish-registry-config.json", seenExistsConfig)
 	assert.Equal(t, "/tmp/hydra-publish-registry-config.json", seenPushConfig)
 }
@@ -409,8 +409,53 @@ func TestRunPublish_CI_UsesPreparedRegistryAuthForDependencyDownload(t *testing.
 		remoteChartExistsHook = oldExists
 	})
 
-	require.NoError(t, RunPublish(filepath.Join(dir, ConfigFileName), ModeCI, nil, false, false, false))
+	require.NoError(t, RunPublish(filepath.Join(dir, ConfigFileName), ModeCI, nil, false, false, false, false))
 	assert.Equal(t, "/tmp/hydra-publish-registry-config.json", seenConfig)
+}
+
+func TestRunPublish_Local_SkipDependencyDownload_DoesNotCallDependencyUpdate(t *testing.T) {
+	dir := t.TempDir()
+	fs := git.NewFS().
+		File(ConfigFileName, `ci:
+  rootAppsPath: apps
+  environments: [dev, stage, prod]
+  registry: oci://registry/helm
+  appGroups:
+    - name: demo
+      path: apps/demo
+`).
+		Add("apps/demo/service-ui/dev", git.NewChart("service-ui").Version("1.0.0-dev"))
+	repo := git.Init(dir).CommitFS("init", fs)
+	require.NoError(t, repo.Err)
+	repo.Tag("build-202601011200").Tag("demo-service-ui-1.0.0-dev")
+	require.NoError(t, repo.Err)
+
+	oldDownload := downloadChartDependencies
+	oldPackage := packageChartArchiveHook
+	oldPush := pushChartArchiveHook
+	dependencyDownloadCalled := false
+	packaged := false
+	downloadChartDependencies = func(_ log.Logger, _ string, _ *v2chart.Chart) error {
+		dependencyDownloadCalled = true
+		return fmt.Errorf("dependency update must be skipped")
+	}
+	packageChartArchiveHook = func(chartDir, stageDir string, signing *packageSigningConfig) (packageArtifact, error) {
+		packaged = true
+		assert.Nil(t, signing)
+		return packageArtifact{TGZPath: filepath.Join(stageDir, "service-ui-1.0.0-dev.tgz")}, nil
+	}
+	pushChartArchiveHook = func(artifact packageArtifact, registryURL, chartName, version string, registryConfigPath string) error {
+		return fmt.Errorf("push must not run in local mode")
+	}
+	t.Cleanup(func() {
+		downloadChartDependencies = oldDownload
+		packageChartArchiveHook = oldPackage
+		pushChartArchiveHook = oldPush
+	})
+
+	require.NoError(t, RunPublish(filepath.Join(dir, ConfigFileName), ModeLocal, nil, false, false, true, true))
+	assert.False(t, dependencyDownloadCalled)
+	assert.True(t, packaged)
 }
 
 func TestRunPublish_CI_FailsWithoutUploadRegistryToken(t *testing.T) {
@@ -449,7 +494,7 @@ func TestRunPublish_CI_FailsWithoutUploadRegistryToken(t *testing.T) {
 		loadSecretsConfigHook = oldSecretsLoad
 	})
 
-	err := RunPublish(filepath.Join(dir, ConfigFileName), ModeCI, nil, false, false, false)
+	err := RunPublish(filepath.Join(dir, ConfigFileName), ModeCI, nil, false, false, false, false)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "prepare OCI registry auth")
 	assert.Contains(t, err.Error(), "ci publish requires at least one writable OCI registry token")
@@ -496,7 +541,7 @@ func TestRunPublish_CI_SkipsWhenRemoteChartAlreadyExists(t *testing.T) {
 
 	cfgPath := filepath.Join(dir, ConfigFileName)
 	logs := capturePackageLogs(t, func() {
-		require.NoError(t, RunPublish(cfgPath, ModeCI, nil, false, false, false))
+		require.NoError(t, RunPublish(cfgPath, ModeCI, nil, false, false, false, false))
 	})
 	assert.Contains(t, logs, "remote chart already exists")
 	assert.Contains(t, logs, "skipping publish")
@@ -582,7 +627,7 @@ func TestRunPublish_CI_CosignOnlySignsRemoteArtifact(t *testing.T) {
 		signOCIChartHook = oldResolve
 	})
 
-	require.NoError(t, RunPublish(filepath.Join(dir, ConfigFileName), ModeCI, nil, false, false, false))
+	require.NoError(t, RunPublish(filepath.Join(dir, ConfigFileName), ModeCI, nil, false, false, false, false))
 	assert.Equal(t, []string{"upload", "sign", "tag"}, callOrder)
 	assert.Contains(t, signedRef, "registry/helm/service-ui@")
 }
@@ -615,7 +660,7 @@ func TestRunPublish_CI_RemoteChartExistsCheckError(t *testing.T) {
 	})
 
 	cfgPath := filepath.Join(dir, ConfigFileName)
-	err := RunPublish(cfgPath, ModeCI, nil, false, false, false)
+	err := RunPublish(cfgPath, ModeCI, nil, false, false, false, false)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "check remote chart")
 	assert.Contains(t, err.Error(), "registry unavailable")
@@ -665,7 +710,7 @@ func TestRunPublish_CI_ForcePublishUploadWhenRemoteChartAlreadyExists(t *testing
 
 	cfgPath := filepath.Join(dir, ConfigFileName)
 	logs := capturePackageLogs(t, func() {
-		require.NoError(t, RunPublish(cfgPath, ModeCI, nil, false, true, false))
+		require.NoError(t, RunPublish(cfgPath, ModeCI, nil, false, true, false, false))
 	})
 	require.Len(t, packageCalls, 1)
 	require.Len(t, pushCalls, 1)
@@ -776,7 +821,7 @@ func TestRunPublish_NonDryRunRequiresSigningSecrets(t *testing.T) {
 	repo.Tag("build-202601011200").Tag("demo-service-ui-1.0.0-dev")
 	require.NoError(t, repo.Err)
 
-	err = RunPublish(filepath.Join(dir, ConfigFileName), ModeLocal, nil, false, false, false)
+	err = RunPublish(filepath.Join(dir, ConfigFileName), ModeLocal, nil, false, false, false, false)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "load CI signing configuration")
 	assert.Contains(t, err.Error(), "no secrets available")
@@ -866,7 +911,7 @@ func TestRunPublish_CI_RequiresRegistry(t *testing.T) {
 	require.NoError(t, repo.Err)
 
 	cfgPath := filepath.Join(dir, ConfigFileName)
-	err := RunPublish(cfgPath, ModeCI, nil, false, false, false)
+	err := RunPublish(cfgPath, ModeCI, nil, false, false, false, false)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "registry")
 }
@@ -911,7 +956,7 @@ func TestRunPublish_UsesOnlyHeadReleaseTagsWhenBuildTagOnHead(t *testing.T) {
 	})
 
 	cfgPath := filepath.Join(dir, ConfigFileName)
-	require.NoError(t, RunPublish(cfgPath, ModeLocal, nil, false, false, false))
+	require.NoError(t, RunPublish(cfgPath, ModeLocal, nil, false, false, false, false))
 	assert.Equal(t, []string{"dev"}, packaged)
 }
 
@@ -950,7 +995,7 @@ func TestRunPublish_SelectedCharts_SkipHeadTagRequirement(t *testing.T) {
 	})
 
 	cfgPath := filepath.Join(dir, ConfigFileName)
-	require.NoError(t, RunPublish(cfgPath, ModeLocal, []string{"demo/service-ui/dev"}, false, false, false))
+	require.NoError(t, RunPublish(cfgPath, ModeLocal, []string{"demo/service-ui/dev"}, false, false, false, false))
 	assert.Equal(t, []string{"dev"}, packaged)
 }
 
@@ -974,7 +1019,7 @@ func TestRunPublish_SelectedCharts_HeadMismatchRequiresForce(t *testing.T) {
 
 	cfgPath := filepath.Join(dir, ConfigFileName)
 	logs := capturePackageLogs(t, func() {
-		err := RunPublish(cfgPath, ModeDryRun, []string{"demo/service-ui/dev"}, false, false, false)
+		err := RunPublish(cfgPath, ModeDryRun, []string{"demo/service-ui/dev"}, false, false, false, false)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "does not match publish commit")
 	})
@@ -1002,7 +1047,7 @@ func TestRunPublish_SelectedCharts_ForcePublishOverridesHeadMismatch(t *testing.
 
 	cfgPath := filepath.Join(dir, ConfigFileName)
 	logs := capturePackageLogs(t, func() {
-		err := RunPublish(cfgPath, ModeDryRun, []string{"demo/service-ui/dev"}, true, false, false)
+		err := RunPublish(cfgPath, ModeDryRun, []string{"demo/service-ui/dev"}, true, false, false, false)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "does not match publish commit")
 	})
@@ -1085,7 +1130,7 @@ metadata:
 		packageChartArchiveHook = oldPackage
 	})
 
-	err := RunPublish(filepath.Join(dir, ConfigFileName), ModeLocal, nil, false, false, true)
+	err := RunPublish(filepath.Join(dir, ConfigFileName), ModeLocal, nil, false, false, true, false)
 	require.NoError(t, err)
 	require.NotNil(t, packagedChart)
 
