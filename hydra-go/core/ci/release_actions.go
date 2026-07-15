@@ -259,14 +259,17 @@ func pushReleaseTags(repo *git.Repo, remote string, tags []string) error {
 	if len(tags) == 0 {
 		return nil
 	}
+	l := log.Default()
 	pushRemote := remote
 	pushToken := ""
+	usedTokenAuth := false
 	if token, header, err := gitLabToken(repo); err == nil && header == "PRIVATE-TOKEN" {
 		if remoteURL, remoteErr := repo.RemoteURL(); remoteErr == nil {
 			authRemote, authErr := gitLabTokenPushRemote(remoteURL, token)
 			if authErr == nil {
 				pushRemote = authRemote
 				pushToken = token
+				usedTokenAuth = true
 			}
 		}
 	}
@@ -288,6 +291,16 @@ func pushReleaseTags(repo *git.Repo, remote string, tags []string) error {
 		}
 		return fmt.Errorf("git push %s <tags>: %w\n%s", remote, err, msg)
 	}
+	authMode := "remote-auth"
+	if usedTokenAuth {
+		authMode = "secrets.publish.gitlabToken"
+	}
+	l.Info(logIdCI, "release ci: pushed {count} tag(s) to {remote} using {auth}; tags: {tags}",
+		log.Int("count", len(tags)),
+		log.String("remote", remote),
+		log.String("auth", authMode),
+		log.String("tags", strings.Join(tags, ", ")),
+	)
 	return nil
 }
 
