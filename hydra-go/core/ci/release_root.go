@@ -15,8 +15,8 @@ type groupEnvKey struct {
 }
 
 type rootChartUpdate struct {
-	relPath string
-	chart   *git.Chart
+	relPath    string
+	chart      *git.Chart
 	oldVersion string
 }
 

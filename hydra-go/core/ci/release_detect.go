@@ -8,7 +8,7 @@ import (
 )
 
 type chartReleaseState struct {
-	BaselineRef         string
+	BaselineRef          string
 	ChangedSinceBaseline bool
 	FirstRelease         bool
 }

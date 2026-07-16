@@ -693,14 +693,6 @@ func decodeBase64ToFile(encoded, targetPath string) (string, error) {
 	return targetPath, nil
 }
 
-func signOCIChart(registryURL, chartName, version string, signing *cosignSigningConfig, registryConfigPath string) error {
-	ref, err := resolveOCIChartDigestRef(registryURL, chartName, version, registryConfigPath)
-	if err != nil {
-		return err
-	}
-	return signOCIRef(ref, signing)
-}
-
 func signOCIRef(ref string, signing *cosignSigningConfig) error {
 	if signOCIChartHook != nil {
 		return signOCIChartHook(ref, signing.KeyPath)

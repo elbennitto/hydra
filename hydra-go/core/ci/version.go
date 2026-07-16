@@ -270,11 +270,3 @@ func ComputePromoteTargetVersion(sourceVersion, sourceEnv, targetEnv, existingTa
 func isDefaultPromoteResetVersion(v ChartVersion) bool {
 	return v.Major == 0 && v.Minor == 0 && v.Patch == 0 && v.PreRelease == "" && v.Extra < 0 && v.Env == ""
 }
-
-func isDefaultPromoteResetVersionString(version string) bool {
-	v, err := ParseChartVersion(version)
-	if err != nil {
-		return false
-	}
-	return isDefaultPromoteResetVersion(v)
-}

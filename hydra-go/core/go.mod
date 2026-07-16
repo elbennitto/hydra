@@ -11,6 +11,7 @@ require (
 	github.com/google/cel-go v0.28.1
 	github.com/google/go-containerregistry v0.21.6
 	github.com/mikefarah/yq/v4 v4.53.2
+	github.com/opencontainers/image-spec v1.1.1
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
 	github.com/sigstore/cosign/v2 v2.6.3
 	github.com/stretchr/testify v1.11.1
@@ -234,7 +235,6 @@ require (
 	github.com/oleiade/reflections v1.1.0 // indirect
 	github.com/open-policy-agent/opa v1.17.0 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
-	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/pborman/uuid v1.2.1 // indirect
 	github.com/pelletier/go-toml/v2 v2.3.1 // indirect
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
