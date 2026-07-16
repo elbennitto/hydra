@@ -1,0 +1,57 @@
+# Contributing to hydra
+
+hydra is licensed under the Apache License, Version 2.0.
+
+Unless you explicitly state otherwise, any contribution intentionally
+submitted for inclusion in hydra is submitted under the Apache License,
+Version 2.0, without additional terms or conditions.
+
+Do not submit code, documentation, media, or other material unless you
+have the right to license it under Apache-2.0.
+
+If something is not intended as a contribution, clearly mark it:
+“Not a Contribution”.
+
+## Developer Certificate of Origin
+
+This project uses the Developer Certificate of Origin, version 1.1.
+
+The DCO is a lightweight way for contributors to certify that they wrote
+the contribution, or otherwise have the right to submit it under the
+project license.
+
+By signing off a commit, you certify the DCO for that commit.
+
+The canonical DCO text is available at:
+
+    https://developercertificate.org/
+
+Every commit must contain a sign-off line in the commit message:
+
+    Signed-off-by: Full Name <email@example.com>
+
+The name and email address in the sign-off should identify the person who
+is certifying the contribution. Use a real name or another identity that
+you are entitled to use for this purpose.
+
+You can add the sign-off automatically when committing from the command
+line:
+
+    git commit -s
+
+For an existing commit, you can usually add a sign-off with:
+
+    git commit --amend -s
+
+For multiple existing commits, use an interactive rebase and add the
+sign-off to each commit.
+
+Pull requests without the required DCO sign-off may not be merged.
+
+## Configuring Git Sign-off
+
+To automatically add the sign-off to every commit, configure your local Git repository:
+
+    scripts/enable-auto-signoff-hook.sh
+
+This setting is stored locally in `.git/config` and applies only to this repository.

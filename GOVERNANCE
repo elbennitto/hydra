@@ -1,0 +1,91 @@
+# Governance
+
+hydra is a community project licensed under Apache-2.0.
+
+Copyright in contributions remains with the respective contributors.
+Maintainers do not receive copyright ownership by becoming maintainers.
+
+The maintainer team is responsible for project direction, releases,
+repository administration, and accepting contributions.
+
+Maintainers may be added or removed according to the process below.
+Changes in maintainership do not affect the Apache-2.0 licensing of
+previously accepted contributions.
+
+## Adding maintainers: sponsorship and no-objection process
+
+hydra uses a sponsorship-based process for adding maintainers.
+
+This process is intended to recognize contributors who have already been
+doing maintainer-level work in practice. Maintainer status should follow
+sustained contribution, judgment, reliability, and trust.
+
+### Eligibility
+
+A nominee should normally have:
+
+- contributed to hydra for at least three months;
+- made sustained contributions in at least one project area;
+- shown constructive behavior in issues, pull requests, reviews, or
+  community discussions;
+- demonstrated good judgment about compatibility, quality, maintainability,
+  security, documentation, or user impact;
+- helped other contributors participate;
+- shown that they can act in the interest of the project as a whole.
+
+Contributions do not need to be code. Documentation, design, issue triage,
+testing, release work, infrastructure, security handling, community support,
+and project coordination may all qualify.
+
+### Sponsorship
+
+A nomination requires two active maintainer sponsors.
+
+Each sponsor must comment `+1 sponsor` on the nomination issue and explain
+briefly why they believe the nominee is ready.
+
+At least one sponsor should have worked directly with the nominee on
+reviews, issues, releases, documentation, infrastructure, security, or
+another substantial project activity.
+
+Where practical, the two sponsors should not both have the same employer
+as the nominee.
+
+### Review period
+
+After the nominee has accepted and both sponsors have commented, the
+nomination remains open for at least 14 full days.
+
+During this period, active maintainers may comment:
+
+- `+1` to support;
+- `0` to abstain or express no strong opinion;
+- `-1` to object.
+
+A `-1` objection must include a reason and, where possible, a path to
+resolve the concern. Valid objections include concerns about trust,
+sustained activity, project judgment, security, conduct, unresolved
+conflicts of interest, or insufficient evidence of maintainer-level work.
+
+### Acceptance
+
+The nominee becomes a maintainer if, after the review period:
+
+- the nominee has accepted the nomination;
+- two active maintainers have sponsored the nomination;
+- no active maintainer has an unresolved `-1` objection; and
+- at least one existing maintainer with GitHub organization owner access
+  confirms that the access change has been applied.
+
+If there is an unresolved objection, the nomination does not pass under
+this process. The maintainers may either close the issue, continue
+discussion, or restart the nomination later.
+
+### Follow-up
+
+After acceptance, a maintainer updates:
+
+- `MAINTAINERS.md`;
+- the relevant GitHub teams and repository permissions;
+- any release, package registry, security, or infrastructure access lists
+  appropriate to the maintainer's scope.
