@@ -30,7 +30,7 @@ echo "$HYDRA_CONTEXT"
 hydra local apps
 ```
 
-Note: In the recorded example terminal sessions for this tutorial, `HYDRA_CONTEXT` is preconfigured automatically. That is why no explicit `export HYDRA_CONTEXT=...` command is shown in those casts.
+Note: In the recorded terminal demos for this tutorial, `HYDRA_CONTEXT` is preconfigured automatically. That is why no explicit `export HYDRA_CONTEXT=...` command is shown in those recordings.
 
 We use `group` as the directory name in this tutorial, but you can choose any name.
 
@@ -62,8 +62,8 @@ To let Hydra validate this structure, create a `values.yaml` one level above `HY
 ```bash
 cat > "$HYDRA_CONTEXT/../values.yaml" <<EOF
 global:
-	hydra:
-		type: group
+  hydra:
+    type: group
 EOF
 
 hydra local apps

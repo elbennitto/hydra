@@ -18,6 +18,8 @@ Hydra has three operating modes:
 
 This tutorial covers the `local` commands only.
 
+Several steps include a **recorded terminal demo** — a playable recording of the commands and output in your browser. Installation calls these *Demo Videos*; in the chapters below they appear inline after each step.
+
 ## HYDRA_CONTEXT
 
 `HYDRA_CONTEXT` tells Hydra which GitOps directory to read. See [Concepts: Context and Clusters](../../appendix/concepts/context-and-clusters.md) for the full model.
