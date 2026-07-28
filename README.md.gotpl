@@ -29,8 +29,8 @@ brew install {{ .TapPackageRepo }}/hydra
 Linux recommended (download the latest released binary from GitHub releases):
 
 ```bash
-brew trust --formula {{ .TapPackageRepo }}/hydra-bin
-brew install {{ .TapPackageRepo }}/hydra-bin
+brew trust --cask {{ .TapPackageRepo }}/hydra-bin
+brew install --cask {{ .TapPackageRepo }}/hydra-bin
 ```
 
 Linux can also self-compile from source if preferred:
@@ -59,9 +59,9 @@ brew install {{ .TapPackageRepo }}/hydra
 Uninstall Homebrew packages with:
 
 ```bash
-brew uninstall {{ .TapRepo }}/hydra
+brew uninstall {{ .TapPackageRepo }}/hydra
 # or
-brew uninstall {{ .TapRepo }}/hydra-bin
+brew uninstall --cask {{ .TapPackageRepo }}/hydra-bin
 brew untap {{ .TapPackageRepo }}
 ```
 

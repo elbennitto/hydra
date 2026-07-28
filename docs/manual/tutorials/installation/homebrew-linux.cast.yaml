@@ -38,7 +38,7 @@ steps:
 
   - type: prompt
   - sleep: 1
-  - write: brew trust --formula hydra-gitops/tap/hydra-bin
+  - write: brew trust --cask hydra-gitops/tap/hydra-bin
     speed: 0.2
   - sleep: 1
   - color: reset
@@ -47,7 +47,7 @@ steps:
 
   - type: prompt
   - sleep: 1
-  - write: brew install hydra-gitops/tap/hydra-bin
+  - write: brew install --cask hydra-gitops/tap/hydra-bin
     speed: 0.2
   - sleep: 1
   - color: reset

@@ -29,8 +29,8 @@ brew install hydra-gitops/tap/hydra
 Linux recommended (download the latest released binary from GitHub releases):
 
 ```bash
-brew trust --formula hydra-gitops/tap/hydra-bin
-brew install hydra-gitops/tap/hydra-bin
+brew trust --cask hydra-gitops/tap/hydra-bin
+brew install --cask hydra-gitops/tap/hydra-bin
 ```
 
 Linux can also self-compile from source if preferred:
@@ -59,9 +59,9 @@ brew install hydra-gitops/tap/hydra
 Uninstall Homebrew packages with:
 
 ```bash
-brew uninstall hydra-gitops/homebrew-tap/hydra
+brew uninstall hydra-gitops/tap/hydra
 # or
-brew uninstall hydra-gitops/homebrew-tap/hydra-bin
+brew uninstall --cask hydra-gitops/tap/hydra-bin
 brew untap hydra-gitops/tap
 ```
 

@@ -707,7 +707,6 @@ cask "hydra-bin" do
   name "Hydra"
   desc "Hydra GitOps CLI binary for Kubernetes cluster management"
   homepage "https://hydra-gitops.org/"
-  license "Apache-2.0"
 
   on_macos do
     if Hardware::CPU.arm?
